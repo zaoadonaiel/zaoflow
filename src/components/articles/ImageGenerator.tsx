@@ -1,0 +1,235 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { Image, Loader2, RefreshCw, Download, Send, Wand2, X, ZoomIn } from 'lucide-react'
+import { getSizesForModel, getDefaultSize, IMAGE_GEN_MODELS } from '@/lib/image-gen'
+import ImageModelSelect, { LAST_IMG_MODEL_KEY } from '@/components/ui/ImageModelSelect'
+import toast from 'react-hot-toast'
+
+interface Props {
+  articleId?: string
+  articleTitle?: string
+  defaultPrompt?: string
+  onImageGenerated?: (url: string, prompt: string, altText: string) => void
+}
+
+function getInitialModel(): string {
+  try { return localStorage.getItem(LAST_IMG_MODEL_KEY) || '' } catch {}
+  return ''
+}
+
+export default function ImageGenerator({ articleId, articleTitle = '', defaultPrompt = '', onImageGenerated }: Props) {
+  const [prompt, setPrompt] = useState(defaultPrompt)
+  const [model, setModel] = useState(getInitialModel)
+  const [size, setSize] = useState(() => {
+    const m = getInitialModel()
+    return m ? getDefaultSize(m) : '1024x1024'
+  })
+  const [imageUrl, setImageUrl] = useState('')
+  const [altText, setAltText] = useState('')
+  const [generating, setGenerating] = useState(false)
+  const [editText, setEditText] = useState('')
+  const [showEdit, setShowEdit] = useState(false)
+  const [lightbox, setLightbox] = useState(false)
+
+  // Update prompt when articleTitle changes and prompt is still default/empty
+  useEffect(() => {
+    if (articleTitle && !imageUrl) {
+      setPrompt(`Professional blog featured image for: ${articleTitle}`)
+    }
+  }, [articleTitle])
+
+  function handleModelChange(newModel: string) {
+    setModel(newModel)
+    setSize(getDefaultSize(newModel))
+  }
+
+  async function generate(customPrompt?: string) {
+    const finalPrompt = customPrompt || prompt
+    if (!finalPrompt.trim()) { toast.error('Enter an image prompt'); return }
+    setGenerating(true)
+    try {
+      const res = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: finalPrompt, size, model, articleId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+
+      const newAlt = articleTitle || finalPrompt.slice(0, 120)
+      setImageUrl(data.imageUrl)
+      setPrompt(data.prompt)
+      setAltText(newAlt)
+      setShowEdit(false)
+      setEditText('')
+      onImageGenerated?.(data.imageUrl, data.prompt, newAlt)
+      toast.success('Image generated!')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Image generation failed')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  function handleEdit() {
+    if (!editText.trim()) return
+    generate(`${prompt}. ${editText}`)
+  }
+
+  function handleAltChange(val: string) {
+    setAltText(val)
+    if (imageUrl) onImageGenerated?.(imageUrl, prompt, val)
+  }
+
+  async function download() {
+    if (!imageUrl) return
+    const a = document.createElement('a')
+    a.href = imageUrl
+    a.download = `featured-image-${Date.now()}.jpg`
+    a.target = '_blank'
+    a.click()
+  }
+
+  const sizes = getSizesForModel(model)
+
+  return (
+    <>
+      {/* Lightbox */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm"
+          onClick={() => setLightbox(false)}
+        >
+          <button
+            className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            onClick={() => setLightbox(false)}
+          >
+            <X className="w-5 h-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imageUrl}
+            alt={altText || 'Featured image preview'}
+            className="max-w-[90vw] max-h-[90vh] rounded-xl object-contain shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+          <Image className="w-4 h-4 text-gray-400" />
+          Featured Image
+        </h3>
+
+        {/* Model */}
+        <ImageModelSelect value={model} onChange={handleModelChange} className="mb-2" />
+
+        {/* Size */}
+        <select
+          value={size}
+          onChange={(e) => setSize(e.target.value)}
+          className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 mb-3"
+        >
+          {sizes.map((s) => (
+            <option key={s.value} value={s.value}>{s.label}</option>
+          ))}
+        </select>
+
+        {/* Prompt */}
+        <textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="Describe the image (e.g. 'Professional photo of a person working on a laptop in a modern office')"
+          rows={3}
+          className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none mb-2"
+        />
+
+        <button
+          onClick={() => generate()}
+          disabled={generating}
+          className="w-full flex items-center justify-center gap-2 bg-brand-600 text-white py-2 rounded-lg text-xs font-medium hover:bg-brand-700 transition-colors disabled:opacity-50 mb-3"
+        >
+          {generating
+            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Generating…</>
+            : <><Wand2 className="w-3.5 h-3.5" />Generate Image</>}
+        </button>
+
+        {/* Preview */}
+        {imageUrl && (
+          <div className="space-y-2">
+            {/* Thumbnail — click to open lightbox */}
+            <div
+              className="relative rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 cursor-zoom-in group"
+              onClick={() => setLightbox(true)}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={imageUrl} alt={altText || 'Generated featured image'} className="w-full h-auto object-cover" />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                <ZoomIn className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+              </div>
+            </div>
+
+            {/* Alt text */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Alt description</label>
+              <input
+                type="text"
+                value={altText}
+                onChange={(e) => handleAltChange(e.target.value)}
+                placeholder="Describe the image for accessibility and SEO"
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+
+            {/* Action bar */}
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => generate()}
+                disabled={generating}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className="w-3 h-3" />Regenerate
+              </button>
+              <button
+                onClick={() => setShowEdit(!showEdit)}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                  showEdit ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-400' : 'text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                <Send className="w-3 h-3" />Edit
+              </button>
+              <button
+                onClick={download}
+                className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 transition-colors"
+              >
+                <Download className="w-3 h-3" />
+              </button>
+            </div>
+
+            {showEdit && (
+              <div className="flex gap-2 mt-1">
+                <input
+                  type="text"
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleEdit()}
+                  placeholder="e.g. remove the woman, add a sunset background"
+                  className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <button
+                  onClick={handleEdit}
+                  disabled={generating || !editText.trim()}
+                  className="px-3 py-2 bg-brand-600 text-white rounded-lg text-xs font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
+                >
+                  Apply
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
