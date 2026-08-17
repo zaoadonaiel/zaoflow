@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     site_id, title, content, keywords, ai_model, status, scheduled_at,
     word_count, excerpt, meta_description,
     focus_keyphrase, keyphrase_synonyms, yoast_title, yoast_meta_description, slug,
-    featured_image_url, featured_image_prompt,
+    featured_image_url, featured_image_prompt, wp_category_id,
   } = body
 
   if (!title || !site_id) {
@@ -65,6 +65,9 @@ export async function POST(req: NextRequest) {
     slug: slug || null,
     featured_image_url: featured_image_url || null,
     featured_image_prompt: featured_image_prompt || null,
+    // Dropping this silently sent every new article to Uncategorized, since
+    // the publish route reads it back off the row to set WP categories
+    wp_category_id: wp_category_id || null,
   }).select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
