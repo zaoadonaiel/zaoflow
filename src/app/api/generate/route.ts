@@ -78,6 +78,13 @@ export async function POST(req: NextRequest) {
       if (!seoMeta.slug) seoMeta.slug = titleWords.slice(0, 8).join('-').slice(0, 60)
     }
 
+    // A meta description the writer model put in the body was written for this
+    // exact article, so prefer it over the separately generated one
+    const lifted = articleResult.extractedMetaDescription
+    if (lifted && lifted.length >= 50) {
+      seoMeta.yoastMetaDescription = lifted.slice(0, 160)
+    }
+
     return NextResponse.json({ ...articleResult, seo: seoMeta })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Generation failed'

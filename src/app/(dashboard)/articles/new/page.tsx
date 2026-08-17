@@ -83,9 +83,22 @@ export default function NewArticlePage() {
     if (!siteId) return
     setLoadingCats(true)
     setCategories([])
+    // Categories are per-site, so a selection from the previous site is stale
+    setWpCategoryId('')
     fetch(`/api/sites/${siteId}/categories`)
       .then((r) => r.json())
-      .then((d) => setCategories(d.categories || []))
+      .then((d) => {
+        const cats: WPCategory[] = d.categories || []
+        setCategories(cats)
+        // Preselect the site's most-used category (WordPress reports a post
+        // count per category) so the common case needs no change. An all-zero
+        // site has no "most used", so leave it on Uncategorized.
+        const mostUsed = cats.reduce<WPCategory | null>(
+          (best, c) => (best === null || c.count > best.count ? c : best),
+          null
+        )
+        if (mostUsed && mostUsed.count > 0) setWpCategoryId(mostUsed.id)
+      })
       .catch(() => {})
       .finally(() => setLoadingCats(false))
   }, [siteId])
@@ -286,6 +299,8 @@ export default function NewArticlePage() {
               }}
               placeholder="AI instructions: tone, audience, word count, specific points to cover… (optional)"
               rows={4}
+              suppressHydrationWarning
+              data-gramm="false"
               className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-700 dark:text-gray-300 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-y"
             />
           </div>
@@ -456,7 +471,7 @@ export default function NewArticlePage() {
                   >
                     <option value="">Uncategorized</option>
                     {categories.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
+                      <option key={c.id} value={c.id}>{c.name} ({c.count})</option>
                     ))}
                   </select>
                 )}

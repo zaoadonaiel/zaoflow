@@ -6,11 +6,87 @@ export const AVAILABLE_MODELS = [
   { id: 'openai/gpt-4o', name: 'GPT-4o', badge: '' },
   { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini', badge: 'Fast' },
   { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', badge: 'Fast' },
-  { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B', badge: 'Free' },
-  { id: 'mistralai/mistral-small-3.1-24b-instruct', name: 'Mistral Small 3.1', badge: 'Free' },
+  // Not free — these are the paid variants. The picker shows live per-token
+  // pricing next to the badge, so "Free" read as a contradiction.
+  { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B', badge: 'Budget' },
+  { id: 'mistralai/mistral-small-3.1-24b-instruct', name: 'Mistral Small 3.1', badge: 'Budget' },
 ]
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
+
+// Models often emit a meta description alongside the body despite being asked
+// for body HTML only. Lift it out so it lands in the Yoast field instead of
+// being published inside the post.
+const META_LABEL = String.raw`(?:seo\s*)?meta[\s\-_]*descriptions?`
+const EMPHASIS = String.raw`(?:strong|b|em|i)`
+
+// Only trust the label at the very top or bottom of the output — an article
+// *about* SEO can legitimately discuss meta descriptions mid-body.
+const EDGE_WINDOW = 500
+
+// Shortest string we'll accept as a real meta description rather than a stray label
+const MIN_META_LENGTH = 20
+
+const META_PATTERNS: RegExp[] = [
+  // <h2>Meta Description</h2><p>…</p>
+  // No capture group on the tag — every pattern here must expose the description
+  // as group 1.
+  new RegExp(
+    String.raw`<h[1-6][^>]*>\s*(?:\*\*)?\s*${META_LABEL}\s*:?\s*(?:\*\*)?\s*</h[1-6]>\s*<p[^>]*>([\s\S]*?)</p>`,
+    'i'
+  ),
+  // <p><strong>Meta Description:</strong></p><p>…</p>
+  new RegExp(
+    String.raw`<p[^>]*>\s*(?:<${EMPHASIS}>)?\s*(?:\*\*)?\s*${META_LABEL}\s*:?\s*(?:\*\*)?\s*(?:</${EMPHASIS}>)?\s*:?\s*</p>\s*<p[^>]*>([\s\S]*?)</p>`,
+    'i'
+  ),
+  // <p><strong>Meta Description:</strong> …</p> — emphasis tag and colon in either order
+  new RegExp(
+    String.raw`<p[^>]*>\s*(?:<${EMPHASIS}>)?\s*(?:\*\*)?\s*${META_LABEL}\s*:?\s*(?:\*\*)?\s*(?:</${EMPHASIS}>)?\s*:?\s*([\s\S]*?)</p>`,
+    'i'
+  ),
+  // <!-- Meta Description: … -->
+  new RegExp(String.raw`<!--\s*${META_LABEL}\s*:?\s*([\s\S]*?)-->`, 'i'),
+  // Bare or markdown-ish line before any tag: **Meta Description:** …
+  new RegExp(
+    String.raw`^[^\S\n]*(?:\*\*)?[^\S\n]*${META_LABEL}[^\S\n]*:[^\S\n]*(?:\*\*)?[^\S\n]*(.+)$`,
+    'im'
+  ),
+]
+
+function htmlToText(input: string): string {
+  return input
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Splits a leading/trailing meta description off the generated body.
+ * Returns the body with it removed, plus the description when one was found.
+ */
+export function extractMetaDescription(html: string): {
+  content: string
+  metaDescription: string | null
+} {
+  for (const pattern of META_PATTERNS) {
+    const match = html.match(pattern)
+    if (!match || match.index === undefined) continue
+
+    const atStart = match.index <= EDGE_WINDOW
+    const atEnd = match.index + match[0].length >= html.length - EDGE_WINDOW
+    if (!atStart && !atEnd) continue
+
+    const text = htmlToText(match[1] || '')
+    if (text.length < MIN_META_LENGTH) continue
+
+    const content = (html.slice(0, match.index) + html.slice(match.index + match[0].length)).trim()
+    return { content, metaDescription: text }
+  }
+
+  return { content: html.trim(), metaDescription: null }
+}
 
 export async function generateTopic(
   apiKey: string,
@@ -55,7 +131,14 @@ export async function generateArticle({
   focusKeyword?: string
   instructions?: string
   wordCount?: number
-}): Promise<{ content: string; wordCount: number; excerpt: string; metaDescription: string }> {
+}): Promise<{
+  content: string
+  wordCount: number
+  excerpt: string
+  metaDescription: string
+  /** Non-null when the model put a meta description in the body and we lifted it out */
+  extractedMetaDescription: string | null
+}> {
   const systemPrompt = `You are an expert SEO content writer who creates high-quality, comprehensive blog posts.
 Your articles are well-structured with proper HTML, engaging, and optimized for search engines while remaining genuinely helpful for readers.
 Always output clean HTML without any markdown code blocks or document tags — just the article body HTML.`
@@ -95,13 +178,17 @@ Always output clean HTML without any markdown code blocks or document tags — j
   const data = await response.json()
   const rawContent: string = data.choices?.[0]?.message?.content || ''
 
-  // Generate excerpt and meta description from content
-  const plainText = rawContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  // Keep the meta description out of the body — it belongs in the Yoast field.
+  // Doing this before the word/excerpt maths also keeps those counts honest.
+  const { content, metaDescription: extracted } = extractMetaDescription(rawContent)
+
+  const plainText = htmlToText(content)
   const excerpt = plainText.slice(0, 300) + (plainText.length > 300 ? '...' : '')
-  const metaDescription = plainText.slice(0, 155) + (plainText.length > 155 ? '...' : '')
+  const metaDescription =
+    extracted || plainText.slice(0, 155) + (plainText.length > 155 ? '...' : '')
   const wc = plainText.split(/\s+/).filter(Boolean).length
 
-  return { content: rawContent, wordCount: wc, excerpt, metaDescription }
+  return { content, wordCount: wc, excerpt, metaDescription, extractedMetaDescription: extracted }
 }
 
 function buildArticlePrompt({
@@ -137,6 +224,7 @@ Hard rules (never break these):
 - Focus keyword must appear in the intro paragraph AND in the text of the first <h2>
 - Write naturally — avoid keyword stuffing
 - Use transition words and vary sentence length for readability
+- Output the article body ONLY. Do NOT write a meta description, SEO summary, excerpt, or any labelled front-matter such as "Meta Description:" — those fields are generated separately and anything like that here ends up published inside the post
 
 Defaults${hasAuthorInstructions ? " — follow these ONLY where the author's instructions below do not say otherwise" : ''}:
 - Target length: 1,500–1,800 words total (the wordCount hint is ${wordCount})
@@ -154,7 +242,7 @@ already satisfied by the WordPress post title — still do not emit an <h1> tag 
 
 ${authorInstructions}
 ` : ''}
-Output ONLY the HTML body content. Do not include <html>, <head>, <body>, <h1>, or any code block wrappers.`
+Output ONLY the HTML body content, starting with the first <p> of the intro. Do not include <html>, <head>, <body>, <h1>, any code block wrappers, or a "Meta Description:" line.`
 
   return prompt
 }

@@ -112,10 +112,17 @@ export default function ArticleEditor({ value, onChange, placeholder = 'Start wr
       </div>
 
       {/* Editable area */}
+      {/* Writing assistants (Grammarly et al.) inject their own nodes into
+          contentEditable regions before React hydrates, which fails hydration
+          for the whole root. Opt out, and don't fail on what still slips in. */}
       <div
         ref={editorRef}
         contentEditable
         suppressContentEditableWarning
+        suppressHydrationWarning
+        data-gramm="false"
+        data-gramm_editor="false"
+        data-enable-grammarly="false"
         onInput={handleInput}
         onKeyDown={handleKeyDown}
         data-placeholder={!value ? placeholder : ''}
