@@ -17,6 +17,7 @@ interface InstructionSetsProps {
 export default function InstructionSets({ selectedId, onSelect }: InstructionSetsProps) {
   const [sets, setSets] = useState<ArticleInstruction[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Form modal — `editing` holds the set being edited, or null when creating
   const [formOpen, setFormOpen] = useState(false)
@@ -29,13 +30,19 @@ export default function InstructionSets({ selectedId, onSelect }: InstructionSet
   const limitError = wordCountLimitError(instructions)
 
   const load = useCallback(async () => {
+    setLoading(true)
+    setLoadError(null)
     try {
       const res = await fetch('/api/instructions')
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to load instructions')
       setSets(data.instructions || [])
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to load instructions')
+      const message = err instanceof Error ? err.message : 'Failed to load instructions'
+      // Surface the failure inline — an empty list here is indistinguishable
+      // from "you have none yet", which hides things like a missing table
+      setLoadError(message)
+      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -117,6 +124,18 @@ export default function InstructionSets({ selectedId, onSelect }: InstructionSet
           <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-gray-400">
             <Loader2 className="w-3 h-3 animate-spin" />
             Loading…
+          </span>
+        ) : loadError ? (
+          <span className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+            {loadError}
+            <button
+              type="button"
+              onClick={load}
+              className="underline underline-offset-2 hover:text-red-700 dark:hover:text-red-300"
+            >
+              Retry
+            </button>
           </span>
         ) : sets.length === 0 ? (
           <span className="text-xs text-gray-400 dark:text-gray-500 italic">

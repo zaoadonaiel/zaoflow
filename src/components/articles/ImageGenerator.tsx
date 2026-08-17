@@ -13,24 +13,28 @@ interface Props {
   onImageGenerated?: (url: string, prompt: string, altText: string) => void
 }
 
-function getInitialModel(): string {
-  try { return localStorage.getItem(LAST_IMG_MODEL_KEY) || '' } catch {}
-  return ''
-}
-
 export default function ImageGenerator({ articleId, articleTitle = '', defaultPrompt = '', onImageGenerated }: Props) {
   const [prompt, setPrompt] = useState(defaultPrompt)
-  const [model, setModel] = useState(getInitialModel)
-  const [size, setSize] = useState(() => {
-    const m = getInitialModel()
-    return m ? getDefaultSize(m) : '1024x1024'
-  })
+  // Start empty so the first client render matches the server HTML — reading
+  // localStorage during render makes hydration fail once a model has been saved
+  const [model, setModel] = useState('')
+  const [size, setSize] = useState('1024x1024')
   const [imageUrl, setImageUrl] = useState('')
   const [altText, setAltText] = useState('')
   const [generating, setGenerating] = useState(false)
   const [editText, setEditText] = useState('')
   const [showEdit, setShowEdit] = useState(false)
   const [lightbox, setLightbox] = useState(false)
+
+  // Restore the last-used model after hydration, not during render
+  useEffect(() => {
+    let saved = ''
+    try { saved = localStorage.getItem(LAST_IMG_MODEL_KEY) || '' } catch {}
+    if (saved) {
+      setModel(saved)
+      setSize(getDefaultSize(saved))
+    }
+  }, [])
 
   // Update prompt when articleTitle changes and prompt is still default/empty
   useEffect(() => {
