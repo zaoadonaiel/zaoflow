@@ -1,12 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Star, ChevronDown, ExternalLink, SlidersHorizontal } from 'lucide-react'
+import { Star, ChevronDown, ExternalLink, Pencil } from 'lucide-react'
 import { AVAILABLE_MODELS } from '@/lib/openrouter'
 import Modal from '@/components/ui/Modal'
 
 const FAVORITES_KEY = 'zaoflo_favorites_text'
 export const LAST_MODEL_KEY = 'zaoflo_last_model_text'
+
+const OPENROUTER_SEO_MODELS_URL =
+  'https://openrouter.ai/models?categories=marketing/seo&order=most-popular'
 
 interface ModelPricing {
   inputPerM: number
@@ -19,28 +22,40 @@ interface Props {
   onChange: (model: string) => void
   className?: string
   lastModelKey?: string
+  /** 'tile' is the standalone card; 'compact' is a single row for tight layouts */
+  variant?: 'tile' | 'compact'
 }
 
-// Shared across every picker instance so the two on the New Article page make
-// one request between them, and reopening is instant.
-let pricingCache: Record<string, ModelPricing> | null = null
-let pricingRequest: Promise<Record<string, ModelPricing>> | null = null
+// Shared across instances so the pickers on a page make one request between
+// them, and reopening is instant.
+let pricingCache: Record<string, ModelPricing> = {}
+const inFlight = new Map<string, Promise<Record<string, ModelPricing>>>()
 
-function loadPricing(): Promise<Record<string, ModelPricing>> {
-  if (pricingCache) return Promise.resolve(pricingCache)
-  if (!pricingRequest) {
-    pricingRequest = fetch('/api/models')
-      .then((r) => r.json())
-      .then((d) => {
-        pricingCache = d.pricing || {}
-        return pricingCache as Record<string, ModelPricing>
-      })
-      .catch(() => ({}))
-      .finally(() => {
-        pricingRequest = null
-      })
+function loadPricing(customId?: string): Promise<Record<string, ModelPricing>> {
+  const needsCustom = Boolean(customId) && !(customId! in pricingCache)
+  const key = needsCustom ? customId! : '__catalogue__'
+
+  if (!needsCustom && Object.keys(pricingCache).length > 0) {
+    return Promise.resolve(pricingCache)
   }
-  return pricingRequest
+
+  const existing = inFlight.get(key)
+  if (existing) return existing
+
+  const qs = needsCustom ? `?ids=${encodeURIComponent(customId!)}` : ''
+  const request = fetch(`/api/models${qs}`)
+    .then((r) => r.json())
+    .then((d) => {
+      pricingCache = { ...pricingCache, ...(d.pricing || {}) }
+      return pricingCache
+    })
+    .catch(() => pricingCache)
+    .finally(() => {
+      inFlight.delete(key)
+    })
+
+  inFlight.set(key, request)
+  return request
 }
 
 function formatPerM(value: number): string {
@@ -54,14 +69,15 @@ export default function ModelSelect({
   onChange,
   className,
   lastModelKey = LAST_MODEL_KEY,
+  variant = 'tile',
 }: Props) {
   const [open, setOpen] = useState(false)
   const [favorites, setFavorites] = useState<string[]>([])
-  const [customMode, setCustomMode] = useState(false)
   const [pricing, setPricing] = useState<Record<string, ModelPricing>>({})
-  const [pricingLoading, setPricingLoading] = useState(false)
+  const [pricingLoading, setPricingLoading] = useState(true)
+  const [customDraft, setCustomDraft] = useState('')
 
-  const isKnown = AVAILABLE_MODELS.some((m) => m.id === value)
+  const known = AVAILABLE_MODELS.find((m) => m.id === value)
 
   useEffect(() => {
     try {
@@ -70,24 +86,25 @@ export default function ModelSelect({
     } catch {}
   }, [])
 
+  // The trigger shows a price now, so this can't wait for the modal to open.
+  // Re-runs when a custom id is picked so its price gets fetched too.
   useEffect(() => {
-    setCustomMode(!AVAILABLE_MODELS.some((m) => m.id === value))
-  }, [value])
-
-  // Only fetch once the picker is actually opened
-  useEffect(() => {
-    if (!open) return
     let active = true
-    if (!pricingCache) setPricingLoading(true)
-    loadPricing().then((p) => {
+    const isCustom = Boolean(value) && !AVAILABLE_MODELS.some((m) => m.id === value)
+    loadPricing(isCustom ? value : undefined).then((p) => {
       if (!active) return
-      setPricing(p)
+      setPricing({ ...p })
       setPricingLoading(false)
     })
     return () => {
       active = false
     }
-  }, [open])
+  }, [value])
+
+  // Seed the modal's custom field with the current custom model
+  useEffect(() => {
+    if (value && !AVAILABLE_MODELS.some((m) => m.id === value)) setCustomDraft(value)
+  }, [value])
 
   function saveFavorites(next: string[]) {
     setFavorites(next)
@@ -106,7 +123,6 @@ export default function ModelSelect({
   }
 
   function selectModel(id: string) {
-    setCustomMode(false)
     onChange(id)
     if (!AVAILABLE_MODELS.some((m) => m.id === id)) {
       try {
@@ -116,17 +132,14 @@ export default function ModelSelect({
     setOpen(false)
   }
 
-  function chooseCustom() {
-    setCustomMode(true)
-    onChange('')
-    setOpen(false)
+  function applyCustom() {
+    const id = customDraft.trim()
+    if (id) selectModel(id)
   }
 
-  const currentName = isKnown
-    ? AVAILABLE_MODELS.find((m) => m.id === value)?.name
-    : customMode
-    ? value || 'Custom model…'
-    : 'Select model…'
+  const currentName = known?.name || value || 'Select a model'
+  const currentPrice = pricing[value]
+  const isFavourite = favorites.includes(value)
 
   const favoriteModels = AVAILABLE_MODELS.filter((m) => favorites.includes(m.id))
   const otherModels = AVAILABLE_MODELS.filter((m) => !favorites.includes(m.id))
@@ -149,20 +162,43 @@ export default function ModelSelect({
   )
 
   return (
-    <div className={`relative ${className ?? ''}`}>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="w-full flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-500 text-left text-gray-900 dark:text-gray-100"
-      >
-        <span className="flex items-center gap-1.5 min-w-0">
-          {favorites.includes(value) && (
-            <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 shrink-0" />
+    <div className={className}>
+      {variant === 'tile' ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="w-full text-left rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 p-3 hover:border-brand-300 dark:hover:border-brand-700 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors"
+        >
+          <div className="flex items-center gap-1.5 min-w-0">
+            {isFavourite && (
+              <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 shrink-0" />
+            )}
+            <span className="flex-1 text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+              {currentName}
+            </span>
+            <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+          </div>
+          <div className="grid grid-cols-2 gap-2 mt-2.5">
+            <PriceCell label="Input" value={currentPrice?.inputPerM} loading={pricingLoading} />
+            <PriceCell label="Output" value={currentPrice?.outputPerM} loading={pricingLoading} />
+          </div>
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-500 text-left text-gray-900 dark:text-gray-100"
+        >
+          {isFavourite && <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 shrink-0" />}
+          <span className="flex-1 truncate">{currentName}</span>
+          {currentPrice && (
+            <span className="shrink-0 text-xs font-mono text-gray-400 dark:text-gray-500">
+              {formatPerM(currentPrice.inputPerM)} / {formatPerM(currentPrice.outputPerM)}
+            </span>
           )}
-          <span className="truncate">{currentName}</span>
-        </span>
-        <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
-      </button>
+          <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+        </button>
+      )}
 
       <Modal
         open={open}
@@ -195,44 +231,46 @@ export default function ModelSelect({
             {renderGrid(otherModels)}
           </div>
 
-          <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
-            <button
-              type="button"
-              onClick={chooseCustom}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-gray-300 dark:border-gray-600 text-sm font-medium text-gray-600 dark:text-gray-400 hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
+          <div className="border-t border-gray-100 dark:border-gray-700 pt-4 space-y-2">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Pencil className="w-3 h-3" />
+              Custom model
+            </h3>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={customDraft}
+                onChange={(e) => setCustomDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    applyCustom()
+                  }
+                }}
+                placeholder="e.g. openai/gpt-5.6-luna"
+                className="flex-1 min-w-0 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono"
+              />
+              <button
+                type="button"
+                onClick={applyCustom}
+                disabled={!customDraft.trim() || customDraft.trim() === value}
+                className="shrink-0 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
+              >
+                Use
+              </button>
+            </div>
+            <a
+              href={OPENROUTER_SEO_MODELS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:underline"
             >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              Use a custom model
-            </button>
+              <ExternalLink className="w-3 h-3" />
+              Browse top SEO models on OpenRouter
+            </a>
           </div>
         </div>
       </Modal>
-
-      {customMode && (
-        <div className="mt-2 space-y-1.5">
-          <input
-            type="text"
-            value={value}
-            onChange={(e) => {
-              onChange(e.target.value)
-              try {
-                localStorage.setItem(lastModelKey, e.target.value)
-              } catch {}
-            }}
-            placeholder="e.g. anthropic/claude-opus-4"
-            className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono"
-          />
-          <a
-            href="https://openrouter.ai/models?categories=marketing/seo&order=most-popular"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:underline"
-          >
-            <ExternalLink className="w-3 h-3" />
-            Browse top SEO models on OpenRouter
-          </a>
-        </div>
-      )}
     </div>
   )
 }
@@ -317,7 +355,7 @@ function PriceCell({
   loading: boolean
 }) {
   return (
-    <div className="rounded-lg bg-gray-50 dark:bg-gray-900/40 px-2 py-1.5">
+    <div className="rounded-lg bg-white dark:bg-gray-900/40 border border-gray-100 dark:border-transparent px-2 py-1.5">
       <div className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">
         {label}
       </div>

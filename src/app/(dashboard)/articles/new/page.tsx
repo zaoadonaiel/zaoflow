@@ -305,16 +305,13 @@ export default function NewArticlePage() {
             />
           </div>
 
-          {/* AI Generate bar */}
+          {/* AI Generate bar — the model is chosen in the sidebar */}
           <div className="p-3 bg-brand-50 dark:bg-brand-900/20 border border-brand-100 dark:border-brand-900/40 rounded-xl">
             <div className="flex items-center gap-3">
               <Sparkles className="w-4 h-4 text-brand-600 flex-shrink-0" />
-              <div className="flex-1">
-                <ModelSelect
-                  value={model}
-                  onChange={setModel}
-                />
-              </div>
+              <p className="flex-1 text-sm text-brand-900/70 dark:text-brand-200/70">
+                Writes the article from your title, keywords and instructions.
+              </p>
               <button
                 onClick={handleGenerate}
                 disabled={generating || !title.trim()}
@@ -345,6 +342,7 @@ export default function NewArticlePage() {
                   value={seoModel}
                   onChange={setSeoModel}
                   lastModelKey={SEO_LAST_MODEL_KEY}
+                  variant="compact"
                 />
               </div>
               <button
@@ -435,6 +433,14 @@ export default function NewArticlePage() {
 
         {/* Sidebar */}
         <div className="w-80 shrink-0 space-y-4">
+          {/* AI model */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-gray-400" /> AI Model
+            </h3>
+            <ModelSelect value={model} onChange={setModel} />
+          </div>
+
           {/* Site selector */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">

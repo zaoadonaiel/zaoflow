@@ -1,11 +1,14 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { AVAILABLE_MODELS } from '@/lib/openrouter'
 
-// Pricing changes rarely and the catalogue is public, so cache it for an hour
-// rather than hitting OpenRouter every time someone opens the model picker.
-export const revalidate = 3600
-
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models'
+
+// The upstream catalogue is public and changes rarely, so cache it for an hour.
+// The route itself is dynamic because callers can ask about extra model ids.
+const CATALOGUE_TTL = 3600
+
+// Guards against a caller asking for an unbounded id list
+const MAX_EXTRA_IDS = 10
 
 interface OpenRouterModel {
   id: string
@@ -20,16 +23,23 @@ export interface ModelPricing {
   contextLength: number | null
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // `ids` lets the picker price a custom model the user typed in
+  const extraIds = (req.nextUrl.searchParams.get('ids') || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, MAX_EXTRA_IDS)
+
   try {
     const res = await fetch(OPENROUTER_MODELS_URL, {
-      next: { revalidate },
+      next: { revalidate: CATALOGUE_TTL },
       signal: AbortSignal.timeout(10000),
     })
     if (!res.ok) return NextResponse.json({ pricing: {} })
 
     const json = await res.json()
-    const wanted = new Set(AVAILABLE_MODELS.map((m) => m.id))
+    const wanted = new Set([...AVAILABLE_MODELS.map((m) => m.id), ...extraIds])
     const pricing: Record<string, ModelPricing> = {}
 
     for (const model of (json.data || []) as OpenRouterModel[]) {
