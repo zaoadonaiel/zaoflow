@@ -77,6 +77,15 @@ export interface Schedule {
   sites?: Site
 }
 
+export interface ArticleInstruction {
+  id: string
+  user_id: string
+  name: string
+  instructions: string
+  created_at: string
+  updated_at: string
+}
+
 export interface PublishLog {
   id: string
   article_id: string

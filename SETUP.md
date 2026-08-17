@@ -13,7 +13,7 @@
 ## 1. Supabase Setup
 
 1. Create a project at [supabase.com](https://supabase.com)
-2. Go to **SQL Editor** and run the entire contents of `supabase/migrations/001_initial.sql`
+2. Go to **SQL Editor** and run each file in `supabase/migrations/` in filename order, starting with `001_initial.sql`
 3. Copy your project URL and API keys from **Project Settings → API**
 
 ---

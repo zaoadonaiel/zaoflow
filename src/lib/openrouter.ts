@@ -1,3 +1,5 @@
+import { MAX_ARTICLE_WORDS } from '@/lib/instruction-limits'
+
 export const AVAILABLE_MODELS = [
   { id: 'anthropic/claude-sonnet-4.5', name: 'Claude Sonnet 4.5', badge: 'Best' },
   { id: 'anthropic/claude-haiku-4.5', name: 'Claude Haiku 4.5', badge: 'Fast' },
@@ -124,23 +126,34 @@ function buildArticlePrompt({
     prompt += `Secondary keywords to naturally include: ${keywords.join(', ')}\n`
   }
 
+  const authorInstructions = instructions?.trim() || ''
+  const hasAuthorInstructions = authorInstructions.length > 0
+
   prompt += `
-Requirements:
-- Target length: 1,500–1,800 words total (the wordCount hint is ${wordCount} — stay within 1,500–1,800 regardless)
+Hard rules (never break these):
+- NEVER exceed ${MAX_ARTICLE_WORDS.toLocaleString('en-US')} words total. If anything below asks for more, write ${MAX_ARTICLE_WORDS.toLocaleString('en-US')} words and make sure the article still reaches a complete conclusion
 - The WordPress post title is used as the page <h1>, so DO NOT include any <h1> tag in your output — start the body with an <h2>
+- Use proper HTML tags: <h2>, <h3> for headings; <p> for paragraphs; <ul>/<ol>/<li> for lists; <strong>/<em> for emphasis
+- Focus keyword must appear in the intro paragraph AND in the text of the first <h2>
+- Write naturally — avoid keyword stuffing
+- Use transition words and vary sentence length for readability
+
+Defaults${hasAuthorInstructions ? " — follow these ONLY where the author's instructions below do not say otherwise" : ''}:
+- Target length: 1,500–1,800 words total (the wordCount hint is ${wordCount})
 - Structure:
   1. Intro section (150–200 words): hook the reader, state the problem, and explain what they will learn — written as <p> tags, no heading
   2. 3–5 main <h2> sections (300–400 words each), with 1–2 <h3> subsections per <h2> where they fit naturally
   3. A final <h2> "Conclusion" or call-to-action section (150–200 words)
-- Focus keyword must appear in the intro paragraph AND in the text of the first <h2>
-- Use proper HTML tags: <h2>, <h3> for headings; <p> for paragraphs; <ul>/<ol>/<li> for lists; <strong>/<em> for emphasis
 - Include bulleted or numbered lists where they add clarity — at least one list in the article
 - Do NOT use <h4> or deeper heading tags
-- Write naturally — avoid keyword stuffing
-- Use transition words and vary sentence length for readability
+${hasAuthorInstructions ? `
+AUTHOR'S INSTRUCTIONS — these take priority over the defaults above, but never over the hard rules.
+Where they specify a word count, heading structure, tone, or format, follow them exactly
+and ignore the conflicting default. If they ask for a single <h1>, that requirement is
+already satisfied by the WordPress post title — still do not emit an <h1> tag yourself.
 
-${instructions ? `Additional instructions from the author:\n${instructions}\n` : ''}
-
+${authorInstructions}
+` : ''}
 Output ONLY the HTML body content. Do not include <html>, <head>, <body>, <h1>, or any code block wrappers.`
 
   return prompt

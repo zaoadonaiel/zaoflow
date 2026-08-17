@@ -10,18 +10,12 @@ import ModelSelect, { LAST_MODEL_KEY } from '@/components/ui/ModelSelect'
 
 const SEO_LAST_MODEL_KEY = 'zaoflo_last_model_seo'
 import ImageGenerator from '@/components/articles/ImageGenerator'
+import InstructionSets from '@/components/articles/InstructionSets'
 import { AVAILABLE_MODELS } from '@/lib/openrouter'
-import type { Site } from '@/types'
+import type { Site, ArticleInstruction } from '@/types'
 import toast from 'react-hot-toast'
 
 interface WPCategory { id: number; name: string; count: number }
-
-const INSTRUCTION_PRESETS = [
-  { label: '800 words', value: 'Write approximately 800 words. Keep it concise and focused.' },
-  { label: '1200 words', value: 'Write approximately 1200 words. Include clear sections with headings.' },
-  { label: '1500 words', value: 'Write approximately 1500 words. Cover the topic in depth with examples.' },
-  { label: '2000 words', value: 'Write approximately 2000 words. Comprehensive, in-depth article with multiple sections, examples, and a conclusion.' },
-]
 
 type PublishMode = 'draft' | 'now' | 'scheduled'
 
@@ -56,6 +50,7 @@ export default function NewArticlePage() {
     } catch {}
   }, [])
   const [instructions, setInstructions] = useState('')
+  const [instructionSetId, setInstructionSetId] = useState<string | null>(null)
   const [wpCategoryId, setWpCategoryId] = useState<number | ''>('')
   const [categories, setCategories] = useState<WPCategory[]>([])
   const [loadingCats, setLoadingCats] = useState(false)
@@ -103,6 +98,13 @@ export default function NewArticlePage() {
       }
       setKeywordInput('')
     }
+  }
+
+  // Selecting a saved set replaces the textarea contents, the same way the old
+  // word-count presets did. Edits made afterwards stay local to this article.
+  function handleSelectInstructionSet(set: ArticleInstruction) {
+    setInstructions(set.instructions)
+    setInstructionSetId(set.id)
   }
 
   async function handleGenerate() {
@@ -270,28 +272,20 @@ export default function NewArticlePage() {
 
           {/* AI Instructions — near the title so it's clear what it applies to */}
           <div>
-            <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-              <span className="text-xs text-gray-400 dark:text-gray-500 mr-1">Presets:</span>
-              {INSTRUCTION_PRESETS.map((p) => (
-                <button
-                  key={p.label}
-                  type="button"
-                  onClick={() => setInstructions(p.value)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors border ${
-                    instructions === p.value
-                      ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
-                      : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500 hover:text-gray-700 dark:hover:text-gray-200'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
+            <InstructionSets
+              selectedId={instructionSetId}
+              onSelect={handleSelectInstructionSet}
+            />
             <textarea
               value={instructions}
-              onChange={(e) => setInstructions(e.target.value)}
+              onChange={(e) => {
+                setInstructions(e.target.value)
+                // Hand-edits detach the textarea from the saved set — the set is
+                // a starting point, edits here don't write back to it
+                if (instructionSetId) setInstructionSetId(null)
+              }}
               placeholder="AI instructions: tone, audience, word count, specific points to cover… (optional)"
-              rows={2}
+              rows={4}
               className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-700 dark:text-gray-300 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-y"
             />
           </div>
