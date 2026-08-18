@@ -26,8 +26,15 @@ export default function InstructionSets({ selectedId, onSelect }: InstructionSet
   const [instructions, setInstructions] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // Delete modal — `deleteTarget` holds the set awaiting confirmation
+  const [deleteTarget, setDeleteTarget] = useState<ArticleInstruction | null>(null)
+  const [deleteCode, setDeleteCode] = useState('')
+  const [codeInput, setCodeInput] = useState('')
+  const [deleting, setDeleting] = useState(false)
+
   // Live check so the cap is visible while typing, not only on save
   const limitError = wordCountLimitError(instructions)
+  const codeMatches = codeInput === deleteCode
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -99,16 +106,36 @@ export default function InstructionSets({ selectedId, onSelect }: InstructionSet
     }
   }
 
-  async function handleDelete(set: ArticleInstruction) {
-    if (!confirm(`Delete instruction set "${set.name}"? This cannot be undone.`)) return
+  // A fresh code per attempt, so muscle memory can't carry over from the last delete
+  function generateDeleteCode() {
+    const random = typeof crypto !== 'undefined' && crypto.getRandomValues
+      ? crypto.getRandomValues(new Uint32Array(1))[0] % 10000
+      : Math.floor(Math.random() * 10000)
+    return String(random).padStart(4, '0')
+  }
+
+  function openDelete(set: ArticleInstruction) {
+    setDeleteTarget(set)
+    setDeleteCode(generateDeleteCode())
+    setCodeInput('')
+  }
+
+  async function handleDelete(e: React.FormEvent) {
+    e.preventDefault()
+    if (!deleteTarget || !codeMatches) return
+
+    setDeleting(true)
     try {
-      const res = await fetch(`/api/instructions/${set.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/instructions/${deleteTarget.id}`, { method: 'DELETE' })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Delete failed')
-      setSets((prev) => prev.filter((s) => s.id !== set.id))
+      setSets((prev) => prev.filter((s) => s.id !== deleteTarget.id))
       toast.success('Instruction set deleted')
+      setDeleteTarget(null)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Delete failed')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -179,7 +206,7 @@ export default function InstructionSets({ selectedId, onSelect }: InstructionSet
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleDelete(set)}
+                    onClick={() => openDelete(set)}
                     aria-label={`Delete ${set.name}`}
                     title="Delete"
                     className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-white/70 dark:hover:bg-gray-600 transition-colors"
@@ -266,6 +293,71 @@ export default function InstructionSets({ selectedId, onSelect }: InstructionSet
               className="flex-1 flex items-center justify-center gap-2 bg-brand-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
             >
               {saving ? <><Loader2 className="w-4 h-4 animate-spin" />Saving…</> : 'Save'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={deleteTarget !== null}
+        onClose={() => !deleting && setDeleteTarget(null)}
+        title="Delete instruction set"
+      >
+        <form onSubmit={handleDelete} className="space-y-4">
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            Delete{' '}
+            <span className="font-semibold text-gray-900 dark:text-white">
+              &ldquo;{deleteTarget?.name}&rdquo;
+            </span>
+            ? This cannot be undone.
+          </p>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              If you want to delete this, please type in this 4 digit code
+            </label>
+            <div className="flex items-center gap-3">
+              <span
+                aria-label={`Confirmation code ${deleteCode.split('').join(' ')}`}
+                className="select-none font-mono font-semibold tracking-[0.3em] text-lg text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl px-4 py-2.5"
+              >
+                {deleteCode}
+              </span>
+              <input
+                type="text"
+                value={codeInput}
+                onChange={(e) => setCodeInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                inputMode="numeric"
+                autoComplete="off"
+                autoFocus
+                placeholder="––––"
+                aria-label="Type the confirmation code"
+                className="flex-1 min-w-0 px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-lg font-mono tracking-[0.3em] text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+              />
+            </div>
+            {codeInput.length === 4 && !codeMatches && (
+              <p className="flex items-start gap-1.5 text-xs text-red-600 dark:text-red-400 mt-1.5">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+                That code doesn&apos;t match. Type {deleteCode} to confirm.
+              </p>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => setDeleteTarget(null)}
+              disabled={deleting}
+              className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={deleting || !codeMatches}
+              className="flex-1 flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+            >
+              {deleting ? <><Loader2 className="w-4 h-4 animate-spin" />Deleting…</> : 'Delete'}
             </button>
           </div>
         </form>
