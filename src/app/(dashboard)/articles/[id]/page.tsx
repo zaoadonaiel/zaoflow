@@ -158,12 +158,12 @@ export default function ArticleDetailPage() {
     <div className="max-w-4xl">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Link href="/articles" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <ArrowLeft className="w-4 h-4 text-gray-600" />
+          <Link href="/articles" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
+            <ArrowLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           </Link>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-gray-900 line-clamp-1">{title || 'Untitled'}</h1>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white line-clamp-1">{title || 'Untitled'}</h1>
               <Badge variant={statusToBadgeVariant(article.status)}>{article.status}</Badge>
             </div>
             {article.wp_post_url && (
@@ -176,7 +176,7 @@ export default function ArticleDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={handleSave} disabled={saving}
-            className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
+            className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50">
             {saving ? <Loader2 className="w-4 h-4 spin" /> : <Save className="w-4 h-4" />}
             Save
           </button>
@@ -194,12 +194,12 @@ export default function ArticleDetailPage() {
         <div className="lg:col-span-2 space-y-4">
           <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
             placeholder="Article title..."
-            className="w-full text-2xl font-bold text-gray-900 placeholder-gray-300 bg-transparent border-0 outline-none py-2" />
+            className="w-full text-2xl font-bold text-gray-900 dark:text-white placeholder-gray-300 dark:placeholder-gray-600 bg-transparent border-0 outline-none py-2" />
 
-          <div className="flex items-center gap-3 p-3 bg-brand-50 border border-brand-100 rounded-xl">
-            <Sparkles className="w-4 h-4 text-brand-600 flex-shrink-0" />
+          <div className="flex items-center gap-3 p-3 bg-brand-50 dark:bg-brand-900/30 border border-brand-100 dark:border-brand-800 rounded-xl">
+            <Sparkles className="w-4 h-4 text-brand-600 dark:text-brand-400 flex-shrink-0" />
             <select value={model} onChange={(e) => setModel(e.target.value)}
-              className="flex-1 text-sm text-brand-700 bg-transparent border-0 outline-none font-medium">
+              className="flex-1 text-sm text-brand-700 dark:text-brand-300 bg-transparent border-0 outline-none font-medium">
               {AVAILABLE_MODELS.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
             <button onClick={handleGenerate} disabled={generating || !title.trim()}
@@ -212,18 +212,18 @@ export default function ArticleDetailPage() {
         </div>
 
         <div className="space-y-4">
-          <div className="bg-white rounded-2xl border border-gray-100 p-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
               <Globe className="w-4 h-4 text-gray-400" />Target Site
             </h3>
             <select value={siteId} onChange={(e) => setSiteId(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+              className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500">
               {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
 
-          <div className="bg-white rounded-2xl border border-gray-100 p-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
               <FolderOpen className="w-4 h-4 text-gray-400" />Category
             </h3>
             {loadingCats ? (
@@ -234,7 +234,7 @@ export default function ArticleDetailPage() {
               <select
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : '')}
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
               >
                 <option value="">— Uncategorized —</option>
                 {categories.map((c) => (
@@ -245,15 +245,15 @@ export default function ArticleDetailPage() {
           </div>
 
           {article.word_count && (
-            <div className="bg-white rounded-2xl border border-gray-100 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-gray-400 text-xs">Words</p>
-                  <p className="font-semibold text-gray-900">{article.word_count.toLocaleString()}</p>
+                  <p className="text-gray-400 dark:text-gray-500 text-xs">Words</p>
+                  <p className="font-semibold text-gray-900 dark:text-white">{article.word_count.toLocaleString()}</p>
                 </div>
                 <div>
-                  <p className="text-gray-400 text-xs">Model</p>
-                  <p className="font-semibold text-gray-900 text-xs truncate">
+                  <p className="text-gray-400 dark:text-gray-500 text-xs">Model</p>
+                  <p className="font-semibold text-gray-900 dark:text-white text-xs truncate">
                     {AVAILABLE_MODELS.find((m) => m.id === article.ai_model)?.name || article.ai_model || '—'}
                   </p>
                 </div>
@@ -261,16 +261,16 @@ export default function ArticleDetailPage() {
             </div>
           )}
 
-          <div className="bg-white rounded-2xl border border-gray-100 p-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
               <Tag className="w-4 h-4 text-gray-400" />Keywords
             </h3>
             <input type="text" value={keywordInput} onChange={(e) => setKeywordInput(e.target.value)}
               onKeyDown={addKeyword} placeholder="Add keyword (Enter)..."
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 mb-2" />
+              className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 mb-2" />
             <div className="flex flex-wrap gap-1.5">
               {keywords.map((kw) => (
-                <span key={kw} className="flex items-center gap-1 bg-brand-50 text-brand-700 text-xs px-2 py-1 rounded-full border border-brand-100">
+                <span key={kw} className="flex items-center gap-1 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 text-xs px-2 py-1 rounded-full border border-brand-100 dark:border-brand-800">
                   {kw}
                   <button onClick={() => setKeywords(keywords.filter((k) => k !== kw))}>
                     <X className="w-3 h-3" />

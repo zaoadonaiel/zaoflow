@@ -7,6 +7,11 @@
   --sidebar-width: 240px;
 }
 
+/* Native controls (select popups, date pickers, form widgets) follow the theme */
+.dark {
+  color-scheme: dark;
+}
+
 * {
   box-sizing: border-box;
 }
