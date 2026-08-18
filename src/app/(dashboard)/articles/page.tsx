@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { FileText, Plus, Search, Trash2, ExternalLink, Filter } from 'lucide-react'
+import { FileText, Plus, Search, Trash2, ExternalLink, Globe } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import Badge, { statusToBadgeVariant } from '@/components/ui/Badge'
-import type { Article } from '@/types'
+import type { Article, Site } from '@/types'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
@@ -17,6 +17,8 @@ export default function ArticlesPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [sites, setSites] = useState<Site[]>([])
+  const [siteFilter, setSiteFilter] = useState('all')
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const fetchArticles = useCallback(async () => {
@@ -25,15 +27,23 @@ export default function ArticlesPage() {
       const params = new URLSearchParams()
       if (search) params.set('search', search)
       if (statusFilter !== 'all') params.set('status', statusFilter)
+      if (siteFilter !== 'all') params.set('site_id', siteFilter)
       const res = await fetch(`/api/articles?${params}`)
       const data = await res.json()
       setArticles(data.articles || [])
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter])
+  }, [search, statusFilter, siteFilter])
 
   useEffect(() => { fetchArticles() }, [fetchArticles])
+
+  useEffect(() => {
+    fetch('/api/sites')
+      .then((r) => r.json())
+      .then((d) => setSites(d.sites || []))
+      .catch(() => {})
+  }, [])
 
   async function deleteArticle(article: Article) {
     const hasWp = !!article.wp_post_id
@@ -91,6 +101,19 @@ export default function ArticlesPage() {
             className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
           />
         </div>
+        <div className="relative">
+          <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          <select
+            value={siteFilter}
+            onChange={(e) => setSiteFilter(e.target.value)}
+            className="appearance-none pl-10 pr-8 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent cursor-pointer"
+          >
+            <option value="all">All sites</option>
+            {sites.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
         <div className="flex items-center gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1">
           {STATUS_FILTERS.map((s) => (
             <button
@@ -141,10 +164,10 @@ export default function ArticlesPage() {
             <div>
               <p className="font-medium text-gray-900 dark:text-white">No articles found</p>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {search || statusFilter !== 'all' ? 'Try adjusting your filters' : 'Create your first article to get started'}
+                {search || statusFilter !== 'all' || siteFilter !== 'all' ? 'Try adjusting your filters' : 'Create your first article to get started'}
               </p>
             </div>
-            {!search && statusFilter === 'all' && (
+            {!search && statusFilter === 'all' && siteFilter === 'all' && (
               <Link
                 href="/articles/new"
                 className="flex items-center gap-2 bg-brand-600 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-brand-700 transition-colors"

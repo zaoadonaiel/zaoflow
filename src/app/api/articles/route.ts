@@ -9,6 +9,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const search = searchParams.get('search')
   const status = searchParams.get('status')
+  const siteId = searchParams.get('site_id')
 
   let query = supabase
     .from('articles')
@@ -18,6 +19,7 @@ export async function GET(req: NextRequest) {
 
   if (search) query = query.ilike('title', `%${search}%`)
   if (status) query = query.eq('status', status)
+  if (siteId) query = query.eq('site_id', siteId)
 
   const { data: articles, error } = await query
 
