@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { FileText, Plus, Search, Trash2, ExternalLink, Globe } from 'lucide-react'
+import { FileText, Plus, Search, Trash2, ExternalLink, Globe, Pencil } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import Badge, { statusToBadgeVariant } from '@/components/ui/Badge'
 import type { Article, Site } from '@/types'
@@ -135,11 +135,11 @@ export default function ArticlesPage() {
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
           <div className="grid grid-cols-12 gap-4 text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">
-            <div className="col-span-5">Title</div>
+            <div className="col-span-4">Title</div>
             <div className="col-span-2">Site</div>
             <div className="col-span-2">Status</div>
             <div className="col-span-2">Date</div>
-            <div className="col-span-1"></div>
+            <div className="col-span-2"></div>
           </div>
         </div>
 
@@ -148,7 +148,7 @@ export default function ArticlesPage() {
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="px-6 py-4 border-b border-gray-50 dark:border-gray-700 animate-pulse">
                 <div className="grid grid-cols-12 gap-4 items-center">
-                  <div className="col-span-5 h-4 bg-gray-200 dark:bg-gray-700 rounded" />
+                  <div className="col-span-4 h-4 bg-gray-200 dark:bg-gray-700 rounded" />
                   <div className="col-span-2 h-3 bg-gray-100 dark:bg-gray-700 rounded" />
                   <div className="col-span-2 h-5 bg-gray-100 dark:bg-gray-700 rounded-full w-20" />
                   <div className="col-span-2 h-3 bg-gray-100 dark:bg-gray-700 rounded" />
@@ -185,7 +185,7 @@ export default function ArticlesPage() {
                 className="px-6 py-4 border-b border-gray-50 dark:border-gray-700 last:border-0 hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors"
               >
                 <div className="grid grid-cols-12 gap-4 items-center">
-                  <div className="col-span-5">
+                  <div className="col-span-4">
                     <Link
                       href={`/articles/${article.id}`}
                       className="font-medium text-gray-900 dark:text-gray-100 text-sm hover:text-brand-600 dark:hover:text-brand-400 transition-colors line-clamp-1"
@@ -212,7 +212,14 @@ export default function ArticlesPage() {
                       {format(new Date(article.created_at), 'MMM d, yyyy')}
                     </span>
                   </div>
-                  <div className="col-span-1 flex items-center gap-1 justify-end">
+                  <div className="col-span-2 flex items-center gap-1 justify-end">
+                    <Link
+                      href={`/articles/${article.id}`}
+                      className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                      title="Edit article"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Link>
                     {article.wp_post_url && (
                       <a
                         href={article.wp_post_url}
