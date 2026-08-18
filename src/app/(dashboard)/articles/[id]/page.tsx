@@ -63,7 +63,7 @@ export default function ArticleDetailPage() {
       .finally(() => setLoadingCats(false))
   }, [siteId])
 
-  async function handleSave() {
+  async function handleSave(): Promise<boolean> {
     setSaving(true)
     try {
       const res = await fetch(`/api/articles/${id}`, {
@@ -71,10 +71,15 @@ export default function ArticleDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, content, keywords, site_id: siteId, ai_model: model, wp_category_id: categoryId || null }),
       })
-      if (!res.ok) throw new Error('Save failed')
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Save failed')
+      }
       toast.success('Saved')
-    } catch {
-      toast.error('Failed to save')
+      return true
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save')
+      return false
     } finally {
       setSaving(false)
     }
@@ -83,7 +88,10 @@ export default function ArticleDetailPage() {
   async function handlePublish() {
     setPublishing(true)
     try {
-      await handleSave()
+      // Publishing reads the category (and everything else) back off the saved row,
+      // so a failed save would quietly publish the previous values.
+      const saved = await handleSave()
+      if (!saved) return
       const res = await fetch('/api/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -95,6 +103,9 @@ export default function ArticleDetailPage() {
       toast.success('Published to WordPress!')
       if (data.imageWarning) {
         toast.error(`Featured image: ${data.imageWarning}`, { duration: 8000 })
+      }
+      if (data.categoryWarning) {
+        toast.error(`Category: ${data.categoryWarning}`, { duration: 10000 })
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Publish failed')

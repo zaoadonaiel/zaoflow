@@ -122,6 +122,14 @@ export const generateAndPublishTask = task({
       })
       logger.log('Published to WordPress', { wpPostId: wpResult.id, url: wpResult.link })
 
+      if (wpResult.categoryWarning) {
+        logger.warn('Category not applied', {
+          articleId: article.id,
+          requestedCategory: wpCategoryId,
+          warning: wpResult.categoryWarning,
+        })
+      }
+
       // Step 5: Update DB record
       await supabase.from('articles').update({
         status: 'published',
@@ -154,6 +162,7 @@ export const generateAndPublishTask = task({
         wpPostId: wpResult.id,
         url: wpResult.link,
         status: 'published',
+        categoryWarning: wpResult.categoryWarning,
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'

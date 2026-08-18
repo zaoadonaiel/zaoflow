@@ -18,6 +18,10 @@ export interface WPPostResult {
   id: number
   link: string
   status: string
+  /** Category IDs WordPress actually has on the post after the call. */
+  categories?: number[]
+  /** Set when the requested category could not be applied — the post is live but in Uncategorized. */
+  categoryWarning?: string
 }
 
 function getAuthHeader(username: string, appPassword: string): string {
@@ -166,7 +170,56 @@ export async function publishPost({
   }
 
   const data = await res.json()
-  return { id: data.id, link: data.link, status: data.status }
+  const result: WPPostResult = {
+    id: data.id,
+    link: data.link,
+    status: data.status,
+    categories: toCategoryIds(data.categories),
+  }
+
+  // WordPress silently falls back to Uncategorized whenever it does not apply the
+  // terms we sent (a security/SEO plugin filtering the payload, a role without
+  // assign_terms, a term id that does not exist on the site). Confirm the category
+  // landed, retry once against the created post, and report it if it still didn't.
+  const requested = post.categories ?? []
+  if (requested.length) {
+    let missing = missingCategories(requested, result.categories)
+
+    if (missing.length) {
+      try {
+        const retry = await updatePost({
+          siteUrl,
+          username,
+          appPassword,
+          postId: data.id,
+          post: { categories: requested },
+        })
+        result.categories = retry.categories
+        missing = missingCategories(requested, retry.categories)
+      } catch (err) {
+        result.categoryWarning = err instanceof Error ? err.message : 'Category assignment failed'
+      }
+    }
+
+    if (missing.length && !result.categoryWarning) {
+      result.categoryWarning =
+        `WordPress did not apply category ${missing.join(', ')} — the post is in Uncategorized. ` +
+        `Check that the category still exists on the site and that the connected user can assign categories.`
+    }
+  }
+
+  return result
+}
+
+function toCategoryIds(value: unknown): number[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  return value.map(Number).filter((n) => Number.isFinite(n))
+}
+
+function missingCategories(requested: number[], applied: number[] | undefined): number[] {
+  // An absent categories field means the site did not tell us — don't cry wolf.
+  if (!applied) return []
+  return requested.filter((id) => !applied.includes(id))
 }
 
 export async function deletePost({
@@ -225,5 +278,10 @@ export async function updatePost({
   }
 
   const data = await res.json()
-  return { id: data.id, link: data.link, status: data.status }
+  return {
+    id: data.id,
+    link: data.link,
+    status: data.status,
+    categories: toCategoryIds(data.categories),
+  }
 }

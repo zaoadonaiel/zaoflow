@@ -96,7 +96,17 @@ export async function POST(req: NextRequest) {
       }).eq('id', logEntry.id)
     }
 
-    return NextResponse.json({ success: true, id: wpResult.id, url: wpResult.link, imageWarning })
+    if (wpResult.categoryWarning) {
+      console.warn(`[publish] article ${articleId}: ${wpResult.categoryWarning}`)
+    }
+
+    return NextResponse.json({
+      success: true,
+      id: wpResult.id,
+      url: wpResult.link,
+      imageWarning,
+      categoryWarning: wpResult.categoryWarning,
+    })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Publish failed'
 

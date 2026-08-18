@@ -174,10 +174,13 @@ export default function NewArticlePage() {
     }
   }
 
-  async function handleSave() {
+  // The header buttons pick a mode and save in the same click, so they pass the
+  // mode explicitly — reading `publishMode` there would still see the old value.
+  async function handleSave(modeOverride?: PublishMode) {
+    const mode = modeOverride ?? publishMode
     if (!title.trim()) { toast.error('Title is required'); return }
     if (!siteId) { toast.error('Select a site'); return }
-    if (publishMode === 'scheduled' && !scheduledAt) { toast.error('Pick a date and time to schedule'); return }
+    if (mode === 'scheduled' && !scheduledAt) { toast.error('Pick a date and time to schedule'); return }
 
     setSaving(true)
     try {
@@ -187,8 +190,8 @@ export default function NewArticlePage() {
         content,
         keywords,
         ai_model: model,
-        status: publishMode === 'draft' ? 'draft' : 'scheduled',
-        scheduled_at: publishMode === 'scheduled' ? scheduledAt : null,
+        status: mode === 'draft' ? 'draft' : 'scheduled',
+        scheduled_at: mode === 'scheduled' ? scheduledAt : null,
         focus_keyphrase: focusKeyphrase || null,
         keyphrase_synonyms: keyphraseSynonyms || null,
         yoast_title: yoastTitle || null,
@@ -208,7 +211,7 @@ export default function NewArticlePage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Save failed')
 
-      if (publishMode === 'now') {
+      if (mode === 'now') {
         // Publish immediately to WordPress
         const pubRes = await fetch('/api/publish', {
           method: 'POST',
@@ -217,13 +220,14 @@ export default function NewArticlePage() {
         })
         const pubData = await pubRes.json()
         if (!pubRes.ok) throw new Error(pubData.error || 'Publish failed')
+        toast.success('Article published to WordPress!')
         if (pubData.imageWarning) {
-          toast.success('Article published to WordPress!')
           toast.error(`Featured image: ${pubData.imageWarning}`, { duration: 8000 })
-        } else {
-          toast.success('Article published to WordPress!')
         }
-      } else if (publishMode === 'scheduled') {
+        if (pubData.categoryWarning) {
+          toast.error(`Category: ${pubData.categoryWarning}`, { duration: 10000 })
+        }
+      } else if (mode === 'scheduled') {
         // Send to WordPress as a scheduled (future) post — WP handles publishing at the right time
         const pubRes = await fetch('/api/publish', {
           method: 'POST',
@@ -233,6 +237,9 @@ export default function NewArticlePage() {
         const pubData = await pubRes.json()
         if (!pubRes.ok) throw new Error(pubData.error || 'Scheduling failed')
         toast.success('Article scheduled on WordPress!')
+        if (pubData.categoryWarning) {
+          toast.error(`Category: ${pubData.categoryWarning}`, { duration: 10000 })
+        }
       } else {
         toast.success('Article saved as draft')
       }
@@ -254,7 +261,7 @@ export default function NewArticlePage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={handleSave}
+            onClick={() => { setPublishMode('draft'); handleSave('draft') }}
             disabled={saving}
             className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
@@ -262,7 +269,7 @@ export default function NewArticlePage() {
             Save draft
           </button>
           <button
-            onClick={() => { setPublishMode('now'); handleSave() }}
+            onClick={() => { setPublishMode('now'); handleSave('now') }}
             disabled={saving}
             className="flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white rounded-xl text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
           >
@@ -519,7 +526,7 @@ export default function NewArticlePage() {
             )}
 
             <button
-              onClick={handleSave}
+              onClick={() => handleSave()}
               disabled={saving}
               className="w-full mt-3 bg-brand-600 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >

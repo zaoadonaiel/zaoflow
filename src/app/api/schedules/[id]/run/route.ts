@@ -131,11 +131,16 @@ export async function POST(
       updated_at: new Date().toISOString(),
     }).eq('id', schedule.id)
 
+    if (wpResult.categoryWarning) {
+      console.warn(`[schedule-run] schedule ${schedule.id}: ${wpResult.categoryWarning}`)
+    }
+
     return NextResponse.json({
       success: true,
       title,
       articleId: article.id,
       url: wpResult.link,
+      categoryWarning: wpResult.categoryWarning,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Run failed'
