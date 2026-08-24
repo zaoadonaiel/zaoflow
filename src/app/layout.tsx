@@ -6,6 +6,7 @@ import ThemeProvider from '@/components/ui/ThemeProvider'
 export const metadata: Metadata = {
   title: 'Zaoflo — AI WordPress Publishing Autopilot',
   description: 'Publish SEO-optimized content to multiple WordPress sites on autopilot. Connect your sites, choose an AI model, set a schedule.',
+  viewport: 'width=device-width, initial-scale=1.0, maximum-scale=5.0',
 }
 
 export default function RootLayout({
