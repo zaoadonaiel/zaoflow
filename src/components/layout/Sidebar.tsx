@@ -57,10 +57,8 @@ export default function Sidebar({ userEmail, userName }: SidebarProps) {
       {/* Logo */}
       <div className="h-16 flex items-center px-5 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
         <div className="flex items-center gap-2.5 flex-1">
-          <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center flex-shrink-0">
-            <Sparkles className="w-4 h-4 text-white" />
-          </div>
-          <span className="text-lg font-bold text-gray-900 dark:text-white">Zaoflo</span>
+          <img src="/logo.png" alt="Zao Flo" className="w-8 h-8 flex-shrink-0" />
+          <span className="text-lg font-bold text-gray-900 dark:text-white">Zao Flo</span>
         </div>
         <button
           onClick={() => setIsOpen(false)}
@@ -144,10 +142,8 @@ export default function Sidebar({ userEmail, userName }: SidebarProps) {
           <Menu className="w-5 h-5" />
         </button>
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-brand-600 rounded-md flex items-center justify-center">
-            <Sparkles className="w-3.5 h-3.5 text-white" />
-          </div>
-          <span className="font-bold text-gray-900 dark:text-white">Zaoflo</span>
+          <img src="/logo.png" alt="Zao Flo" className="w-6 h-6" />
+          <span className="font-bold text-gray-900 dark:text-white">Zao Flo</span>
         </div>
         <div className="ml-auto">
           <ThemeToggle />

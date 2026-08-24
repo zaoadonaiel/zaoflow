@@ -178,7 +178,7 @@ export default function SettingsPage() {
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-6">
           <h2 className="font-semibold text-gray-900 dark:text-white mb-2">WordPress Plugin</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-            The Zaoflo Connector plugin extends WordPress publishing with status callbacks and advanced scheduling.
+            The Zao Flo Connector plugin extends WordPress publishing with status callbacks and advanced scheduling.
             Basic publishing works without it via the WordPress REST API.
           </p>
           <div className="bg-gray-50 dark:bg-gray-900/50 rounded-xl p-4 font-mono text-xs text-gray-600 dark:text-gray-400 mb-4 overflow-x-auto">

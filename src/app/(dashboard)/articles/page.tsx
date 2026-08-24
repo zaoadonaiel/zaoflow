@@ -59,10 +59,10 @@ export default function ArticlesPage() {
       if (!res.ok) throw new Error(data.error || 'Delete failed')
       setArticles((prev) => prev.filter((a) => a.id !== article.id))
       if (data.wpError) {
-        toast.success('Deleted from Zaoflo', { duration: 2000 })
+        toast.success('Deleted from Zao Flo', { duration: 2000 })
         toast.error(`WordPress: ${data.wpError}`, { duration: 6000 })
       } else if (data.wpDeleted) {
-        toast.success('Deleted from Zaoflo and WordPress')
+        toast.success('Deleted from Zao Flo and WordPress')
       } else {
         toast.success('Article deleted')
       }

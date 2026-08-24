@@ -61,7 +61,7 @@ export default function AddSiteModal({ open, onClose, onAdded }: AddSiteModalPro
     const appId = crypto.randomUUID()
 
     const authUrl = `${cleanUrl}/wp-admin/authorize-application.php?` +
-      `app_name=${encodeURIComponent('Zaoflo')}&` +
+      `app_name=${encodeURIComponent('Zao Flo')}&` +
       `app_id=${appId}&` +
       `success_url=${encodeURIComponent(successUrl)}&` +
       `reject_url=${encodeURIComponent(rejectUrl)}`
@@ -187,7 +187,7 @@ export default function AddSiteModal({ open, onClose, onAdded }: AddSiteModalPro
                 <p className="font-medium text-blue-800">How it works</p>
                 <ol className="list-decimal list-inside space-y-0.5 ml-1">
                   <li>You&apos;ll be taken to your WordPress admin to log in</li>
-                  <li>WordPress asks you to approve Zaoflo access</li>
+                  <li>WordPress asks you to approve Zao Flo access</li>
                   <li>Click <strong>Yes, Grant Access</strong> — you&apos;re done!</li>
                 </ol>
                 <p className="text-blue-600 mt-1">No copy-pasting required. Works on any WordPress 5.6+ site.</p>

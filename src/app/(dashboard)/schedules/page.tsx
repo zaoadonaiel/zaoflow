@@ -288,7 +288,7 @@ export default function SchedulesPage() {
             </div>
             <div>
               <p className="font-semibold text-gray-900 dark:text-white">No schedules yet</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Set up autopilot publishing and Zaoflo handles the rest</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Set up autopilot publishing and Zao Flo handles the rest</p>
             </div>
             <button
               onClick={() => setShowCreate(true)}
@@ -583,7 +583,7 @@ export default function SchedulesPage() {
               placeholder="Describe what kind of articles to generate. e.g. 'Write SEO articles about dog training tips for first-time owners. Target beginner dog owners. Focus on actionable advice.'"
               rows={4} required
               className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none" />
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Zaoflo will use this to generate unique article topics each time</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Zao Flo will use this to generate unique article topics each time</p>
           </div>
 
           <div className="flex gap-3 pt-2">

@@ -35,10 +35,8 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-6">
-            <div className="w-9 h-9 bg-brand-600 rounded-xl flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-bold text-gray-900 dark:text-white">Zaoflo</span>
+            <img src="/logo.png" alt="Zao Flo" className="w-9 h-9" />
+            <span className="text-xl font-bold text-gray-900 dark:text-white">Zao Flo</span>
           </Link>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Welcome back</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-2 text-sm">Sign in to your account</p>

@@ -20,10 +20,8 @@ export default function LandingPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
-            <span className="text-xl font-bold text-gray-900">Zaoflo</span>
+            <img src="/logo.png" alt="Zao Flo" className="w-8 h-8" />
+            <span className="text-xl font-bold text-gray-900">Zao Flo</span>
           </div>
           <div className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Features</a>
@@ -58,7 +56,7 @@ export default function LandingPage() {
           </h1>
           <p className="text-xl text-gray-500 max-w-2xl mx-auto mb-10">
             Connect your WordPress sites, let AI write great blog posts, set a publishing schedule.
-            Zaoflo handles the rest — automatically, every time.
+            Zao Flo handles the rest — automatically, every time.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
@@ -84,7 +82,7 @@ export default function LandingPage() {
               <div className="w-3 h-3 rounded-full bg-red-500/80" />
               <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
               <div className="w-3 h-3 rounded-full bg-green-500/80" />
-              <span className="ml-3 text-xs text-gray-500 font-mono">Zaoflo Dashboard</span>
+              <span className="ml-3 text-xs text-gray-500 font-mono">Zao Flo Dashboard</span>
             </div>
             <div className="flex h-72">
               <div className="w-52 bg-gray-900 border-r border-gray-800 p-4 flex flex-col gap-1">
@@ -182,7 +180,7 @@ export default function LandingPage() {
               {
                 icon: RefreshCw,
                 title: 'Recurring Autopilot',
-                desc: 'Set a topic strategy once. Zaoflo writes and publishes fresh content on autopilot.',
+                desc: 'Set a topic strategy once. Zao Flo writes and publishes fresh content on autopilot.',
                 color: 'bg-rose-50 text-rose-600',
               },
             ].map(({ icon: Icon, title, desc, color }) => (
@@ -210,7 +208,7 @@ export default function LandingPage() {
               {
                 step: '01',
                 title: 'Connect your WordPress site',
-                desc: 'Install the Zaoflo plugin on your WordPress site and add your site URL with an Application Password. No complicated setup — takes 2 minutes.',
+                desc: 'Install the Zao Flo plugin on your WordPress site and add your site URL with an Application Password. No complicated setup — takes 2 minutes.',
               },
               {
                 step: '02',
@@ -220,7 +218,7 @@ export default function LandingPage() {
               {
                 step: '03',
                 title: 'Write, generate, and schedule',
-                desc: 'Type your own content or let AI write it. Set a publishing schedule (daily, weekly, or custom). Zaoflo publishes automatically from then on.',
+                desc: 'Type your own content or let AI write it. Set a publishing schedule (daily, weekly, or custom). Zao Flo publishes automatically from then on.',
               },
             ].map(({ step, title, desc }) => (
               <div key={step} className="flex gap-8 items-start">
@@ -269,17 +267,15 @@ export default function LandingPage() {
       <footer className="border-t border-gray-100 py-12 px-6">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-brand-600 rounded-lg flex items-center justify-center">
-              <Sparkles className="w-3.5 h-3.5 text-white" />
-            </div>
-            <span className="font-bold text-gray-900">Zaoflo</span>
+            <img src="/logo.png" alt="Zao Flo" className="w-7 h-7" />
+            <span className="font-bold text-gray-900">Zao Flo</span>
           </div>
           <div className="flex items-center gap-8 text-sm text-gray-500">
             <Link href="/privacy" className="hover:text-gray-900 transition-colors">Privacy</Link>
             <Link href="/terms" className="hover:text-gray-900 transition-colors">Terms</Link>
             <Link href="mailto:support@zaoflo.com" className="hover:text-gray-900 transition-colors">Support</Link>
           </div>
-          <p className="text-sm text-gray-400">© 2026 Zaoflo. All rights reserved.</p>
+          <p className="text-sm text-gray-400">© 2026 Zao Flo. All rights reserved.</p>
         </div>
       </footer>
     </div>
