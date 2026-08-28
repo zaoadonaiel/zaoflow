@@ -1,6 +1,7 @@
 import { task, logger } from '@trigger.dev/sdk/v3'
 import { generateArticle } from '@/lib/openrouter'
 import { publishPost } from '@/lib/wordpress'
+import { publishPost as publishNodePost } from '@/lib/nodejs-site'
 
 interface GenerateAndPublishPayload {
   scheduleId: string
@@ -9,9 +10,11 @@ interface GenerateAndPublishPayload {
   topicPrompt: string
   aiModel: string
   apiKey: string
+  siteType?: 'wordpress' | 'nodejs'
   siteUrl: string
   wpUsername: string
   wpAppPassword: string
+  nodeApiUrl?: string
   secretToken: string
   wpCategoryId?: number
   publishImmediately?: boolean
@@ -56,7 +59,8 @@ export const generateAndPublishTask = task({
   run: async (payload: GenerateAndPublishPayload) => {
     const {
       scheduleId, siteId, userId, topicPrompt, aiModel, apiKey,
-      siteUrl, wpUsername, wpAppPassword, wpCategoryId, publishImmediately = true,
+      siteType = 'wordpress', siteUrl, wpUsername, wpAppPassword, nodeApiUrl, secretToken,
+      wpCategoryId, publishImmediately = true,
     } = payload
 
     logger.log('Starting generate-and-publish task', { scheduleId, siteId })
@@ -106,7 +110,58 @@ export const generateAndPublishTask = task({
         return { success: true, articleId: article.id, status: 'draft' }
       }
 
-      // Step 4: Publish to WordPress
+      // Step 4: Publish to the site
+      if (siteType === 'nodejs') {
+        logger.log('Publishing to Node.js site...')
+        const nodeResult = await publishNodePost({
+          apiUrl: nodeApiUrl || '',
+          apiKey: secretToken,
+          post: {
+            title,
+            content,
+            excerpt,
+            metaDescription,
+            status: 'publish',
+            publishedAt: new Date().toISOString(),
+          },
+        })
+        logger.log('Published to Node.js site', { nodePostId: nodeResult.id, url: nodeResult.url })
+
+        // Step 5: Update DB record
+        await supabase.from('articles').update({
+          status: 'published',
+          published_at: new Date().toISOString(),
+          node_post_id: nodeResult.id,
+          node_post_url: nodeResult.url,
+          updated_at: new Date().toISOString(),
+        }).eq('id', article.id)
+
+        // Log success
+        await supabase.from('publish_logs').insert({
+          article_id: article.id,
+          site_id: siteId,
+          user_id: userId,
+          status: 'success',
+          node_post_id: nodeResult.id,
+          node_post_url: nodeResult.url,
+        })
+
+        // Update schedule counters
+        await supabase.from('schedules').update({
+          articles_generated: supabase.rpc('increment', { x: 1 }),
+          last_run: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }).eq('id', scheduleId)
+
+        return {
+          success: true,
+          articleId: article.id,
+          nodePostId: nodeResult.id,
+          url: nodeResult.url,
+          status: 'published',
+        }
+      }
+
       logger.log('Publishing to WordPress...')
       const wpResult = await publishPost({
         siteUrl,

@@ -43,7 +43,9 @@ export const scheduleRunnerTask = schedules.task({
       }
 
       const site = (schedule as Record<string, unknown>).sites as {
-        url: string; wp_username: string; wp_app_password: string; secret_token: string; status: string
+        site_type?: 'wordpress' | 'nodejs'
+        url: string; wp_username: string; wp_app_password: string
+        node_api_url?: string; secret_token: string; status: string
       }
 
       if (!site || site.status !== 'connected') {
@@ -63,9 +65,11 @@ export const scheduleRunnerTask = schedules.task({
           topicPrompt: schedule.topic_prompt,
           aiModel: schedule.ai_model || userSettings.default_model,
           apiKey: userSettings.openrouter_api_key,
+          siteType: site.site_type || 'wordpress',
           siteUrl: site.url,
           wpUsername: site.wp_username,
           wpAppPassword: site.wp_app_password,
+          nodeApiUrl: site.node_api_url,
           secretToken: site.secret_token,
           wpCategoryId: schedule.wp_category_id || undefined,
           publishImmediately: true,

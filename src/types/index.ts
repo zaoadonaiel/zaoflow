@@ -11,12 +11,17 @@ export interface Site {
   user_id: string
   name: string
   url: string
-  wp_username: string
-  wp_app_password: string
+  site_type: 'wordpress' | 'nodejs' | 'other'
+  wp_username?: string
+  wp_app_password?: string
+  node_api_url?: string
   secret_token: string
   status: 'connected' | 'disconnected' | 'error'
   plugin_installed: boolean
   last_sync?: string
+  ga4_property_id?: string
+  ga4_measurement_id?: string
+  gsc_site_url?: string
   created_at: string
   updated_at: string
 }
@@ -36,6 +41,8 @@ export interface Article {
   published_at?: string
   wp_post_id?: number
   wp_post_url?: string
+  node_post_id?: string
+  node_post_url?: string
   ai_model?: string
   word_count?: number
   wp_category_id?: number
@@ -95,9 +102,29 @@ export interface PublishLog {
   error_message?: string
   wp_post_id?: number
   wp_post_url?: string
+  node_post_id?: string
+  node_post_url?: string
   created_at: string
   articles?: Article
   sites?: Site
+}
+
+export interface GA4Property {
+  propertyId: string
+  displayName: string
+  accountName: string
+}
+
+export interface GoogleConnection {
+  id: string
+  user_id: string
+  access_token: string
+  refresh_token: string
+  expires_at: string
+  scope: string
+  google_email?: string
+  created_at: string
+  updated_at: string
 }
 
 export interface ApiSettings {

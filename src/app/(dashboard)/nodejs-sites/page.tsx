@@ -1,54 +1,33 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
-import { Globe, Plus, Trash2, RefreshCw, ExternalLink, CheckCircle2, XCircle, Server } from 'lucide-react'
+import { Server, Plus, Trash2, RefreshCw, ExternalLink, CheckCircle2, XCircle } from 'lucide-react'
 import Header from '@/components/layout/Header'
-import AddSiteModal from '@/components/sites/AddSiteModal'
 import AddNodeSiteModal from '@/components/sites/AddNodeSiteModal'
 import Badge, { statusToBadgeVariant } from '@/components/ui/Badge'
 import type { Site } from '@/types'
 import toast from 'react-hot-toast'
 
-export default function SitesPage() {
+export default function NodeJSSitesPage() {
   const [sites, setSites] = useState<Site[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
-  const [showAddNode, setShowAddNode] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [testingId, setTestingId] = useState<string | null>(null)
-  const searchParams = useSearchParams()
-  const router = useRouter()
 
   const fetchSites = useCallback(async () => {
     setLoading(true)
     try {
       const res = await fetch('/api/sites')
       const data = await res.json()
-      setSites(data.sites || [])
+      const nodeSites: Site[] = (data.sites || []).filter((s: Site) => s.site_type === 'nodejs')
+      setSites(nodeSites)
     } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => { fetchSites() }, [fetchSites])
-
-  // Handle WordPress OAuth callback result
-  useEffect(() => {
-    const connected = searchParams.get('wp_connected')
-    const error = searchParams.get('wp_error')
-    if (connected) {
-      toast.success(`${decodeURIComponent(connected)} connected successfully!`)
-      fetchSites()
-      router.replace('/sites')
-    } else if (error === 'rejected') {
-      toast.error('Authorization was cancelled in WordPress')
-      router.replace('/sites')
-    } else if (error) {
-      toast.error('Could not save site — please try again')
-      router.replace('/sites')
-    }
-  }, [searchParams, fetchSites, router])
 
   async function deleteSite(id: string, name: string) {
     if (!confirm(`Remove "${name}"? Articles linked to this site will remain as drafts.`)) return
@@ -84,25 +63,16 @@ export default function SitesPage() {
   return (
     <div>
       <Header
-        title="Sites"
-        subtitle="Manage your connected WordPress sites"
+        title="Node JS Sites"
+        subtitle="Connect your Node.js sites to schedule and publish AI-written blog posts."
         actions={
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowAdd(true)}
-              className="flex items-center gap-2 bg-brand-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-brand-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Add WordPress site
-            </button>
-            <button
-              onClick={() => setShowAddNode(true)}
-              className="flex items-center gap-2 bg-gray-900 dark:bg-gray-700 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Add Node.js site
-            </button>
-          </div>
+          <button
+            onClick={() => setShowAdd(true)}
+            className="flex items-center gap-2 bg-brand-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-brand-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Node.js site
+          </button>
         }
       />
 
@@ -120,28 +90,19 @@ export default function SitesPage() {
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 border-dashed">
           <div className="flex flex-col items-center gap-4 py-20 text-center">
             <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-2xl flex items-center justify-center">
-              <Globe className="w-8 h-8 text-gray-400" />
+              <Server className="w-8 h-8 text-gray-400" />
             </div>
             <div>
-              <p className="font-semibold text-gray-900 dark:text-white">No sites connected</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Connect your first WordPress or Node.js site to start publishing</p>
+              <p className="font-semibold text-gray-900 dark:text-white">No Node.js sites connected</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Connect your first Node.js site to start publishing</p>
             </div>
-            <div className="flex items-center gap-2 mt-2">
-              <button
-                onClick={() => setShowAdd(true)}
-                className="flex items-center gap-2 bg-brand-600 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-brand-700 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                WordPress site
-              </button>
-              <button
-                onClick={() => setShowAddNode(true)}
-                className="flex items-center gap-2 bg-gray-900 dark:bg-gray-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Node.js site
-              </button>
-            </div>
+            <button
+              onClick={() => setShowAdd(true)}
+              className="flex items-center gap-2 bg-brand-600 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-brand-700 transition-colors mt-2"
+            >
+              <Plus className="w-4 h-4" />
+              Connect a site
+            </button>
           </div>
         </div>
       ) : (
@@ -150,35 +111,26 @@ export default function SitesPage() {
             <div key={site.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 hover:border-gray-200 dark:hover:border-gray-600 transition-all">
               <div className="flex items-start justify-between mb-3">
                 <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                  {site.site_type === 'nodejs' ? (
-                    <Server className="w-5 h-5 text-blue-600" />
+                  <Server className="w-5 h-5 text-blue-600" />
+                </div>
+                <Badge variant={statusToBadgeVariant(site.status)}>
+                  {site.status === 'connected' ? (
+                    <CheckCircle2 className="w-3 h-3" />
                   ) : (
-                    <Globe className="w-5 h-5 text-blue-600" />
+                    <XCircle className="w-3 h-3" />
                   )}
-                </div>
-                <div className="flex flex-col items-end gap-1.5">
-                  <Badge variant={statusToBadgeVariant(site.status)}>
-                    {site.status === 'connected' ? (
-                      <CheckCircle2 className="w-3 h-3" />
-                    ) : (
-                      <XCircle className="w-3 h-3" />
-                    )}
-                    {site.status}
-                  </Badge>
-                  <Badge variant={site.site_type === 'nodejs' ? 'purple' : 'default'}>
-                    {site.site_type === 'nodejs' ? 'Node.js' : 'WordPress'}
-                  </Badge>
-                </div>
+                  {site.status}
+                </Badge>
               </div>
 
               <h3 className="font-semibold text-gray-900 dark:text-white mb-1">{site.name}</h3>
               <a
-                href={site.url}
+                href={site.node_api_url || site.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs text-gray-400 dark:text-gray-500 hover:text-brand-600 dark:hover:text-brand-400 flex items-center gap-1 transition-colors"
               >
-                {site.url.replace(/^https?:\/\//, '')}
+                {(site.node_api_url || site.url).replace(/^https?:\/\//, '')}
                 <ExternalLink className="w-3 h-3" />
               </a>
 
@@ -210,18 +162,9 @@ export default function SitesPage() {
         </div>
       )}
 
-      <AddSiteModal
+      <AddNodeSiteModal
         open={showAdd}
         onClose={() => setShowAdd(false)}
-        onAdded={() => {
-          setShowAdd(false)
-          fetchSites()
-        }}
-      />
-
-      <AddNodeSiteModal
-        open={showAddNode}
-        onClose={() => setShowAddNode(false)}
         onAdded={() => fetchSites()}
       />
     </div>

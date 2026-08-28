@@ -79,8 +79,11 @@ export default function NewArticlePage() {
     })
   }, [])
 
+  const currentSite = sites.find((s) => s.id === siteId)
+  const isNodeSite = currentSite?.site_type === 'nodejs'
+
   useEffect(() => {
-    if (!siteId) return
+    if (!siteId || isNodeSite) return
     setLoadingCats(true)
     setCategories([])
     // Categories are per-site, so a selection from the previous site is stale
@@ -101,7 +104,7 @@ export default function NewArticlePage() {
       })
       .catch(() => {})
       .finally(() => setLoadingCats(false))
-  }, [siteId])
+  }, [siteId, isNodeSite])
 
   function addKeyword(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && keywordInput.trim()) {
@@ -220,7 +223,7 @@ export default function NewArticlePage() {
         })
         const pubData = await pubRes.json()
         if (!pubRes.ok) throw new Error(pubData.error || 'Publish failed')
-        toast.success('Article published to WordPress!')
+        toast.success(isNodeSite ? 'Article published to Node.js site!' : 'Article published to WordPress!')
         if (pubData.imageWarning) {
           toast.error(`Featured image: ${pubData.imageWarning}`, { duration: 8000 })
         }
@@ -467,7 +470,7 @@ export default function NewArticlePage() {
                 {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             )}
-            {siteId && (
+            {siteId && !isNodeSite && (
               <div className="mt-3">
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5 flex items-center gap-1">
                   <FolderOpen className="w-3.5 h-3.5 text-gray-400" /> Category

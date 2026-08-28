@@ -14,6 +14,8 @@ import {
   Sparkles,
   Menu,
   X,
+  Clock,
+  Server,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import ThemeToggle from '@/components/ui/ThemeToggle'
@@ -22,9 +24,11 @@ import toast from 'react-hot-toast'
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/sites', label: 'Sites', icon: Globe },
+  { href: '/nodejs-sites', label: 'Node JS Sites', icon: Server },
   { href: '/articles', label: 'Articles', icon: FileText },
   { href: '/schedules', label: 'Schedules', icon: Calendar },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { href: '/history', label: 'History', icon: Clock },
 ]
 
 interface SidebarProps {

@@ -51,9 +51,12 @@ export default function ArticleDetailPage() {
     })
   }, [id])
 
-  // Fetch categories whenever site changes
+  const currentSite = sites.find((s) => s.id === siteId)
+  const isNodeSite = currentSite?.site_type === 'nodejs'
+
+  // Fetch categories whenever site changes (WordPress only — Node.js sites have no category concept)
   useEffect(() => {
-    if (!siteId) return
+    if (!siteId || isNodeSite) return
     setLoadingCats(true)
     setCategories([])
     fetch(`/api/sites/${siteId}/categories`)
@@ -61,7 +64,7 @@ export default function ArticleDetailPage() {
       .then((d) => setCategories(d.categories || []))
       .catch(() => {})
       .finally(() => setLoadingCats(false))
-  }, [siteId])
+  }, [siteId, isNodeSite])
 
   async function handleSave(): Promise<boolean> {
     setSaving(true)
@@ -99,8 +102,12 @@ export default function ArticleDetailPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Publish failed')
-      setArticle((prev) => prev ? { ...prev, status: 'published', wp_post_url: data.url } : prev)
-      toast.success('Published to WordPress!')
+      setArticle((prev) => prev ? {
+        ...prev,
+        status: 'published',
+        ...(isNodeSite ? { node_post_url: data.url } : { wp_post_url: data.url }),
+      } : prev)
+      toast.success(isNodeSite ? 'Published to Node.js site!' : 'Published to WordPress!')
       if (data.imageWarning) {
         toast.error(`Featured image: ${data.imageWarning}`, { duration: 8000 })
       }
@@ -166,10 +173,10 @@ export default function ArticleDetailPage() {
               <h1 className="text-xl font-bold text-gray-900 dark:text-white line-clamp-1">{title || 'Untitled'}</h1>
               <Badge variant={statusToBadgeVariant(article.status)}>{article.status}</Badge>
             </div>
-            {article.wp_post_url && (
-              <a href={article.wp_post_url} target="_blank" rel="noopener noreferrer"
+            {(article.node_post_url || article.wp_post_url) && (
+              <a href={article.node_post_url || article.wp_post_url} target="_blank" rel="noopener noreferrer"
                 className="text-xs text-brand-600 hover:underline flex items-center gap-1 mt-0.5">
-                View on WordPress <ExternalLink className="w-3 h-3" />
+                {article.node_post_url ? 'View live' : 'View on WordPress'} <ExternalLink className="w-3 h-3" />
               </a>
             )}
           </div>
@@ -222,27 +229,29 @@ export default function ArticleDetailPage() {
             </select>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-              <FolderOpen className="w-4 h-4 text-gray-400" />Category
-            </h3>
-            {loadingCats ? (
-              <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />Loading categories...
-              </div>
-            ) : (
-              <select
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : '')}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              >
-                <option value="">— Uncategorized —</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name} ({c.count})</option>
-                ))}
-              </select>
-            )}
-          </div>
+          {!isNodeSite && (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                <FolderOpen className="w-4 h-4 text-gray-400" />Category
+              </h3>
+              {loadingCats ? (
+                <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />Loading categories...
+                </div>
+              ) : (
+                <select
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : '')}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="">— Uncategorized —</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.count})</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
 
           {article.word_count && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">

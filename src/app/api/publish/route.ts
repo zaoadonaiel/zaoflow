@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { publishPost, uploadMedia } from '@/lib/wordpress'
+import { publishPost as publishNodePost } from '@/lib/nodejs-site'
 
 export async function POST(req: NextRequest) {
   const supabase = createClient()
@@ -21,7 +22,12 @@ export async function POST(req: NextRequest) {
   if (!article) return NextResponse.json({ error: 'Article not found' }, { status: 404 })
 
   const site = (article as Record<string, unknown>).sites as {
-    url: string; wp_username: string; wp_app_password: string
+    site_type?: 'wordpress' | 'nodejs'
+    url: string
+    wp_username: string
+    wp_app_password: string
+    node_api_url: string
+    secret_token: string
   }
   if (!site) return NextResponse.json({ error: 'Site not found' }, { status: 404 })
 
@@ -35,6 +41,63 @@ export async function POST(req: NextRequest) {
     user_id: user.id,
     status: 'pending',
   }).select().single()
+
+  if (site.site_type === 'nodejs') {
+    try {
+      const nodeResult = await publishNodePost({
+        apiUrl: site.node_api_url,
+        apiKey: site.secret_token,
+        post: {
+          title: article.title,
+          slug: article.slug || undefined,
+          content: article.content,
+          excerpt: article.excerpt || undefined,
+          metaDescription: article.meta_description || article.yoast_meta_description || undefined,
+          featuredImageUrl: article.featured_image_url || undefined,
+          status: scheduledAt ? 'draft' : 'publish',
+          publishedAt: scheduledAt || new Date().toISOString(),
+        },
+      })
+
+      await supabase.from('articles').update({
+        status: 'published',
+        published_at: new Date().toISOString(),
+        node_post_id: nodeResult.id,
+        node_post_url: nodeResult.url,
+        updated_at: new Date().toISOString(),
+      }).eq('id', articleId)
+
+      if (logEntry) {
+        await supabase.from('publish_logs').update({
+          status: 'success',
+          node_post_id: nodeResult.id,
+          node_post_url: nodeResult.url,
+        }).eq('id', logEntry.id)
+      }
+
+      return NextResponse.json({
+        success: true,
+        id: nodeResult.id,
+        url: nodeResult.url,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Publish failed'
+
+      await supabase.from('articles').update({
+        status: 'failed',
+        updated_at: new Date().toISOString(),
+      }).eq('id', articleId)
+
+      if (logEntry) {
+        await supabase.from('publish_logs').update({
+          status: 'failed',
+          error_message: msg,
+        }).eq('id', logEntry.id)
+      }
+
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
+  }
 
   try {
     const postStatus = scheduledAt ? 'future' : 'publish'

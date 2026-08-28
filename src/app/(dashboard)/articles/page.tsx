@@ -220,13 +220,13 @@ export default function ArticlesPage() {
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </Link>
-                    {article.wp_post_url && (
+                    {(article.node_post_url || article.wp_post_url) && (
                       <a
-                        href={article.wp_post_url}
+                        href={article.node_post_url || article.wp_post_url}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                        title="View on WordPress"
+                        title={article.node_post_url ? 'View live' : 'View on WordPress'}
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>

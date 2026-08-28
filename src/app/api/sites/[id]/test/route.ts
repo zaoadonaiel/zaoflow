@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { testWordPressConnection } from '@/lib/wordpress'
+import { testNodeConnection } from '@/lib/nodejs-site'
 
 export async function POST(
   _req: NextRequest,
@@ -19,11 +20,16 @@ export async function POST(
 
   if (!site) return NextResponse.json({ error: 'Site not found' }, { status: 404 })
 
-  const result = await testWordPressConnection({
-    siteUrl: site.url,
-    username: site.wp_username,
-    appPassword: site.wp_app_password,
-  })
+  const result = site.site_type === 'nodejs'
+    ? await testNodeConnection({
+        apiUrl: site.node_api_url,
+        apiKey: site.secret_token,
+      })
+    : await testWordPressConnection({
+        siteUrl: site.url,
+        username: site.wp_username,
+        appPassword: site.wp_app_password,
+      })
 
   await supabase.from('sites').update({
     status: result.success ? 'connected' : 'error',
