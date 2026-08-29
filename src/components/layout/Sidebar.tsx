@@ -1,0 +1,201 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
+import {
+  LayoutDashboard,
+  Globe,
+  FileText,
+  ImageIcon,
+  Calendar,
+  Archive,
+  Link2,
+  BarChart3,
+  Settings,
+  LogOut,
+  Sparkles,
+  Menu,
+  Plus,
+  X,
+  Clock,
+  Server,
+} from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import ThemeToggle from '@/components/ui/ThemeToggle'
+import toast from 'react-hot-toast'
+
+const NAV_ITEMS = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/sites', label: 'Sites', icon: Globe },
+  { href: '/nodejs-sites', label: 'Node JS Sites', icon: Server },
+  // The one row that carries its own plus: writing is what this app is for,
+  // and going to the list first to press New article is a step for nothing.
+  { href: '/articles', label: 'Articles', icon: FileText, add: { href: '/articles/new', label: 'New article' } },
+  { href: '/images', label: 'Image Library', icon: ImageIcon },
+  { href: '/schedules', label: 'Schedules', icon: Calendar },
+  { href: '/archive', label: 'Archive', icon: Archive },
+  { href: '/clients', label: 'Client Links', icon: Link2 },
+  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { href: '/history', label: 'History', icon: Clock },
+]
+
+interface SidebarProps {
+  userEmail?: string
+  userName?: string
+}
+
+export default function Sidebar({ userEmail, userName }: SidebarProps) {
+  const pathname = usePathname()
+  const router = useRouter()
+  const [isOpen, setIsOpen] = useState(false)
+
+  useEffect(() => { setIsOpen(false) }, [pathname])
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setIsOpen(false) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
+  async function handleSignOut() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    toast.success('Signed out')
+    router.push('/login')
+  }
+
+  const navContent = (
+    <>
+      {/* Logo */}
+      <div className="h-16 flex items-center px-5 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
+        <div className="flex items-center gap-2.5 flex-1">
+          <img src="/logo.png" alt="Zao Flo" className="w-8 h-8 flex-shrink-0" />
+          <span className="text-lg font-bold text-gray-900 dark:text-white">Zao Flo</span>
+        </div>
+        <button
+          onClick={() => setIsOpen(false)}
+          className="md:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 px-3 py-4 overflow-y-auto">
+        <div className="space-y-0.5">
+          {NAV_ITEMS.map(({ href, label, icon: Icon, add }) => {
+            const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+            return (
+              // The row's shortcut is a link of its own beside the nav link,
+              // not inside it: an anchor within an anchor is neither valid nor
+              // clickable on its own.
+              <div key={href} className="relative group">
+                <Link
+                  href={href}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    add ? 'pr-10' : ''
+                  } ${
+                    isActive
+                      ? 'bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 border border-brand-100 dark:border-brand-800'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 flex-shrink-0 transition-colors ${isActive ? 'text-brand-600 dark:text-brand-400' : 'text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300'}`} />
+                  <span className="flex-1">{label}</span>
+                  {isActive && !add && <div className="w-1.5 h-1.5 rounded-full bg-brand-600 dark:bg-brand-400" />}
+                </Link>
+                {add && (
+                  <Link
+                    href={add.href}
+                    title={add.label}
+                    aria-label={add.label}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Link>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-800 space-y-0.5">
+          <Link
+            href="/settings"
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
+              pathname.startsWith('/settings')
+                ? 'bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 border border-brand-100 dark:border-brand-800'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}
+          >
+            <Settings className={`w-4 h-4 flex-shrink-0 ${pathname.startsWith('/settings') ? 'text-brand-600 dark:text-brand-400' : 'text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300'}`} />
+            Settings
+          </Link>
+        </div>
+      </nav>
+
+      {/* User section */}
+      <div className="border-t border-gray-100 dark:border-gray-800 p-3 flex-shrink-0">
+        <div className="flex items-center gap-2 px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+          <div className="w-8 h-8 bg-brand-100 dark:bg-brand-900/40 rounded-full flex items-center justify-center flex-shrink-0">
+            <span className="text-brand-700 dark:text-brand-400 text-xs font-bold uppercase">
+              {(userName || userEmail || 'U').charAt(0)}
+            </span>
+          </div>
+          <div className="flex-1 min-w-0">
+            {userName && <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{userName}</p>}
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{userEmail}</p>
+          </div>
+          <ThemeToggle />
+          <button
+            onClick={handleSignOut}
+            className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors p-1 rounded"
+            title="Sign out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </>
+  )
+
+  return (
+    <>
+      {/* Mobile top bar */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-30 h-14 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 flex items-center px-4 gap-3">
+        <button
+          onClick={() => setIsOpen(true)}
+          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+        <div className="flex items-center gap-2">
+          <img src="/logo.png" alt="Zao Flo" className="w-6 h-6" />
+          <span className="font-bold text-gray-900 dark:text-white">Zao Flo</span>
+        </div>
+        <div className="ml-auto">
+          <ThemeToggle />
+        </div>
+      </div>
+
+      {/* Mobile backdrop */}
+      {isOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-40 bg-gray-900/40 backdrop-blur-sm"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={`fixed left-0 top-0 bottom-0 w-60 bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 flex flex-col z-50 transition-transform duration-200
+          md:translate-x-0
+          ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        `}
+      >
+        {navContent}
+      </aside>
+    </>
+  )
+}

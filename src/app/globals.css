@@ -1,0 +1,154 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sidebar-width: 240px;
+}
+
+/* Native controls (select popups, date pickers, form widgets) follow the theme */
+.dark {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
+}
+
+/* Article body styles.
+   .article-editor is the editable surface; .article-content is the read-only
+   render used by the client portal. They share every rule deliberately -- what
+   the client sees has to match what the team wrote, so headings and spacing
+   cannot drift between the two. */
+.article-editor {
+  min-height: 400px;
+  outline: none;
+}
+
+.article-editor,
+.article-content { line-height: 1.7; }
+
+.article-editor h1, .article-content h1 { font-size: 2rem; font-weight: 700; margin: 1.5rem 0 0.75rem; line-height: 1.25; }
+.article-editor h2, .article-content h2 { font-size: 1.5rem; font-weight: 700; margin: 1.5rem 0 0.75rem; line-height: 1.3; }
+.article-editor h3, .article-content h3 { font-size: 1.25rem; font-weight: 600; margin: 1.25rem 0 0.5rem; line-height: 1.35; }
+.article-editor h4, .article-content h4 { font-size: 1.075rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+.article-editor h5, .article-content h5,
+.article-editor h6, .article-content h6 { font-size: 1rem; font-weight: 600; margin: 1rem 0 0.5rem; }
+.article-editor p, .article-content p { margin: 0.75rem 0; }
+.article-editor ul, .article-editor ol,
+.article-content ul, .article-content ol { margin: 0.75rem 0; padding-left: 1.5rem; }
+/* Tailwind's preflight resets list-style to none globally, which silently
+   strips the bullets from every generated list. Put them back on both. */
+.article-editor ul, .article-content ul { list-style: disc; }
+.article-editor ol, .article-content ol { list-style: decimal; }
+.article-editor li, .article-content li { margin: 0.25rem 0; }
+.article-editor strong, .article-content strong { font-weight: 600; }
+.article-editor em, .article-content em { font-style: italic; }
+.article-editor a, .article-content a { color: #7c3aed; text-decoration: underline; }
+.article-editor blockquote, .article-content blockquote {
+  border-left: 4px solid #e5e7eb;
+  margin: 1rem 0;
+  padding: 0.5rem 1rem;
+  color: #6b7280;
+}
+
+/* Inline images keep their own proportions and never overflow the column. */
+.article-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.75rem;
+  margin: 1.25rem 0;
+}
+
+.article-content hr { margin: 1.5rem 0; border-color: #e5e7eb; }
+
+.article-content table {
+  width: 100%;
+  margin: 1rem 0;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+.article-content th, .article-content td {
+  border: 1px solid #e5e7eb;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+.article-content th { font-weight: 600; background: #f9fafb; }
+
+/* Dark mode article body */
+.dark .article-editor, .dark .article-content { color: #f1f5f9; }
+.dark .article-editor a, .dark .article-content a { color: #a78bfa; }
+.dark .article-editor blockquote, .dark .article-content blockquote {
+  border-left-color: #374151;
+  color: #9ca3af;
+}
+.dark .article-content hr { border-color: #374151; }
+.dark .article-content th, .dark .article-content td { border-color: #374151; }
+.dark .article-content th { background: #1f2937; }
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+.dark ::-webkit-scrollbar-thumb { background: #4b5563; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in { animation: fadeIn 0.2s ease-out; }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spin { animation: spin 1s linear infinite; }
+
+/* ------------------------------------------------------------------
+   Whose change is whose.
+
+   These only ever appear in the review views. The stored article never
+   carries them, so nothing has to strip them before publishing.
+
+   The client's colour follows the theme because neither neon survives both
+   grounds: green on white is barely legible, purple on near-black loses its
+   glow. The team's stays blue in both, so the two are never the same colour
+   at the same time.
+   ------------------------------------------------------------------ */
+.edit-client { color: #b026ff; font-weight: 500; }
+.dark .edit-client { color: #39ff14; font-weight: 500; }
+.edit-team { color: #0091ff; font-weight: 500; }
+.dark .edit-team { color: #3aa9ff; font-weight: 500; }
+
+/* ------------------------------------------------------------------
+   Approved.
+
+   The live state of the publishing switch. Green here is doing the same
+   job as the edit colours above — saying which of two states you are
+   looking at — so it is tuned the same way, bright enough to read as neon
+   on the dark ground and dropped just far enough on the light one to stay
+   legible as text.
+   ------------------------------------------------------------------ */
+.approve-live { color: #0aa81a; }
+.dark .approve-live { color: #39ff14; }

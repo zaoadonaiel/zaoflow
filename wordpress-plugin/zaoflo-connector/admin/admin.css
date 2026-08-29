@@ -1,0 +1,108 @@
+.zaoflo-admin {
+    max-width: 800px;
+}
+
+.zaoflo-header {
+    background: linear-gradient(135deg, #7c3aed, #4f46e5);
+    color: white;
+    padding: 24px 28px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+}
+
+.zaoflo-header h1 {
+    color: white;
+    font-size: 24px;
+    margin: 0 0 4px;
+}
+
+.zaoflo-tagline {
+    color: rgba(255,255,255,0.8);
+    margin: 0;
+    font-size: 14px;
+}
+
+.zaoflo-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+}
+
+.zaoflo-card h2 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-top: 0;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.zaoflo-card--danger {
+    border-color: #fecaca;
+    background: #fef2f2;
+}
+
+.zaoflo-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.zaoflo-table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-weight: 500;
+    color: #6b7280;
+    font-size: 13px;
+    width: 160px;
+    vertical-align: top;
+    padding-top: 12px;
+}
+
+.zaoflo-table td {
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+.zaoflo-table tr + tr td,
+.zaoflo-table tr + tr th {
+    border-top: 1px solid #f3f4f6;
+}
+
+.zaoflo-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.zaoflo-badge--success {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.zaoflo-token-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.zaoflo-token {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    word-break: break-all;
+    max-width: 400px;
+    display: inline-block;
+}
+
+code {
+    background: #f3f4f6;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+}
