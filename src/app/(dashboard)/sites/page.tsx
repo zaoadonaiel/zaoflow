@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Globe, Plus, Trash2, RefreshCw, ExternalLink, CheckCircle2, XCircle, Calendar, BookMarked, Server } from 'lucide-react'
+import { Globe, Plus, Trash2, RefreshCw, ExternalLink, CheckCircle2, XCircle, Calendar, BookMarked, Server, KeyRound } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import AddSiteModal from '@/components/sites/AddSiteModal'
 import AddNodeSiteModal from '@/components/sites/AddNodeSiteModal'
+import ReconnectSiteModal from '@/components/sites/ReconnectSiteModal'
 import Badge, { statusToBadgeVariant } from '@/components/ui/Badge'
 import ScheduleCalendarOverview from '@/components/schedules/ScheduleCalendarOverview'
 import KnowledgeBaseModal from '@/components/sites/KnowledgeBaseModal'
@@ -23,6 +24,8 @@ export default function SitesPage() {
   const [calendarFor, setCalendarFor] = useState<Site | null>(null)
   // Which site's knowledge base is open, if any.
   const [knowledgeFor, setKnowledgeFor] = useState<Site | null>(null)
+  // Which site is having its WordPress credentials swapped, if any.
+  const [reconnectFor, setReconnectFor] = useState<Site | null>(null)
   const searchParams = useSearchParams()
   const router = useRouter()
 
@@ -51,12 +54,26 @@ export default function SitesPage() {
   // Handle WordPress OAuth callback result
   useEffect(() => {
     const connected = searchParams.get('wp_connected')
+    const reconnected = searchParams.get('wp_reconnected')
     const error = searchParams.get('wp_error')
     // Already decoded by searchParams — the callback sends the reason the test failed.
     const message = searchParams.get('wp_message')
     if (connected) {
       toast.success(`${decodeURIComponent(connected)} connected successfully!`)
       fetchSites()
+      router.replace('/sites')
+    } else if (reconnected) {
+      toast.success(`${decodeURIComponent(reconnected)} reconnected — articles and schedules kept`)
+      fetchSites()
+      router.replace('/sites')
+    } else if (error === 'reconnect_failed') {
+      // Nothing was written — the site still holds its previous credentials.
+      toast.error(
+        message
+          ? `${message} Your existing credentials were left in place.`
+          : 'Those credentials did not work — your existing ones were left in place.',
+        { duration: 10000 }
+      )
       router.replace('/sites')
     } else if (error === 'rejected') {
       toast.error('Authorization was cancelled in WordPress')
@@ -221,6 +238,16 @@ export default function SitesPage() {
                   <RefreshCw className={`w-3.5 h-3.5 ${testingId === site.id ? 'spin' : ''}`} />
                   {testingId === site.id ? 'Testing...' : 'Test'}
                 </button>
+                {site.site_type === 'wordpress' && (
+                  <button
+                    onClick={() => setReconnectFor(site)}
+                    title={`Reconnect ${site.name} with new credentials`}
+                    aria-label={`Reconnect ${site.name} with new credentials`}
+                    className="flex items-center justify-center py-2 px-3 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 <button
                   onClick={() => setKnowledgeFor(site)}
                   title={`Knowledge base for ${site.name}`}
@@ -275,6 +302,20 @@ export default function SitesPage() {
             setSites((prev) =>
               prev.map((s) => (s.id === knowledgeFor.id ? { ...s, knowledge_base } : s))
             )
+          }
+        />
+      )}
+
+      {/* Keyed on the site so the form fields reset to the right site's URL and
+          username when a different card is opened. */}
+      {reconnectFor && (
+        <ReconnectSiteModal
+          key={reconnectFor.id}
+          open
+          onClose={() => setReconnectFor(null)}
+          site={reconnectFor}
+          onReconnected={(updated) =>
+            setSites((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
           }
         />
       )}

@@ -3,7 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { testWordPressConnection } from '@/lib/wordpress'
 
 // WordPress redirects here after user approves the Application Password
-// Params: site_url, user_login, password (from WordPress) + site_name (our own param)
+// Params: site_url, user_login, password (from WordPress) + our own site_name,
+// or site_id when an existing site is being reconnected with new credentials.
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
@@ -12,6 +13,7 @@ export async function GET(req: NextRequest) {
   const userLogin = searchParams.get('user_login')
   const password  = searchParams.get('password')
   const siteName  = searchParams.get('site_name') || 'My Site'
+  const siteId    = searchParams.get('site_id')
 
   // User rejected the authorization
   if (searchParams.get('error') === 'user_refused') {
@@ -35,6 +37,52 @@ export async function GET(req: NextRequest) {
     username: userLogin,
     appPassword: password,
   })
+
+  // Reconnecting an existing site: update the credentials on the row that is
+  // already there, so its articles, schedules and knowledge base all survive.
+  if (siteId) {
+    const { data: existing } = await supabase
+      .from('sites')
+      .select('id, name')
+      .eq('id', siteId)
+      .eq('user_id', user.id)
+      .single()
+
+    if (!existing) {
+      return NextResponse.redirect(`${appUrl}/sites?wp_error=invalid`)
+    }
+
+    // Unlike a new site, there are working credentials here worth protecting —
+    // never overwrite them with ones that failed their test.
+    if (!test.success) {
+      return NextResponse.redirect(
+        `${appUrl}/sites?wp_error=reconnect_failed&wp_message=${encodeURIComponent(
+          test.error || 'WordPress granted access, but the connection test failed.'
+        )}`
+      )
+    }
+
+    const { error: updateError } = await supabase
+      .from('sites')
+      .update({
+        url: siteUrl.replace(/\/$/, ''),
+        wp_username: userLogin,
+        wp_app_password: password,
+        status: 'connected',
+        last_sync: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', siteId)
+      .eq('user_id', user.id)
+
+    if (updateError) {
+      return NextResponse.redirect(`${appUrl}/sites?wp_error=save_failed`)
+    }
+
+    return NextResponse.redirect(
+      `${appUrl}/sites?wp_reconnected=${encodeURIComponent(existing.name)}`
+    )
+  }
 
   const { error } = await supabase.from('sites').insert({
     user_id: user.id,
