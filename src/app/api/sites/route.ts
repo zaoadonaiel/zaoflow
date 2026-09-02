@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { testWordPressConnection } from '@/lib/wordpress'
+import { testWordPressConnection, getAuthors } from '@/lib/wordpress'
 import { testNodeConnection } from '@/lib/nodejs-site'
 
 export async function GET() {
@@ -102,6 +102,11 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Best-effort — a site whose connected account can't list users still
+  // publishes fine, it just has nothing to offer in the author picker yet.
+  const authors = await getAuthors({ siteUrl: url, username: wp_username, appPassword: wp_app_password })
+  const defaultAuthor = authors.find((a) => a.name.toLowerCase() === wp_username.toLowerCase())
+
   const { data: site, error } = await supabase.from('sites').insert({
     user_id: user.id,
     name,
@@ -109,6 +114,8 @@ export async function POST(req: NextRequest) {
     site_type: 'wordpress',
     wp_username,
     wp_app_password,
+    wp_authors: authors,
+    wp_default_author_id: defaultAuthor?.id ?? null,
     status: 'connected',
     last_sync: new Date().toISOString(),
     plugin_installed: false,

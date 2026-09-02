@@ -55,6 +55,7 @@ export async function publishArticle({
   const site = (article as Record<string, unknown>).sites as {
     site_type?: 'wordpress' | 'nodejs' | 'other'
     url: string; wp_username: string; wp_app_password: string
+    wp_default_author_id?: number | null
     node_api_url?: string; secret_token?: string
   } | null
   if (!site) return { success: false, error: 'Site not found' }
@@ -148,6 +149,7 @@ export async function publishArticle({
       categories: article.wp_category_id ? [article.wp_category_id] : undefined,
       slug: article.slug || undefined,
       featuredMediaId,
+      author: site.wp_default_author_id || undefined,
       focusKeyphrase: article.focus_keyphrase || undefined,
       keyphraseSynonyms: article.keyphrase_synonyms || undefined,
       yoastTitle: article.yoast_title || undefined,

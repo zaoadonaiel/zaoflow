@@ -14,6 +14,10 @@ export interface Site {
   site_type: 'wordpress' | 'nodejs' | 'other'
   wp_username?: string
   wp_app_password?: string
+  /** WordPress users available to attribute posts to, cached from the site's user list. */
+  wp_authors?: { id: number; name: string }[]
+  /** Author every publish uses, independent of which WP account authorized the connection. */
+  wp_default_author_id?: number | null
   node_api_url?: string
   secret_token: string
   status: 'connected' | 'disconnected' | 'error'

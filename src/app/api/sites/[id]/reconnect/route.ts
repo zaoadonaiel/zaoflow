@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { testWordPressConnection } from '@/lib/wordpress'
+import { testWordPressConnection, getAuthors } from '@/lib/wordpress'
 
 /**
  * Swap in fresh WordPress credentials for a site that is already connected.
@@ -62,6 +62,12 @@ export async function POST(
     )
   }
 
+  // Refresh the author list, but leave an already-chosen default author alone —
+  // reconnecting a broken login should not silently switch who future posts
+  // get attributed to.
+  const authors = await getAuthors({ siteUrl: url, username: wpUsername, appPassword })
+  const keepDefault = authors.some((a) => a.id === site.wp_default_author_id)
+
   // Credentials, URL and status only — name, knowledge_base, analytics links and
   // everything referencing this site's id are deliberately left untouched.
   const { data: updated, error } = await supabase
@@ -70,6 +76,8 @@ export async function POST(
       url,
       wp_username: wpUsername,
       wp_app_password: appPassword,
+      wp_authors: authors,
+      wp_default_author_id: keepDefault ? site.wp_default_author_id : null,
       status: 'connected',
       last_sync: new Date().toISOString(),
       updated_at: new Date().toISOString(),

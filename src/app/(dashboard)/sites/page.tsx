@@ -26,6 +26,8 @@ export default function SitesPage() {
   const [knowledgeFor, setKnowledgeFor] = useState<Site | null>(null)
   // Which site is having its WordPress credentials swapped, if any.
   const [reconnectFor, setReconnectFor] = useState<Site | null>(null)
+  const [authorSavingId, setAuthorSavingId] = useState<string | null>(null)
+  const [authorRefreshingId, setAuthorRefreshingId] = useState<string | null>(null)
   const searchParams = useSearchParams()
   const router = useRouter()
 
@@ -103,6 +105,42 @@ export default function SitesPage() {
       toast.error('Failed to remove site')
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  // Which author WordPress attributes the post to no longer depends on which
+  // account authorized the connection — this saves that choice independently,
+  // without touching credentials.
+  async function setDefaultAuthor(site: Site, authorId: number | null) {
+    setAuthorSavingId(site.id)
+    try {
+      const res = await fetch(`/api/sites/${site.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wp_default_author_id: authorId }),
+      })
+      if (!res.ok) throw new Error('Failed to save')
+      setSites((prev) => prev.map((s) => (s.id === site.id ? { ...s, wp_default_author_id: authorId } : s)))
+      toast.success('Default author updated')
+    } catch {
+      toast.error('Failed to update default author')
+    } finally {
+      setAuthorSavingId(null)
+    }
+  }
+
+  async function refreshAuthors(site: Site) {
+    setAuthorRefreshingId(site.id)
+    try {
+      const res = await fetch(`/api/sites/${site.id}/authors`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) { toast.error(data.error || 'Failed to load authors'); return }
+      setSites((prev) => prev.map((s) => (s.id === site.id ? { ...s, wp_authors: data.authors } : s)))
+      toast.success('Author list refreshed')
+    } catch {
+      toast.error('Failed to load authors')
+    } finally {
+      setAuthorRefreshingId(null)
     }
   }
 
@@ -227,6 +265,35 @@ export default function SitesPage() {
                 <p className="text-xs text-gray-400 mt-2">
                   Last sync: {new Date(site.last_sync).toLocaleDateString()}
                 </p>
+              )}
+
+              {site.site_type === 'wordpress' && (
+                <div className="mt-3 pt-3 border-t border-gray-50 dark:border-gray-700">
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Post as
+                  </label>
+                  {site.wp_authors && site.wp_authors.length > 0 ? (
+                    <select
+                      value={site.wp_default_author_id ?? ''}
+                      disabled={authorSavingId === site.id}
+                      onChange={(e) => setDefaultAuthor(site, e.target.value ? Number(e.target.value) : null)}
+                      className="w-full px-2.5 py-1.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                      <option value="">Whoever authorized the connection</option>
+                      {site.wp_authors.map((a) => (
+                        <option key={a.id} value={a.id}>{a.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <button
+                      onClick={() => refreshAuthors(site)}
+                      disabled={authorRefreshingId === site.id}
+                      className="text-xs text-brand-600 hover:text-brand-700 font-medium disabled:opacity-50"
+                    >
+                      {authorRefreshingId === site.id ? 'Loading authors...' : 'Load author list'}
+                    </button>
+                  )}
+                </div>
               )}
 
               <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-50 dark:border-gray-700">

@@ -15,6 +15,15 @@ export interface WPPost {
   yoastTitle?: string
   yoastMetaDescription?: string
   featuredMediaId?: number    // if already uploaded, use this directly
+  /** WordPress user ID to attribute the post to — independent of whose
+   *  Application Password is authenticating the request. Requires that user
+   *  to have edit_others_posts (admin/editor) capability on the site. */
+  author?: number
+}
+
+export interface WPAuthor {
+  id: number
+  name: string
 }
 
 export interface WPPostResult {
@@ -241,6 +250,42 @@ export async function testWordPressConnection({
   return { success: true, siteName }
 }
 
+/**
+ * Users the connected account is allowed to attribute posts to.
+ *
+ * `context=edit` lists every user (needed to see authors with no posts yet),
+ * but only an admin/editor-capable account can request it — a lower-role
+ * connection falls back to the public author listing instead of erroring out.
+ */
+export async function getAuthors({
+  siteUrl,
+  username,
+  appPassword,
+}: {
+  siteUrl: string
+  username: string
+  appPassword: string
+}): Promise<WPAuthor[]> {
+  const baseUrl = normalizeUrl(siteUrl)
+  const headers = { Authorization: getAuthHeader(username, appPassword), 'User-Agent': USER_AGENT }
+
+  for (const context of ['edit', 'view'] as const) {
+    try {
+      const res = await fetch(`${baseUrl}/wp-json/wp/v2/users?context=${context}&per_page=100`, {
+        headers,
+        signal: AbortSignal.timeout(10000),
+      })
+      if (!res.ok) continue
+      const data = (await res.json()) as Array<{ id: number; name: string }>
+      if (Array.isArray(data)) return data.map((u) => ({ id: u.id, name: u.name }))
+    } catch {
+      // try the next context
+    }
+  }
+
+  return []
+}
+
 /** The origin fetch landed on, when it differs from the one we asked for. */
 function crossOriginRedirect(requested: string, landedOn: string): string | null {
   try {
@@ -283,6 +328,7 @@ export async function publishPost({
   if (post.categories?.length) body.categories = post.categories
   if (post.slug) body.slug = post.slug
   if (post.featuredMediaId) body.featured_media = post.featuredMediaId
+  if (post.author) body.author = post.author
 
   const meta: Record<string, string> = {}
   if (post.focusKeyphrase) meta['_yoast_wpseo_focuskw'] = post.focusKeyphrase

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { testWordPressConnection } from '@/lib/wordpress'
+import { testWordPressConnection, getAuthors } from '@/lib/wordpress'
 
 // WordPress redirects here after user approves the Application Password
 // Params: site_url, user_login, password (from WordPress) + our own site_name,
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
   if (siteId) {
     const { data: existing } = await supabase
       .from('sites')
-      .select('id, name')
+      .select('id, name, wp_default_author_id')
       .eq('id', siteId)
       .eq('user_id', user.id)
       .single()
@@ -62,12 +62,20 @@ export async function GET(req: NextRequest) {
       )
     }
 
+    // Refresh the author list, but leave an already-chosen default author alone —
+    // reconnecting (e.g. because that account's access was revoked) should not
+    // silently switch who future posts get attributed to.
+    const authors = await getAuthors({ siteUrl, username: userLogin, appPassword: password })
+    const keepDefault = authors.some((a) => a.id === existing.wp_default_author_id)
+
     const { error: updateError } = await supabase
       .from('sites')
       .update({
         url: siteUrl.replace(/\/$/, ''),
         wp_username: userLogin,
         wp_app_password: password,
+        wp_authors: authors,
+        wp_default_author_id: keepDefault ? existing.wp_default_author_id : null,
         status: 'connected',
         last_sync: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -84,12 +92,21 @@ export async function GET(req: NextRequest) {
     )
   }
 
+  // Best-effort — a connection that can't list users still saves and publishes
+  // fine, it just has nothing to offer in the author picker yet.
+  const authors = test.success
+    ? await getAuthors({ siteUrl, username: userLogin, appPassword: password })
+    : []
+  const defaultAuthor = authors.find((a) => a.name.toLowerCase() === userLogin.toLowerCase())
+
   const { error } = await supabase.from('sites').insert({
     user_id: user.id,
     name: decodeURIComponent(siteName),
     url: siteUrl.replace(/\/$/, ''),
     wp_username: userLogin,
     wp_app_password: password,
+    wp_authors: authors,
+    wp_default_author_id: defaultAuthor?.id ?? null,
     status: test.success ? 'connected' : 'error',
     last_sync: test.success ? new Date().toISOString() : null,
     plugin_installed: false,
