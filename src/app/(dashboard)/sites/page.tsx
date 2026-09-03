@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Globe, Plus, Trash2, RefreshCw, ExternalLink, CheckCircle2, XCircle, Server } from 'lucide-react'
+import { Globe, Plus, Trash2, RefreshCw, ExternalLink, CheckCircle2, XCircle, Server, KeyRound } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import AddSiteModal from '@/components/sites/AddSiteModal'
 import AddNodeSiteModal from '@/components/sites/AddNodeSiteModal'
+import EditCredentialsModal from '@/components/sites/EditCredentialsModal'
 import Badge, { statusToBadgeVariant } from '@/components/ui/Badge'
 import type { Site } from '@/types'
 import toast from 'react-hot-toast'
@@ -17,6 +18,7 @@ export default function SitesPage() {
   const [showAddNode, setShowAddNode] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [testingId, setTestingId] = useState<string | null>(null)
+  const [editSite, setEditSite] = useState<Site | null>(null)
   const searchParams = useSearchParams()
   const router = useRouter()
 
@@ -197,6 +199,15 @@ export default function SitesPage() {
                   <RefreshCw className={`w-3.5 h-3.5 ${testingId === site.id ? 'spin' : ''}`} />
                   {testingId === site.id ? 'Testing...' : 'Test'}
                 </button>
+                {site.site_type !== 'other' && (
+                  <button
+                    onClick={() => setEditSite(site)}
+                    title="Edit credentials"
+                    className="flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 <button
                   onClick={() => deleteSite(site.id, site.name)}
                   disabled={deletingId === site.id}
@@ -223,6 +234,13 @@ export default function SitesPage() {
         open={showAddNode}
         onClose={() => setShowAddNode(false)}
         onAdded={() => fetchSites()}
+      />
+
+      <EditCredentialsModal
+        open={editSite !== null}
+        site={editSite}
+        onClose={() => setEditSite(null)}
+        onSaved={() => fetchSites()}
       />
     </div>
   )

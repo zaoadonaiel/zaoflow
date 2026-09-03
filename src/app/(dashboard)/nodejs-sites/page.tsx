@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Server, Plus, Trash2, RefreshCw, ExternalLink, CheckCircle2, XCircle } from 'lucide-react'
+import { Server, Plus, Trash2, RefreshCw, ExternalLink, CheckCircle2, XCircle, KeyRound } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import AddNodeSiteModal from '@/components/sites/AddNodeSiteModal'
+import EditCredentialsModal from '@/components/sites/EditCredentialsModal'
 import Badge, { statusToBadgeVariant } from '@/components/ui/Badge'
 import type { Site } from '@/types'
 import toast from 'react-hot-toast'
@@ -14,6 +15,7 @@ export default function NodeJSSitesPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [testingId, setTestingId] = useState<string | null>(null)
+  const [editSite, setEditSite] = useState<Site | null>(null)
 
   const fetchSites = useCallback(async () => {
     setLoading(true)
@@ -150,6 +152,13 @@ export default function NodeJSSitesPage() {
                   {testingId === site.id ? 'Testing...' : 'Test'}
                 </button>
                 <button
+                  onClick={() => setEditSite(site)}
+                  title="Edit credentials"
+                  className="flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                </button>
+                <button
                   onClick={() => deleteSite(site.id, site.name)}
                   disabled={deletingId === site.id}
                   className="flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50"
@@ -166,6 +175,13 @@ export default function NodeJSSitesPage() {
         open={showAdd}
         onClose={() => setShowAdd(false)}
         onAdded={() => fetchSites()}
+      />
+
+      <EditCredentialsModal
+        open={editSite !== null}
+        site={editSite}
+        onClose={() => setEditSite(null)}
+        onSaved={() => fetchSites()}
       />
     </div>
   )
