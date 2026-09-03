@@ -2,11 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Globe, Plus, Trash2, RefreshCw, ExternalLink, CheckCircle2, XCircle, Server, KeyRound } from 'lucide-react'
+import { Globe, Plus, Trash2, RefreshCw, ExternalLink, CheckCircle2, XCircle, Calendar, BookMarked, Server, KeyRound, RotateCcw } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import AddSiteModal from '@/components/sites/AddSiteModal'
 import AddNodeSiteModal from '@/components/sites/AddNodeSiteModal'
 import EditCredentialsModal from '@/components/sites/EditCredentialsModal'
+import ReconnectSiteModal from '@/components/sites/ReconnectSiteModal'
+import KnowledgeBaseModal from '@/components/sites/KnowledgeBaseModal'
+import ScheduleCalendarOverview from '@/components/schedules/ScheduleCalendarOverview'
 import Badge, { statusToBadgeVariant } from '@/components/ui/Badge'
 import type { Site } from '@/types'
 import toast from 'react-hot-toast'
@@ -19,6 +22,11 @@ export default function SitesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [testingId, setTestingId] = useState<string | null>(null)
   const [editSite, setEditSite] = useState<Site | null>(null)
+  const [calendarFor, setCalendarFor] = useState<Site | null>(null)
+  const [knowledgeFor, setKnowledgeFor] = useState<Site | null>(null)
+  const [reconnectFor, setReconnectFor] = useState<Site | null>(null)
+  const [authorSavingId, setAuthorSavingId] = useState<string | null>(null)
+  const [authorRefreshingId, setAuthorRefreshingId] = useState<string | null>(null)
   const searchParams = useSearchParams()
   const router = useRouter()
 
@@ -35,19 +43,45 @@ export default function SitesPage() {
 
   useEffect(() => { fetchSites() }, [fetchSites])
 
-  // Handle WordPress OAuth callback result
+  useEffect(() => {
+    if (searchParams.get('new')) {
+      setShowAdd(true)
+      router.replace('/sites')
+    }
+  }, [searchParams, router])
+
   useEffect(() => {
     const connected = searchParams.get('wp_connected')
+    const reconnected = searchParams.get('wp_reconnected')
     const error = searchParams.get('wp_error')
+    const message = searchParams.get('wp_message')
     if (connected) {
       toast.success(`${decodeURIComponent(connected)} connected successfully!`)
       fetchSites()
       router.replace('/sites')
+    } else if (reconnected) {
+      toast.success(`${decodeURIComponent(reconnected)} reconnected — articles and schedules kept`)
+      fetchSites()
+      router.replace('/sites')
+    } else if (error === 'reconnect_failed') {
+      toast.error(
+        message
+          ? `${message} Your existing credentials were left in place.`
+          : 'Those credentials did not work — your existing ones were left in place.',
+        { duration: 10000 }
+      )
+      router.replace('/sites')
     } else if (error === 'rejected') {
       toast.error('Authorization was cancelled in WordPress')
       router.replace('/sites')
+    } else if (error === 'test_failed') {
+      toast.error(message || 'WordPress granted access, but the connection test failed.', {
+        duration: 10000,
+      })
+      fetchSites()
+      router.replace('/sites')
     } else if (error) {
-      toast.error('Could not save site — please try again')
+      toast.error(message || 'Could not save site — please try again')
       router.replace('/sites')
     }
   }, [searchParams, fetchSites, router])
@@ -64,6 +98,39 @@ export default function SitesPage() {
       toast.error('Failed to remove site')
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  async function setDefaultAuthor(site: Site, authorId: number | null) {
+    setAuthorSavingId(site.id)
+    try {
+      const res = await fetch(`/api/sites/${site.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wp_default_author_id: authorId }),
+      })
+      if (!res.ok) throw new Error('Failed to save')
+      setSites((prev) => prev.map((s) => (s.id === site.id ? { ...s, wp_default_author_id: authorId } : s)))
+      toast.success('Default author updated')
+    } catch {
+      toast.error('Failed to update default author')
+    } finally {
+      setAuthorSavingId(null)
+    }
+  }
+
+  async function refreshAuthors(site: Site) {
+    setAuthorRefreshingId(site.id)
+    try {
+      const res = await fetch(`/api/sites/${site.id}/authors`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) { toast.error(data.error || 'Failed to load authors'); return }
+      setSites((prev) => prev.map((s) => (s.id === site.id ? { ...s, wp_authors: data.authors } : s)))
+      toast.success('Author list refreshed')
+    } catch {
+      toast.error('Failed to load authors')
+    } finally {
+      setAuthorRefreshingId(null)
     }
   }
 
@@ -190,6 +257,35 @@ export default function SitesPage() {
                 </p>
               )}
 
+              {site.site_type === 'wordpress' && (
+                <div className="mt-3 pt-3 border-t border-gray-50 dark:border-gray-700">
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Post as
+                  </label>
+                  {site.wp_authors && site.wp_authors.length > 0 ? (
+                    <select
+                      value={site.wp_default_author_id ?? ''}
+                      disabled={authorSavingId === site.id}
+                      onChange={(e) => setDefaultAuthor(site, e.target.value ? Number(e.target.value) : null)}
+                      className="w-full px-2.5 py-1.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                      <option value="">Whoever authorized the connection</option>
+                      {site.wp_authors.map((a) => (
+                        <option key={a.id} value={a.id}>{a.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <button
+                      onClick={() => refreshAuthors(site)}
+                      disabled={authorRefreshingId === site.id}
+                      className="text-xs text-brand-600 hover:text-brand-700 font-medium disabled:opacity-50"
+                    >
+                      {authorRefreshingId === site.id ? 'Loading authors...' : 'Load author list'}
+                    </button>
+                  )}
+                </div>
+              )}
+
               <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-50 dark:border-gray-700">
                 <button
                   onClick={() => testConnection(site)}
@@ -203,11 +299,37 @@ export default function SitesPage() {
                   <button
                     onClick={() => setEditSite(site)}
                     title="Edit credentials"
-                    className="flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                    className="flex items-center justify-center py-2 px-3 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
                   >
                     <KeyRound className="w-3.5 h-3.5" />
                   </button>
                 )}
+                {site.site_type === 'wordpress' && (
+                  <button
+                    onClick={() => setReconnectFor(site)}
+                    title={`Reconnect ${site.name} via WordPress`}
+                    aria-label={`Reconnect ${site.name} via WordPress`}
+                    className="flex items-center justify-center py-2 px-3 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button
+                  onClick={() => setKnowledgeFor(site)}
+                  title={`Knowledge base for ${site.name}`}
+                  aria-label={`Knowledge base for ${site.name}`}
+                  className="flex items-center justify-center py-2 px-3 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                >
+                  <BookMarked className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setCalendarFor(site)}
+                  title={`Publishing calendar for ${site.name}`}
+                  aria-label={`Publishing calendar for ${site.name}`}
+                  className="flex items-center justify-center py-2 px-3 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                </button>
                 <button
                   onClick={() => deleteSite(site.id, site.name)}
                   disabled={deletingId === site.id}
@@ -219,6 +341,43 @@ export default function SitesPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {calendarFor && (
+        <ScheduleCalendarOverview
+          key={calendarFor.id}
+          open
+          onClose={() => setCalendarFor(null)}
+          siteId={calendarFor.id}
+          siteName={calendarFor.name}
+        />
+      )}
+
+      {knowledgeFor && (
+        <KnowledgeBaseModal
+          key={knowledgeFor.id}
+          open
+          onClose={() => setKnowledgeFor(null)}
+          siteId={knowledgeFor.id}
+          siteName={knowledgeFor.name}
+          onSaved={(knowledge_base) =>
+            setSites((prev) =>
+              prev.map((s) => (s.id === knowledgeFor.id ? { ...s, knowledge_base } : s))
+            )
+          }
+        />
+      )}
+
+      {reconnectFor && (
+        <ReconnectSiteModal
+          key={reconnectFor.id}
+          open
+          onClose={() => setReconnectFor(null)}
+          site={reconnectFor}
+          onReconnected={(updated) =>
+            setSites((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+          }
+        />
       )}
 
       <AddSiteModal

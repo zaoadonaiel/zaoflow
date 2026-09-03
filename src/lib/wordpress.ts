@@ -4,6 +4,9 @@ export interface WPPost {
   excerpt?: string
   status: 'draft' | 'publish' | 'future'
   date?: string
+  /** UTC instant for a scheduled post. Preferred over `date`, which WordPress
+   *  reads in the site's own timezone and so can land hours off. */
+  dateGmt?: string
   categories?: number[]
   slug?: string
   featuredImageUrl?: string   // Supabase/external URL — will be downloaded and uploaded to WP
@@ -12,6 +15,15 @@ export interface WPPost {
   yoastTitle?: string
   yoastMetaDescription?: string
   featuredMediaId?: number    // if already uploaded, use this directly
+  /** WordPress user ID to attribute the post to — independent of whose
+   *  Application Password is authenticating the request. Requires that user
+   *  to have edit_others_posts (admin/editor) capability on the site. */
+  author?: number
+}
+
+export interface WPAuthor {
+  id: number
+  name: string
 }
 
 export interface WPPostResult {
@@ -24,12 +36,71 @@ export interface WPPostResult {
   categoryWarning?: string
 }
 
+/** WordPress wants a naive ISO string for date_gmt — no trailing Z, no offset. */
+function toWpGmt(iso: string): string {
+  return new Date(iso).toISOString().replace(/\.\d{3}Z$/, '')
+}
+
 function getAuthHeader(username: string, appPassword: string): string {
   return 'Basic ' + Buffer.from(`${username}:${appPassword}`).toString('base64')
 }
 
+/** Managed WordPress hosts and WAFs routinely block the default Node fetch agent,
+ *  so every call identifies itself. */
+const USER_AGENT = `Zaoflo/1.0 (+${process.env.NEXT_PUBLIC_APP_URL || 'https://zaoflo.com'})`
+
+/** WordPress error messages arrive as HTML. Toasts render text. */
+function stripTags(message: string): string {
+  return message.replace(/<[^>]*>/g, '').trim()
+}
+
+/** Unwraps the real reason out of a Node fetch failure — a bare `fetch failed`
+ *  tells the user nothing they can act on. */
+function describeFetchError(err: unknown): string {
+  if (!(err instanceof Error)) return 'Unknown error'
+
+  if (err.name === 'TimeoutError' || err.message.includes('timeout')) {
+    return 'The site did not respond in time. It may be slow, or blocking requests from our servers.'
+  }
+
+  const cause = (err as Error & { cause?: unknown }).cause
+  const code = (cause as { code?: string } | undefined)?.code
+
+  switch (code) {
+    case 'ENOTFOUND':
+    case 'EAI_AGAIN':
+      return 'That domain could not be resolved. Check the URL for typos.'
+    case 'ECONNREFUSED':
+    case 'ECONNRESET':
+      return 'The server refused the connection. Check the URL and that the site is online.'
+    case 'CERT_HAS_EXPIRED':
+    case 'DEPTH_ZERO_SELF_SIGNED_CERT':
+    case 'UNABLE_TO_VERIFY_LEAF_SIGNATURE':
+      return `The site's HTTPS certificate could not be verified (${code}).`
+  }
+
+  const causeMsg = cause instanceof Error ? cause.message : undefined
+  return causeMsg ? `${err.message} — ${causeMsg}` : err.message
+}
+
 function normalizeUrl(url: string): string {
   return url.replace(/\/$/, '')
+}
+
+
+/**
+ * The file extension to send an image up under.
+ *
+ * WordPress checks the name against the bytes and rejects a mismatch, so a
+ * GIF named .jpg is not an untidy filename -- it is a failed upload. Guessed
+ * from the URL because that is all the caller has before fetching it.
+ */
+export function extensionForImageUrl(url: string): string {
+  const lower = url.toLowerCase()
+  if (lower.includes('.png')) return '.png'
+  if (lower.includes('.webp')) return '.webp'
+  if (lower.includes('.gif')) return '.gif'
+  return '.jpg'
 }
 
 export async function uploadMedia({
@@ -38,12 +109,15 @@ export async function uploadMedia({
   appPassword,
   imageUrl,
   filename,
+  altText,
 }: {
   siteUrl: string
   username: string
   appPassword: string
   imageUrl: string
   filename?: string
+  /** Written onto the media item after upload; a failure here is not fatal. */
+  altText?: string
 }): Promise<number> {
   const imgRes = await fetch(imageUrl)
   if (!imgRes.ok) {
@@ -57,6 +131,9 @@ export async function uploadMedia({
     'image/jpeg': '.jpg',
     'image/png': '.png',
     'image/webp': '.webp',
+    // Uploaded images can be GIFs. Without this one the file would go up named
+    // .jpg while declaring image/gif, and WordPress rejects that mismatch.
+    'image/gif': '.gif',
   }
   const ext = extMap[mimeBase] ?? '.jpg'
 
@@ -67,6 +144,7 @@ export async function uploadMedia({
     method: 'POST',
     headers: {
       Authorization: getAuthHeader(username, appPassword),
+      'User-Agent': USER_AGENT,
       'Content-Type': mimeBase,
       'Content-Disposition': `attachment; filename="${filename || 'featured' + ext}"`,
     },
@@ -80,6 +158,27 @@ export async function uploadMedia({
   }
 
   const data = await res.json()
+
+  // Alt text is a second call — the upload endpoint takes the bytes, not the
+  // fields. An image on the page beats an image with a description, so a
+  // failure here is swallowed rather than losing the upload that succeeded.
+  if (altText && data.id) {
+    try {
+      await fetch(`${baseUrl}/wp-json/wp/v2/media/${data.id}`, {
+        method: 'POST',
+        headers: {
+          Authorization: getAuthHeader(username, appPassword),
+          'User-Agent': USER_AGENT,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ alt_text: altText }),
+        signal: AbortSignal.timeout(15000),
+      })
+    } catch {
+      // Left without a description; the image itself is up.
+    }
+  }
+
   return data.id
 }
 
@@ -92,35 +191,109 @@ export async function testWordPressConnection({
   username: string
   appPassword: string
 }): Promise<{ success: boolean; error?: string; siteName?: string }> {
+  const baseUrl = normalizeUrl(siteUrl)
+
+  // Test credentials
+  let userRes: Response
   try {
-    const baseUrl = normalizeUrl(siteUrl)
-
-    // Test credentials
-    const userRes = await fetch(`${baseUrl}/wp-json/wp/v2/users/me`, {
-      headers: { Authorization: getAuthHeader(username, appPassword) },
+    userRes = await fetch(`${baseUrl}/wp-json/wp/v2/users/me`, {
+      headers: { Authorization: getAuthHeader(username, appPassword), 'User-Agent': USER_AGENT },
       signal: AbortSignal.timeout(10000),
     })
-
-    if (!userRes.ok) {
-      if (userRes.status === 401 || userRes.status === 403) {
-        return { success: false, error: 'Invalid username or application password.' }
-      }
-      return { success: false, error: `WordPress returned status ${userRes.status}.` }
-    }
-
-    // Get site name
-    const siteRes = await fetch(`${baseUrl}/wp-json`, {
-      signal: AbortSignal.timeout(10000),
-    })
-    const siteData = await siteRes.json().catch(() => ({}))
-
-    return { success: true, siteName: siteData.name || siteUrl }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error'
-    if (msg.includes('timeout') || msg.includes('fetch')) {
-      return { success: false, error: 'Could not reach the WordPress site. Check the URL.' }
+    return { success: false, error: describeFetchError(err) }
+  }
+
+  // A cross-origin hop (http→https, example.com→www.example.com) makes fetch drop
+  // the Authorization header, so the credentials never arrive and WordPress answers
+  // 401 no matter how correct they are. Name the URL it actually serves instead.
+  const redirectedTo = crossOriginRedirect(baseUrl, userRes.url)
+  if (redirectedTo) {
+    return {
+      success: false,
+      error: `${baseUrl} redirects to ${redirectedTo}, and the redirect strips the login. Use ${redirectedTo} as the site URL.`,
     }
-    return { success: false, error: msg }
+  }
+
+  if (!userRes.ok) {
+    const body = (await userRes.json().catch(() => null)) as { message?: string } | null
+    const detail = body?.message ? ` WordPress said: "${stripTags(body.message)}"` : ''
+
+    if (userRes.status === 401 || userRes.status === 403) {
+      return {
+        success: false,
+        error: `WordPress rejected the credentials (${userRes.status}).${detail || ' Check the username and application password — and that the host is not stripping the Authorization header.'}`,
+      }
+    }
+    if (userRes.status === 404) {
+      return {
+        success: false,
+        error: 'No WordPress REST API at that address (404). Check the URL, and that a security plugin has not disabled the REST API.',
+      }
+    }
+    return { success: false, error: `WordPress returned status ${userRes.status}.${detail}` }
+  }
+
+  // Get site name. The credentials already checked out, so a miss here is cosmetic.
+  let siteName = siteUrl
+  try {
+    const siteRes = await fetch(`${baseUrl}/wp-json`, {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(10000),
+    })
+    const siteData = (await siteRes.json().catch(() => ({}))) as { name?: string }
+    siteName = siteData.name || siteUrl
+  } catch {
+    // keep the URL as the name
+  }
+
+  return { success: true, siteName }
+}
+
+/**
+ * Users the connected account is allowed to attribute posts to.
+ *
+ * `context=edit` lists every user (needed to see authors with no posts yet),
+ * but only an admin/editor-capable account can request it — a lower-role
+ * connection falls back to the public author listing instead of erroring out.
+ */
+export async function getAuthors({
+  siteUrl,
+  username,
+  appPassword,
+}: {
+  siteUrl: string
+  username: string
+  appPassword: string
+}): Promise<WPAuthor[]> {
+  const baseUrl = normalizeUrl(siteUrl)
+  const headers = { Authorization: getAuthHeader(username, appPassword), 'User-Agent': USER_AGENT }
+
+  for (const context of ['edit', 'view'] as const) {
+    try {
+      const res = await fetch(`${baseUrl}/wp-json/wp/v2/users?context=${context}&per_page=100`, {
+        headers,
+        signal: AbortSignal.timeout(10000),
+      })
+      if (!res.ok) continue
+      const data = (await res.json()) as Array<{ id: number; name: string }>
+      if (Array.isArray(data)) return data.map((u) => ({ id: u.id, name: u.name }))
+    } catch {
+      // try the next context
+    }
+  }
+
+  return []
+}
+
+/** The origin fetch landed on, when it differs from the one we asked for. */
+function crossOriginRedirect(requested: string, landedOn: string): string | null {
+  try {
+    const from = new URL(requested).origin
+    const to = new URL(landedOn).origin
+    return from === to ? null : to
+  } catch {
+    return null
   }
 }
 
@@ -129,11 +302,18 @@ export async function publishPost({
   username,
   appPassword,
   post,
+  existingPostId,
 }: {
   siteUrl: string
   username: string
   appPassword: string
   post: WPPost
+  /**
+   * Rewrite this post instead of creating another one. Without it, saving a
+   * scheduled article twice leaves two posts on WordPress — and the first one,
+   * now orphaned from our row, still publishes on its original date.
+   */
+  existingPostId?: number
 }): Promise<WPPostResult> {
   const baseUrl = normalizeUrl(siteUrl)
 
@@ -143,10 +323,12 @@ export async function publishPost({
     status: post.status,
   }
   if (post.excerpt) body.excerpt = post.excerpt
-  if (post.date) body.date = post.date
+  if (post.dateGmt) body.date_gmt = toWpGmt(post.dateGmt)
+  else if (post.date) body.date = post.date
   if (post.categories?.length) body.categories = post.categories
   if (post.slug) body.slug = post.slug
   if (post.featuredMediaId) body.featured_media = post.featuredMediaId
+  if (post.author) body.author = post.author
 
   const meta: Record<string, string> = {}
   if (post.focusKeyphrase) meta['_yoast_wpseo_focuskw'] = post.focusKeyphrase
@@ -154,19 +336,31 @@ export async function publishPost({
   if (post.yoastTitle) meta['_yoast_wpseo_title'] = post.yoastTitle
   if (Object.keys(meta).length > 0) body.meta = meta
 
-  const res = await fetch(`${baseUrl}/wp-json/wp/v2/posts`, {
-    method: 'POST',
-    headers: {
-      Authorization: getAuthHeader(username, appPassword),
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30000),
-  })
+  const res = await fetch(
+    existingPostId
+      ? `${baseUrl}/wp-json/wp/v2/posts/${existingPostId}`
+      : `${baseUrl}/wp-json/wp/v2/posts`,
+    {
+      method: existingPostId ? 'PUT' : 'POST',
+      headers: {
+        Authorization: getAuthHeader(username, appPassword),
+        'User-Agent': USER_AGENT,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30000),
+    }
+  )
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err?.message || `WordPress publish failed: ${res.status}`)
+    const failure = new Error(err?.message || `WordPress publish failed: ${res.status}`)
+    // Tagged so the caller can tell "the post we meant to rewrite is gone" from
+    // a real failure, and create a fresh one instead of dead-ending.
+    if (existingPostId && res.status === 404) {
+      ;(failure as Error & { postMissing?: boolean }).postMissing = true
+    }
+    throw failure
   }
 
   const data = await res.json()
@@ -237,13 +431,52 @@ export async function deletePost({
 
   const res = await fetch(`${baseUrl}/wp-json/wp/v2/posts/${postId}?force=true`, {
     method: 'DELETE',
-    headers: { Authorization: getAuthHeader(username, appPassword) },
+    headers: { Authorization: getAuthHeader(username, appPassword), 'User-Agent': USER_AGENT },
     signal: AbortSignal.timeout(15000),
   })
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err?.message || `WordPress delete failed: ${res.status}`)
+  }
+}
+
+/**
+ * Reads a post's current state from WordPress.
+ *
+ * Needed because WordPress, not this app, publishes scheduled posts — so our
+ * stored status goes stale the moment a slot fires. Anything about to change a
+ * post has to ask what it actually is first.
+ */
+export async function getPost({
+  siteUrl,
+  username,
+  appPassword,
+  postId,
+}: {
+  siteUrl: string
+  username: string
+  appPassword: string
+  postId: number
+}): Promise<{ id: number; status: string; link: string; dateGmt?: string }> {
+  const baseUrl = normalizeUrl(siteUrl)
+
+  const res = await fetch(`${baseUrl}/wp-json/wp/v2/posts/${postId}?context=edit`, {
+    headers: { Authorization: getAuthHeader(username, appPassword), 'User-Agent': USER_AGENT },
+    signal: AbortSignal.timeout(30000),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.message || `WordPress read failed: ${res.status}`)
+  }
+
+  const data = await res.json()
+  return {
+    id: data.id,
+    status: data.status,
+    link: data.link,
+    dateGmt: data.date_gmt ? `${data.date_gmt}Z` : undefined,
   }
 }
 
@@ -262,13 +495,24 @@ export async function updatePost({
 }): Promise<WPPostResult> {
   const baseUrl = normalizeUrl(siteUrl)
 
+  // `post` is the camelCase shape used across this file; WordPress wants its own
+  // field names, so translate the ones we actually send on an update.
+  const { dateGmt, featuredMediaId, ...rest } = post
+  const body: Record<string, unknown> = { ...rest }
+  if (dateGmt) {
+    body.date_gmt = toWpGmt(dateGmt)
+    delete body.date
+  }
+  if (featuredMediaId) body.featured_media = featuredMediaId
+
   const res = await fetch(`${baseUrl}/wp-json/wp/v2/posts/${postId}`, {
     method: 'PUT',
     headers: {
       Authorization: getAuthHeader(username, appPassword),
+      'User-Agent': USER_AGENT,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(post),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(30000),
   })
 
