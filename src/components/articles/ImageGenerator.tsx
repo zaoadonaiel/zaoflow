@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Image, Loader2, RefreshCw, Download, Send, Wand2, X, ZoomIn } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Image, Images, Loader2, RefreshCw, Download, Send, Wand2, X, ZoomIn } from 'lucide-react'
 import { getSizesForModel, getDefaultSize, IMAGE_GEN_MODELS } from '@/lib/image-gen'
 import ImageModelSelect, { LAST_IMG_MODEL_KEY } from '@/components/ui/ImageModelSelect'
+import MediaLibraryModal from '@/components/articles/MediaLibraryModal'
+import type { GeneratedImage } from '@/types'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -49,6 +51,11 @@ export default function ImageGenerator({
   const [editText, setEditText] = useState('')
   const [showEdit, setShowEdit] = useState(false)
   const [lightbox, setLightbox] = useState(false)
+  const [showLibrary, setShowLibrary] = useState(false)
+  // Focused the moment an image is picked from the library, because a reused
+  // image arrives describing the article it was made for and the alt is what
+  // usually needs to change first.
+  const altRef = useRef<HTMLInputElement>(null)
 
   // Restore the last-used model after hydration, not during render
   useEffect(() => {
@@ -98,6 +105,36 @@ export default function ImageGenerator({
     } finally {
       setGenerating(false)
     }
+  }
+
+  /**
+   * Takes an image that already exists rather than paying for another one.
+   *
+   * No usage ids go back to the form: this image was paid for when it was
+   * generated, and attaching that cost to a second article would count the
+   * same spend twice.
+   */
+  function selectFromLibrary(image: GeneratedImage) {
+    // The alt is rebuilt rather than kept: whatever was in the box described
+    // the image being replaced, and an alt that describes the wrong picture is
+    // worse than an empty one.
+    const newAlt = articleTitle || (image.prompt || '').slice(0, 120)
+
+    setImageUrl(image.url)
+    if (image.prompt) setPrompt(image.prompt)
+    setAltText(newAlt)
+    setShowEdit(false)
+    setEditText('')
+    setShowLibrary(false)
+    onImageGenerated?.(image.url, image.prompt || prompt, newAlt)
+
+    // Straight into the alt box, so the one thing that is usually wrong about
+    // a reused image is the one thing your cursor lands on.
+    requestAnimationFrame(() => {
+      altRef.current?.focus()
+      altRef.current?.select()
+    })
+    toast.success('Image selected — check the alt description before publishing.')
   }
 
   function handleEdit() {
@@ -174,15 +211,29 @@ export default function ImageGenerator({
           className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none mb-2"
         />
 
-        <button
-          onClick={() => generate()}
-          disabled={generating}
-          className="w-full flex items-center justify-center gap-2 bg-brand-600 text-white py-2 rounded-lg text-xs font-medium hover:bg-brand-700 transition-colors disabled:opacity-50 mb-3"
-        >
-          {generating
-            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Generating…</>
-            : <><Wand2 className="w-3.5 h-3.5" />Generate Image</>}
-        </button>
+        {/* Generating is the first move, but not the only one — an image that
+            already exists costs nothing to use again, so the library sits
+            beside the button that spends money rather than below the fold. */}
+        <div className="flex gap-2 mb-3">
+          <button
+            onClick={() => generate()}
+            disabled={generating}
+            className="flex-1 flex items-center justify-center gap-2 bg-brand-600 text-white py-2 rounded-lg text-xs font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
+          >
+            {generating
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Generating…</>
+              : <><Wand2 className="w-3.5 h-3.5" />Generate Image</>}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowLibrary(true)}
+            title="Pick an image you have already generated"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          >
+            <Images className="w-3.5 h-3.5" />
+            Library
+          </button>
+        </div>
 
         {/* Preview */}
         {imageUrl && (
@@ -203,6 +254,7 @@ export default function ImageGenerator({
             <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Alt description</label>
               <input
+                ref={altRef}
                 type="text"
                 value={altText}
                 onChange={(e) => handleAltChange(e.target.value)}
@@ -258,6 +310,13 @@ export default function ImageGenerator({
           </div>
         )}
       </div>
+
+      <MediaLibraryModal
+        open={showLibrary}
+        onClose={() => setShowLibrary(false)}
+        onSelect={selectFromLibrary}
+        currentUrl={imageUrl}
+      />
     </>
   )
 }
