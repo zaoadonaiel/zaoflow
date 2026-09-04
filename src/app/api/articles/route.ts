@@ -34,10 +34,11 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
   const {
-    site_id, title, content, keywords, ai_model, status, scheduled_at,
+    site_id, title, content, keywords, ai_model, status, scheduled_at, scheduled_tz,
     word_count, excerpt, meta_description,
     focus_keyphrase, keyphrase_synonyms, yoast_title, yoast_meta_description, slug,
-    featured_image_url, featured_image_prompt, wp_category_id,
+    featured_image_url, featured_image_prompt, featured_image_alt, wp_category_id,
+    usage_ids,
   } = body
 
   if (!title || !site_id) {
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
     ai_model,
     status: status || 'draft',
     scheduled_at: scheduled_at || null,
+    scheduled_tz: scheduled_tz || null,
     word_count: word_count || null,
     excerpt: excerpt || null,
     meta_description: meta_description || null,
@@ -67,11 +69,25 @@ export async function POST(req: NextRequest) {
     slug: slug || null,
     featured_image_url: featured_image_url || null,
     featured_image_prompt: featured_image_prompt || null,
+    featured_image_alt: featured_image_alt || null,
     // Dropping this silently sent every new article to Uncategorized, since
     // the publish route reads it back off the row to set WP categories
     wp_category_id: wp_category_id || null,
   }).select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Attach any generation-cost rows to this article. Each row was written with
+  // article_id null while the article did not exist yet — this is the point at
+  // which they earn one.
+  if (Array.isArray(usage_ids) && usage_ids.length > 0) {
+    await supabase
+      .from('ai_usage')
+      .update({ article_id: article.id })
+      .in('id', usage_ids)
+      .eq('user_id', user.id)
+      .is('article_id', null)
+  }
+
   return NextResponse.json({ article }, { status: 201 })
 }

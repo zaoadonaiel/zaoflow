@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Sparkles, Save, Send, Calendar, Loader2, Globe, Search, FolderOpen,
-  ExternalLink, Check, CheckCircle2, ChevronDown, ChevronUp, AlertCircle, Plus, ImageUp
+  ExternalLink, Check, CheckCircle2, ChevronDown, ChevronUp, AlertCircle, Plus, ImageUp,
+  Tag, X,
 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import ConfirmSiteModal from '@/components/ui/ConfirmSiteModal'
@@ -71,9 +72,11 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   const [siteId, setSiteId] = useState('')
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
-  // No longer typed by hand — an accepted idea brings these, and a saved
-  // article loads its own. Both still reach the generator and the SEO fields.
+  // Filled by an accepted idea or a loaded article, and extendable by hand
+  // below in the sidebar for the case where the writer has a keyword the idea
+  // did not name. Both routes reach the generator and the SEO fields.
   const [keywords, setKeywords] = useState<string[]>([])
+  const [keywordInput, setKeywordInput] = useState('')
   const [model, setModel] = useState('')
   const [seoModel, setSeoModel] = useState('')
 
@@ -356,6 +359,15 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   function handleSelectInstructionSet(set: ArticleInstruction) {
     setInstructions(set.instructions)
     setInstructionSetId(set.id)
+  }
+
+  function addKeyword(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter') return
+    const value = keywordInput.trim()
+    if (!value) return
+    e.preventDefault()
+    if (!keywords.includes(value)) setKeywords([...keywords, value])
+    setKeywordInput('')
   }
 
   async function handleGenerate() {
@@ -1210,6 +1222,42 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
                 }
               />
             </div>
+          </div>
+
+          {/* Keywords — filled by an accepted idea, added to by hand for the
+              ones the idea did not name. Read by both the article generator
+              and the SEO generator. */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+              <Tag className="w-4 h-4 text-gray-400" /> Keywords
+            </h3>
+            <input
+              type="text"
+              value={keywordInput}
+              onChange={(e) => setKeywordInput(e.target.value)}
+              onKeyDown={addKeyword}
+              placeholder="Type and press Enter..."
+              className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 mb-2"
+            />
+            {keywords.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {keywords.map((kw) => (
+                  <span
+                    key={kw}
+                    className="flex items-center gap-1 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 text-xs px-2 py-1 rounded-full border border-brand-100 dark:border-brand-800"
+                  >
+                    {kw}
+                    <button
+                      type="button"
+                      onClick={() => setKeywords(keywords.filter((k) => k !== kw))}
+                      aria-label={`Remove ${kw}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Featured Image */}

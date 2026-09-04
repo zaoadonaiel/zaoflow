@@ -123,6 +123,7 @@ export async function generateArticle({
   keywords = [],
   focusKeyword,
   instructions,
+  knowledgeBase,
   wordCount = 1400,
 }: {
   apiKey: string
@@ -131,6 +132,8 @@ export async function generateArticle({
   keywords?: string[]
   focusKeyword?: string
   instructions?: string
+  /** Free-text brief on the company/site the article is being written for. */
+  knowledgeBase?: string
   wordCount?: number
 }): Promise<{
   content: string
@@ -144,7 +147,7 @@ export async function generateArticle({
 Your articles are well-structured with proper HTML, engaging, and optimized for search engines while remaining genuinely helpful for readers.
 Always output clean HTML without any markdown code blocks or document tags — just the article body HTML.`
 
-  const userPrompt = buildArticlePrompt({ title, keywords, focusKeyword, instructions, wordCount })
+  const userPrompt = buildArticlePrompt({ title, keywords, focusKeyword, instructions, knowledgeBase, wordCount })
 
   const response = await fetch(OPENROUTER_API_URL, {
     method: 'POST',
@@ -197,15 +200,25 @@ function buildArticlePrompt({
   keywords,
   focusKeyword,
   instructions,
+  knowledgeBase,
   wordCount,
 }: {
   title: string
   keywords: string[]
   focusKeyword?: string
   instructions?: string
+  knowledgeBase?: string
   wordCount: number
 }): string {
   let prompt = `Write a comprehensive, SEO-optimized blog post for the following WordPress post title:\n\n"${title}"\n\n`
+
+  // Capped at 4,000 chars for the same reason the idea prompt caps it: a very
+  // long brief must not push the article rules or the author's instructions
+  // out of the model's context window.
+  const brief = (knowledgeBase || '').trim()
+  if (brief) {
+    prompt += `About the company / brief the article must sit inside:\n${brief.slice(0, 4000)}\n\n`
+  }
 
   if (focusKeyword) {
     prompt += `Focus keyword: ${focusKeyword}\n`

@@ -30,9 +30,16 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const allowedFields = ['title', 'content', 'keywords', 'excerpt', 'meta_description',
-    'site_id', 'ai_model', 'status', 'scheduled_at', 'word_count', 'wp_post_id', 'wp_post_url',
-    'wp_category_id']
+  // Every editable column on the row. Anything missing here becomes a silent
+  // data-loss bug — the field is on screen, sent to the API, and dropped —
+  // which is how SEO and the featured image were disappearing on every edit.
+  const allowedFields = [
+    'title', 'content', 'keywords', 'excerpt', 'meta_description',
+    'site_id', 'ai_model', 'status', 'scheduled_at', 'scheduled_tz',
+    'word_count', 'wp_post_id', 'wp_post_url', 'wp_category_id',
+    'focus_keyphrase', 'keyphrase_synonyms', 'yoast_title', 'yoast_meta_description', 'slug',
+    'featured_image_url', 'featured_image_prompt', 'featured_image_alt',
+  ]
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   for (const key of allowedFields) {
@@ -48,6 +55,19 @@ export async function PATCH(
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Costs paid before the row existed are attached here, the same way the
+  // create route does it — so the second and later autosaves on a new article
+  // still pull their generation rows onto the article.
+  if (Array.isArray(body.usage_ids) && body.usage_ids.length > 0) {
+    await supabase
+      .from('ai_usage')
+      .update({ article_id: article.id })
+      .in('id', body.usage_ids)
+      .eq('user_id', user.id)
+      .is('article_id', null)
+  }
+
   return NextResponse.json({ article })
 }
 

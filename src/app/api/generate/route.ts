@@ -24,13 +24,27 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { title, keywords = [], instructions, model } = body
+  const { title, keywords = [], instructions, model, site_id } = body
 
   if (!title?.trim()) {
     return NextResponse.json({ error: 'Title is required' }, { status: 400 })
   }
 
   const resolvedModel = model || settings?.default_model || AVAILABLE_MODELS[0].id
+
+  // Reading the site's brief here rather than trusting the client not to
+  // impersonate someone else's knowledge base — RLS on the sites table is what
+  // makes this safe to send into the prompt.
+  let knowledgeBase = ''
+  if (site_id) {
+    const { data: site } = await supabase
+      .from('sites')
+      .select('knowledge_base')
+      .eq('id', site_id)
+      .eq('user_id', user.id)
+      .single()
+    knowledgeBase = (site?.knowledge_base || '').trim()
+  }
 
   try {
     const articleResult = await generateArticle({
@@ -39,6 +53,7 @@ export async function POST(req: NextRequest) {
       title,
       keywords,
       instructions,
+      knowledgeBase,
       wordCount: 1600,
     })
 
