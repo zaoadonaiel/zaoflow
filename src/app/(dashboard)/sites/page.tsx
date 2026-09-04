@@ -234,8 +234,20 @@ export default function SitesPage() {
                     )}
                     {site.status}
                   </Badge>
-                  <Badge variant={site.site_type === 'nodejs' ? 'purple' : 'default'}>
-                    {site.site_type === 'nodejs' ? 'Node.js' : 'WordPress'}
+                  <Badge
+                    variant={
+                      site.site_type === 'nodejs'
+                        ? 'purple'
+                        : site.site_type === 'other'
+                        ? 'info'
+                        : 'default'
+                    }
+                  >
+                    {site.site_type === 'nodejs'
+                      ? 'Node.js'
+                      : site.site_type === 'other'
+                      ? 'Analytics only'
+                      : 'WordPress'}
                   </Badge>
                 </div>
               </div>
@@ -286,24 +298,23 @@ export default function SitesPage() {
                 </div>
               )}
 
-              <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-50 dark:border-gray-700">
+              <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-gray-50 dark:border-gray-700">
                 <button
                   onClick={() => testConnection(site)}
                   disabled={testingId === site.id}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50"
+                  className="flex-1 min-w-[80px] flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${testingId === site.id ? 'spin' : ''}`} />
                   {testingId === site.id ? 'Testing...' : 'Test'}
                 </button>
-                {site.site_type !== 'other' && (
-                  <button
-                    onClick={() => setEditSite(site)}
-                    title="Edit credentials"
-                    className="flex items-center justify-center py-2 px-3 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
-                  >
-                    <KeyRound className="w-3.5 h-3.5" />
-                  </button>
-                )}
+                <button
+                  onClick={() => setEditSite(site)}
+                  title={site.site_type === 'other' ? 'Add WordPress credentials' : 'Edit credentials / reauthenticate'}
+                  aria-label={site.site_type === 'other' ? 'Add WordPress credentials' : 'Edit credentials / reauthenticate'}
+                  className="flex items-center justify-center py-2 px-3 text-xs font-medium text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-900/30 hover:bg-brand-100 dark:hover:bg-brand-900/50 rounded-lg transition-colors ring-1 ring-brand-200 dark:ring-brand-800"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                </button>
                 {site.site_type === 'wordpress' && (
                   <button
                     onClick={() => setReconnectFor(site)}
