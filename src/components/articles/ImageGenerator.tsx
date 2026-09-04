@@ -9,18 +9,42 @@ import toast from 'react-hot-toast'
 interface Props {
   articleId?: string
   articleTitle?: string
+  /** Site the article belongs to. Reserved for future per-site image settings. */
+  siteId?: string
   defaultPrompt?: string
-  onImageGenerated?: (url: string, prompt: string, altText: string) => void
+  /** Restores previously generated image state when re-opening an article. */
+  initialImageUrl?: string
+  initialPrompt?: string
+  initialAlt?: string
+  /**
+   * 4th arg is the usage row ids the image call produced, when the endpoint
+   * eventually returns them, so the parent can bill the cost against the
+   * article. Optional so it stays compatible with today's endpoint response.
+   */
+  onImageGenerated?: (
+    url: string,
+    prompt: string,
+    altText: string,
+    usageIds?: string[] | string | null,
+  ) => void
 }
 
-export default function ImageGenerator({ articleId, articleTitle = '', defaultPrompt = '', onImageGenerated }: Props) {
-  const [prompt, setPrompt] = useState(defaultPrompt)
+export default function ImageGenerator({
+  articleId,
+  articleTitle = '',
+  defaultPrompt = '',
+  initialImageUrl = '',
+  initialPrompt = '',
+  initialAlt = '',
+  onImageGenerated,
+}: Props) {
+  const [prompt, setPrompt] = useState(initialPrompt || defaultPrompt)
   // Start empty so the first client render matches the server HTML — reading
   // localStorage during render makes hydration fail once a model has been saved
   const [model, setModel] = useState('')
   const [size, setSize] = useState('1024x1024')
-  const [imageUrl, setImageUrl] = useState('')
-  const [altText, setAltText] = useState('')
+  const [imageUrl, setImageUrl] = useState(initialImageUrl)
+  const [altText, setAltText] = useState(initialAlt)
   const [generating, setGenerating] = useState(false)
   const [editText, setEditText] = useState('')
   const [showEdit, setShowEdit] = useState(false)

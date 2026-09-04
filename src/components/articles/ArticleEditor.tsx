@@ -19,9 +19,16 @@ interface ArticleEditorProps {
   value: string
   onChange: (html: string) => void
   placeholder?: string
+  /** Overrides the default `min-h-[400px]`, e.g. to clamp+scroll when collapsed. */
+  bodyHeightClass?: string
 }
 
-export default function ArticleEditor({ value, onChange, placeholder = 'Start writing...' }: ArticleEditorProps) {
+export default function ArticleEditor({
+  value,
+  onChange,
+  placeholder = 'Start writing...',
+  bodyHeightClass = 'min-h-[400px]',
+}: ArticleEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const [wordCount, setWordCount] = useState(0)
   const [charCount, setCharCount] = useState(0)
@@ -126,7 +133,7 @@ export default function ArticleEditor({ value, onChange, placeholder = 'Start wr
         onInput={handleInput}
         onKeyDown={handleKeyDown}
         data-placeholder={!value ? placeholder : ''}
-        className="article-editor p-5 min-h-[400px] text-gray-800 dark:text-gray-100 text-sm outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-gray-400 dark:empty:before:text-gray-500"
+        className={`article-editor p-5 ${bodyHeightClass} text-gray-800 dark:text-gray-100 text-sm outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-gray-400 dark:empty:before:text-gray-500`}
         style={{ whiteSpace: 'pre-wrap' }}
       />
 

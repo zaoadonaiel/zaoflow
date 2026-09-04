@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Plus, Pencil, Trash2, Loader2, BookOpen, AlertCircle } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import { MAX_ARTICLE_WORDS, wordCountLimitError } from '@/lib/instruction-limits'
@@ -12,9 +12,15 @@ interface InstructionSetsProps {
   selectedId: string | null
   /** fired when a card body is clicked — parent applies set.instructions */
   onSelect: (set: ArticleInstruction) => void
+  /**
+   * When true and nothing is selected yet, pick the first available set once
+   * the list loads. Meant for the new-article page so the first save has a
+   * concrete instruction set attached rather than shipping with none.
+   */
+  autoSelectDefault?: boolean
 }
 
-export default function InstructionSets({ selectedId, onSelect }: InstructionSetsProps) {
+export default function InstructionSets({ selectedId, onSelect, autoSelectDefault = false }: InstructionSetsProps) {
   const [sets, setSets] = useState<ArticleInstruction[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -56,6 +62,22 @@ export default function InstructionSets({ selectedId, onSelect }: InstructionSet
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // Fires at most once per mount, so a user who deliberately clears the
+  // selection back to null doesn't have it snap right back to the first set.
+  const autoSelectedRef = useRef(false)
+  useEffect(() => {
+    if (
+      autoSelectDefault &&
+      !autoSelectedRef.current &&
+      !loading &&
+      !selectedId &&
+      sets.length > 0
+    ) {
+      autoSelectedRef.current = true
+      onSelect(sets[0])
+    }
+  }, [autoSelectDefault, loading, selectedId, sets, onSelect])
 
   function openCreate() {
     setEditing(null)

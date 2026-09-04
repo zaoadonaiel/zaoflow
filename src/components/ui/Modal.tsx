@@ -6,12 +6,20 @@ import { X } from 'lucide-react'
 interface ModalProps {
   open: boolean
   onClose: () => void
-  title: string
+  // ReactNode rather than string so callers (e.g. ScheduleCalendarModal) can
+  // slot controls into the header row next to the title.
+  title: React.ReactNode
   children: React.ReactNode
   maxWidth?: string
+  /**
+   * Replaces the default close (X) button in the header row when provided —
+   * for modals that carry their own primary/cancel actions up top rather than
+   * a lone dismiss control.
+   */
+  headerRight?: React.ReactNode
 }
 
-export default function Modal({ open, onClose, title, children, maxWidth = 'max-w-lg' }: ModalProps) {
+export default function Modal({ open, onClose, title, children, maxWidth = 'max-w-lg', headerRight }: ModalProps) {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
@@ -33,12 +41,16 @@ export default function Modal({ open, onClose, title, children, maxWidth = 'max-
       >
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 rounded-t-2xl">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h2>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          {headerRight ? (
+            <div className="flex items-center gap-2">{headerRight}</div>
+          ) : (
+            <button
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
         <div className="px-6 py-5">{children}</div>
       </div>

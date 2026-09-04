@@ -24,6 +24,8 @@ interface Props {
   lastModelKey?: string
   /** 'tile' is the standalone card; 'compact' is a single row for tight layouts */
   variant?: 'tile' | 'compact'
+  /** Trailing button/element rendered beside the picker — e.g. a "Generate" action. */
+  action?: React.ReactNode
 }
 
 // Shared across instances so the pickers on a page make one request between
@@ -70,6 +72,7 @@ export default function ModelSelect({
   className,
   lastModelKey = LAST_MODEL_KEY,
   variant = 'tile',
+  action,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [favorites, setFavorites] = useState<string[]>([])
@@ -161,44 +164,51 @@ export default function ModelSelect({
     </div>
   )
 
+  const picker = variant === 'tile' ? (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      className="w-full text-left rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 p-3 hover:border-brand-300 dark:hover:border-brand-700 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors"
+    >
+      <div className="flex items-center gap-1.5 min-w-0">
+        {isFavourite && (
+          <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 shrink-0" />
+        )}
+        <span className="flex-1 text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+          {currentName}
+        </span>
+        <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+      </div>
+      <div className="grid grid-cols-2 gap-2 mt-2.5">
+        <PriceCell label="Input" value={currentPrice?.inputPerM} loading={pricingLoading} />
+        <PriceCell label="Output" value={currentPrice?.outputPerM} loading={pricingLoading} />
+      </div>
+    </button>
+  ) : (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-500 text-left text-gray-900 dark:text-gray-100"
+    >
+      {isFavourite && <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 shrink-0" />}
+      <span className="flex-1 truncate">{currentName}</span>
+      {currentPrice && (
+        <span className="shrink-0 text-xs font-mono text-gray-400 dark:text-gray-500">
+          {formatPerM(currentPrice.inputPerM)} / {formatPerM(currentPrice.outputPerM)}
+        </span>
+      )}
+      <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+    </button>
+  )
+
   return (
     <div className={className}>
-      {variant === 'tile' ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="w-full text-left rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 p-3 hover:border-brand-300 dark:hover:border-brand-700 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors"
-        >
-          <div className="flex items-center gap-1.5 min-w-0">
-            {isFavourite && (
-              <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 shrink-0" />
-            )}
-            <span className="flex-1 text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-              {currentName}
-            </span>
-            <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
-          </div>
-          <div className="grid grid-cols-2 gap-2 mt-2.5">
-            <PriceCell label="Input" value={currentPrice?.inputPerM} loading={pricingLoading} />
-            <PriceCell label="Output" value={currentPrice?.outputPerM} loading={pricingLoading} />
-          </div>
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-500 text-left text-gray-900 dark:text-gray-100"
-        >
-          {isFavourite && <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 shrink-0" />}
-          <span className="flex-1 truncate">{currentName}</span>
-          {currentPrice && (
-            <span className="shrink-0 text-xs font-mono text-gray-400 dark:text-gray-500">
-              {formatPerM(currentPrice.inputPerM)} / {formatPerM(currentPrice.outputPerM)}
-            </span>
-          )}
-          <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
-        </button>
-      )}
+      {action ? (
+        <div className="flex items-stretch gap-2">
+          <div className="flex-1 min-w-0">{picker}</div>
+          <div className="shrink-0 flex items-stretch">{action}</div>
+        </div>
+      ) : picker}
 
       <Modal
         open={open}
