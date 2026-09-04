@@ -10,6 +10,7 @@ import ModelSelect, { LAST_MODEL_KEY } from '@/components/ui/ModelSelect'
 
 const SEO_LAST_MODEL_KEY = 'zaoflo_last_model_seo'
 import ImageGenerator from '@/components/articles/ImageGenerator'
+import IdeaGenerator from '@/components/articles/IdeaGenerator'
 import InstructionSets from '@/components/articles/InstructionSets'
 import { AVAILABLE_MODELS } from '@/lib/openrouter'
 import type { Site, ArticleInstruction } from '@/types'
@@ -105,6 +106,17 @@ export default function NewArticlePage() {
       .catch(() => {})
       .finally(() => setLoadingCats(false))
   }, [siteId, isNodeSite])
+
+  // An accepted idea seeds the article: the title fills the header field and
+  // the description becomes the opening brief the writer expands on.
+  function applyIdea(idea: { title: string; description: string; keywords: string[] }) {
+    const hasContent = content.replace(/<[^>]*>/g, '').trim().length > 0
+    if (hasContent && !confirm('Replace what you have written with this idea?')) return
+    setTitle(idea.title)
+    setContent(`<p>${idea.description}</p>`)
+    if (idea.keywords?.length && keywords.length === 0) setKeywords(idea.keywords)
+    toast.success('Idea applied — hit Generate with AI to write it')
+  }
 
   function addKeyword(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && keywordInput.trim()) {
@@ -285,6 +297,12 @@ export default function NewArticlePage() {
       <div className="flex gap-6 items-start">
         {/* Main editor */}
         <div className="flex-1 min-w-0 space-y-4">
+          <IdeaGenerator
+            siteId={siteId}
+            siteName={currentSite?.name || null}
+            onAccept={applyIdea}
+          />
+
           <input
             type="text"
             value={title}
