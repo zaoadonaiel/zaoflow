@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { testWordPressConnection } from '@/lib/wordpress'
+import { testWordPressConnection, getAuthors } from '@/lib/wordpress'
 import { testNodeConnection } from '@/lib/nodejs-site'
 
 export async function DELETE(
@@ -57,6 +57,15 @@ export async function PATCH(
     return NextResponse.json({ error: 'No editable fields provided' }, { status: 400 })
   }
 
+  // Analytics-only sites are promoted to full WordPress once a WP credential pair
+  // is supplied and verified — that's how the key-icon flow "adds" credentials.
+  const promotingToWordPress =
+    site.site_type === 'other' &&
+    typeof updates.wp_username === 'string' &&
+    typeof updates.wp_app_password === 'string' &&
+    (updates.wp_username as string).length > 0 &&
+    (updates.wp_app_password as string).length > 0
+
   // If credentials or their URL context changed, verify before persisting sensitive changes.
   const credentialFields =
     site.site_type === 'nodejs'
@@ -67,18 +76,24 @@ export async function PATCH(
 
   const credentialsChanged = credentialFields.some((k) => k in updates)
 
-  if (credentialsChanged) {
-    if (site.site_type === 'wordpress') {
-      const test = await testWordPressConnection({
-        siteUrl: (updates.url as string) ?? site.url,
-        username: (updates.wp_username as string) ?? site.wp_username,
-        appPassword: (updates.wp_app_password as string) ?? site.wp_app_password,
-      })
+  if (credentialsChanged || promotingToWordPress) {
+    if (site.site_type === 'wordpress' || promotingToWordPress) {
+      const siteUrl = (updates.url as string) ?? site.url
+      const username = (updates.wp_username as string) ?? site.wp_username
+      const appPassword = (updates.wp_app_password as string) ?? site.wp_app_password
+      const test = await testWordPressConnection({ siteUrl, username, appPassword })
       if (!test.success) {
         return NextResponse.json({ error: test.error || 'Could not connect' }, { status: 422 })
       }
       updates.status = 'connected'
       updates.last_sync = new Date().toISOString()
+      if (promotingToWordPress) {
+        updates.site_type = 'wordpress'
+        const authors = await getAuthors({ siteUrl, username, appPassword })
+        updates.wp_authors = authors
+        const defaultAuthor = authors.find((a) => a.name.toLowerCase() === username.toLowerCase())
+        updates.wp_default_author_id = defaultAuthor?.id ?? null
+      }
     } else if (site.site_type === 'nodejs') {
       const test = await testNodeConnection({
         apiUrl: (updates.node_api_url as string) ?? site.node_api_url,
