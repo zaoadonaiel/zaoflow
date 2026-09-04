@@ -1,4 +1,5 @@
 import { MAX_ARTICLE_WORDS } from '@/lib/instruction-limits'
+import { readUsage, type UsageInfo } from '@/lib/ai-cost'
 
 export const AVAILABLE_MODELS = [
   { id: 'anthropic/claude-sonnet-4.5', name: 'Claude Sonnet 4.5', badge: 'Best' },
@@ -245,6 +246,158 @@ ${authorInstructions}
 Output ONLY the HTML body content, starting with the first <p> of the intro. Do not include <html>, <head>, <body>, <h1>, any code block wrappers, or a "Meta Description:" line.`
 
   return prompt
+}
+
+export interface RejectedIdea {
+  title: string
+  keywords?: string[]
+}
+
+/**
+ * Suggests one article the site has not covered yet, given its back catalogue,
+ * knowledge base, and anything already turned down. Returns a proposal, not a
+ * body — the article itself is written later by `generateArticle`.
+ *
+ * `onUsage` fires once per model call so the caller can sum retries and bill
+ * them together.
+ */
+export async function generateArticleIdea({
+  apiKey,
+  model,
+  existingTitles,
+  siteName,
+  knowledgeBase,
+  topic,
+  rejectedIdeas,
+  onUsage,
+}: {
+  apiKey: string
+  model: string
+  existingTitles: string[]
+  siteName: string
+  knowledgeBase: string
+  topic: string
+  rejectedIdeas: RejectedIdea[]
+  onUsage?: (u: UsageInfo) => void
+}): Promise<{ title: string; description: string; keywords: string[] }> {
+  const prompt = buildIdeaPrompt({
+    siteName, knowledgeBase, topic, existingTitles, rejectedIdeas,
+  })
+
+  const response = await fetch(OPENROUTER_API_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://zaoflo.com',
+      'X-Title': 'Zaoflo - AI WordPress Publisher',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 500,
+      response_format: { type: 'json_object' },
+    }),
+  })
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    if (response.status === 401 || response.status === 403) {
+      throw new Error('Invalid OpenRouter API key. Go to Settings and update it.')
+    }
+    if (response.status === 402) {
+      throw new Error('Your OpenRouter account has no credits. Add credits at openrouter.ai.')
+    }
+    throw new Error(err?.error?.message || `OpenRouter error: ${response.status}`)
+  }
+
+  const data = await response.json()
+  onUsage?.(readUsage(data, model))
+
+  const raw: string = data.choices?.[0]?.message?.content || '{}'
+  // Some models still wrap JSON in ```json fences even with response_format set.
+  const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+
+  let parsed: { title?: unknown; description?: unknown; keywords?: unknown } = {}
+  try { parsed = JSON.parse(cleaned) } catch {}
+
+  const title = typeof parsed.title === 'string' ? parsed.title.trim() : ''
+  const description = typeof parsed.description === 'string' ? parsed.description.trim() : ''
+  const keywords = Array.isArray(parsed.keywords)
+    ? parsed.keywords
+        .filter((k): k is string => typeof k === 'string' && k.trim().length > 0)
+        .map((k) => k.trim())
+        .slice(0, 10)
+    : []
+
+  // An empty title would render as a blank card — better to fail loudly so the
+  // caller can retry or switch models.
+  if (!title) {
+    throw new Error('Model did not return a usable idea. Try again or switch models.')
+  }
+
+  return { title, description, keywords }
+}
+
+function buildIdeaPrompt({
+  siteName,
+  knowledgeBase,
+  topic,
+  existingTitles,
+  rejectedIdeas,
+}: {
+  siteName: string
+  knowledgeBase: string
+  topic: string
+  existingTitles: string[]
+  rejectedIdeas: RejectedIdea[]
+}): string {
+  const parts: string[] = [
+    `You are proposing one article for the blog of "${siteName}".`,
+  ]
+
+  if (knowledgeBase) {
+    // Capped so a very long brief cannot push the back-catalogue or the JSON
+    // instructions out of the model's context window.
+    parts.push(`About the company / brief:\n${knowledgeBase.slice(0, 4000)}`)
+  }
+
+  if (topic) {
+    parts.push(
+      `The author asked for something specific:\n"${topic}"\nWrite an article idea that directly answers this ask.`
+    )
+  } else {
+    parts.push(
+      `No specific topic was requested — pick a subject this site has not written about that fits the brief and would earn organic search traffic.`
+    )
+  }
+
+  if (existingTitles.length > 0) {
+    // Recent titles matter more than ancient ones for "don't repeat yourself".
+    const shown = existingTitles.slice(-80)
+    parts.push(
+      `Already covered on this site (do not duplicate or paraphrase):\n${shown.map((t) => `- ${t}`).join('\n')}`
+    )
+  }
+
+  if (rejectedIdeas.length > 0) {
+    const shown = rejectedIdeas.slice(-40)
+    parts.push(
+      `Already turned down (do not suggest again; steer away from close variants):\n${shown
+        .map((r) => `- ${r.title}${r.keywords?.length ? ` [${r.keywords.join(', ')}]` : ''}`)
+        .join('\n')}`
+    )
+  }
+
+  parts.push(`Return ONLY valid JSON with exactly these keys:
+{
+  "title": "Article title (60-80 chars, specific and search-friendly, no clickbait, no year)",
+  "description": "1-2 sentence pitch of the angle — what the article covers and why it matters (max 240 chars)",
+  "keywords": ["3-6 target keywords or phrases the article should rank for"]
+}
+No prose, no markdown, no code fences.`)
+
+  return parts.join('\n\n')
 }
 
 // Converts any string to a URL slug, never cutting mid-word.
