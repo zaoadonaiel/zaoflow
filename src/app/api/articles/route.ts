@@ -15,11 +15,16 @@ export async function GET(req: NextRequest) {
     .from('articles')
     .select('*, sites(name, url)')
     .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
 
   if (search) query = query.ilike('title', `%${search}%`)
   if (status) query = query.eq('status', status)
   if (siteId) query = query.eq('site_id', siteId)
+
+  // Scheduled articles are most useful in publish order (soonest first).
+  // Everything else lists newest-created first.
+  query = status === 'scheduled'
+    ? query.order('scheduled_at', { ascending: true, nullsFirst: false })
+    : query.order('created_at', { ascending: false })
 
   const { data: articles, error } = await query
 
