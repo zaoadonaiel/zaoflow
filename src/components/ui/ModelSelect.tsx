@@ -1,12 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Star, ChevronDown, ExternalLink, Pencil } from 'lucide-react'
+import { Star, ChevronDown, ExternalLink, Pencil, X } from 'lucide-react'
 import { AVAILABLE_MODELS } from '@/lib/openrouter'
 import Modal from '@/components/ui/Modal'
 
 const FAVORITES_KEY = 'zaoflo_favorites_text'
+const HIDDEN_KEY = 'zaoflo_hidden_text_models'
+const CUSTOM_HISTORY_KEY = 'zaoflo_custom_text_models'
 export const LAST_MODEL_KEY = 'zaoflo_last_model_text'
+
+interface TextModel { id: string; name: string; badge: string }
 
 const OPENROUTER_SEO_MODELS_URL =
   'https://openrouter.ai/models?categories=marketing/seo&order=most-popular'
@@ -76,6 +80,8 @@ export default function ModelSelect({
 }: Props) {
   const [open, setOpen] = useState(false)
   const [favorites, setFavorites] = useState<string[]>([])
+  const [hidden, setHidden] = useState<string[]>([])
+  const [customHistory, setCustomHistory] = useState<TextModel[]>([])
   const [pricing, setPricing] = useState<Record<string, ModelPricing>>({})
   const [pricingLoading, setPricingLoading] = useState(true)
   const [customDraft, setCustomDraft] = useState('')
@@ -86,8 +92,26 @@ export default function ModelSelect({
     try {
       const stored = localStorage.getItem(FAVORITES_KEY)
       if (stored) setFavorites(JSON.parse(stored))
+      const h = localStorage.getItem(HIDDEN_KEY)
+      if (h) setHidden(JSON.parse(h))
+      const c = localStorage.getItem(CUSTOM_HISTORY_KEY)
+      if (c) setCustomHistory(JSON.parse(c))
     } catch {}
   }, [])
+
+  // Any custom id the picker sees as `value` gets pinned so it lives on next
+  // time the modal opens — a model used once should be a click away to use
+  // again, not a re-typed slug.
+  useEffect(() => {
+    if (!value) return
+    if (AVAILABLE_MODELS.some((m) => m.id === value)) return
+    setCustomHistory((prev) => {
+      if (prev.some((m) => m.id === value)) return prev
+      const next = [...prev, { id: value, name: value, badge: '' }]
+      try { localStorage.setItem(CUSTOM_HISTORY_KEY, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }, [value])
 
   // The trigger shows a price now, so this can't wait for the modal to open.
   // Re-runs when a custom id is picked so its price gets fetched too.
@@ -116,6 +140,16 @@ export default function ModelSelect({
     } catch {}
   }
 
+  function saveHidden(next: string[]) {
+    setHidden(next)
+    try { localStorage.setItem(HIDDEN_KEY, JSON.stringify(next)) } catch {}
+  }
+
+  function saveCustomHistory(next: TextModel[]) {
+    setCustomHistory(next)
+    try { localStorage.setItem(CUSTOM_HISTORY_KEY, JSON.stringify(next)) } catch {}
+  }
+
   function toggleFav(modelId: string, e: React.MouseEvent) {
     e.stopPropagation()
     saveFavorites(
@@ -123,6 +157,19 @@ export default function ModelSelect({
         ? favorites.filter((f) => f !== modelId)
         : [...favorites, modelId]
     )
+  }
+
+  function hideModel(id: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!hidden.includes(id)) saveHidden([...hidden, id])
+    // Also drop from favorites so an unhide later does not resurrect the
+    // gold-star with no context, and from custom history so a bare custom
+    // id does not silently reappear on next open.
+    if (favorites.includes(id)) saveFavorites(favorites.filter((f) => f !== id))
+    if (customHistory.some((m) => m.id === id)) {
+      saveCustomHistory(customHistory.filter((m) => m.id !== id))
+    }
+    if (value === id) onChange('')
   }
 
   function selectModel(id: string) {
@@ -144,10 +191,17 @@ export default function ModelSelect({
   const currentPrice = pricing[value]
   const isFavourite = favorites.includes(value)
 
-  const favoriteModels = AVAILABLE_MODELS.filter((m) => favorites.includes(m.id))
-  const otherModels = AVAILABLE_MODELS.filter((m) => !favorites.includes(m.id))
+  // Visible list = hardcoded catalogue + every custom id ever used, minus
+  // whatever the user has hidden.
+  const allModels: TextModel[] = [
+    ...AVAILABLE_MODELS,
+    ...customHistory.filter((m) => !AVAILABLE_MODELS.some((h) => h.id === m.id)),
+  ]
+  const visible = allModels.filter((m) => !hidden.includes(m.id))
+  const favoriteModels = visible.filter((m) => favorites.includes(m.id))
+  const otherModels = visible.filter((m) => !favorites.includes(m.id))
 
-  const renderGrid = (models: typeof AVAILABLE_MODELS) => (
+  const renderGrid = (models: TextModel[]) => (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
       {models.map((m) => (
         <ModelCard
@@ -159,6 +213,7 @@ export default function ModelSelect({
           isFav={favorites.includes(m.id)}
           onSelect={() => selectModel(m.id)}
           onToggleFav={(e) => toggleFav(m.id, e)}
+          onHide={(e) => hideModel(m.id, e)}
         />
       ))}
     </div>
@@ -278,6 +333,18 @@ export default function ModelSelect({
               <ExternalLink className="w-3 h-3" />
               Browse top SEO models on OpenRouter
             </a>
+
+            {hidden.length > 0 && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => saveHidden([])}
+                  className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                >
+                  Restore {hidden.length} hidden model{hidden.length === 1 ? '' : 's'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </Modal>
@@ -293,6 +360,7 @@ function ModelCard({
   selected,
   onSelect,
   onToggleFav,
+  onHide,
 }: {
   model: { id: string; name: string; badge: string }
   price?: ModelPricing
@@ -301,6 +369,7 @@ function ModelCard({
   selected: boolean
   onSelect: () => void
   onToggleFav: (e: React.MouseEvent) => void
+  onHide: (e: React.MouseEvent) => void
 }) {
   // The star sits beside the card button rather than inside it — a button
   // nested in a button is invalid HTML and breaks hydration.
@@ -315,7 +384,7 @@ function ModelCard({
             : 'border-gray-200 dark:border-gray-700 hover:border-brand-300 dark:hover:border-brand-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'
         }`}
       >
-        <div className="flex items-start gap-2 pr-7">
+        <div className="flex items-start gap-2 pr-14">
           <span
             className={`text-sm font-medium truncate ${
               selected
@@ -343,13 +412,22 @@ function ModelCard({
         onClick={onToggleFav}
         aria-label={isFav ? `Remove ${model.name} from favorites` : `Add ${model.name} to favorites`}
         title={isFav ? 'Remove from favorites' : 'Add to favorites'}
-        className="absolute top-2 right-2 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+        className="absolute top-2 right-8 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
       >
         <Star
           className={`w-4 h-4 transition-colors ${
             isFav ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300 dark:text-gray-600 hover:text-yellow-400'
           }`}
         />
+      </button>
+      <button
+        type="button"
+        onClick={onHide}
+        aria-label={`Remove ${model.name} from the picker`}
+        title="Remove from picker"
+        className="absolute top-2 right-2 p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors"
+      >
+        <X className="w-4 h-4" />
       </button>
     </div>
   )
