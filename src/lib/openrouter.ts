@@ -369,17 +369,31 @@ function buildIdeaPrompt({
     `You are proposing one article for the blog of "${siteName}".`,
   ]
 
+  // A typed topic is the primary instruction. Lead with it so the model
+  // sees it before the knowledge base or the back catalogue drown it out --
+  // burying the ask three sections deep is why the model kept picking a
+  // different subject from the brief instead of writing to the request.
+  if (topic) {
+    parts.push(
+      `THE AUTHOR HAS ALREADY CHOSEN THE SUBJECT. Write the idea about this exact topic and nothing else:
+
+"${topic}"
+
+Rules for this topic:
+- The title, description, and keywords must all be about this exact topic.
+- Do NOT substitute a different subject, even if it seems more original, more search-friendly, or a better fit for the site.
+- Do NOT pick an adjacent or related topic. If the ask is narrow, keep the idea narrow.
+- If nothing in the company brief below fits the topic, ignore the brief for subject choice and use it only to match tone.`
+    )
+  }
+
   if (knowledgeBase) {
     // Capped so a very long brief cannot push the back-catalogue or the JSON
     // instructions out of the model's context window.
     parts.push(`About the company / brief:\n${knowledgeBase.slice(0, 4000)}`)
   }
 
-  if (topic) {
-    parts.push(
-      `The author asked for something specific:\n"${topic}"\nWrite an article idea that directly answers this ask.`
-    )
-  } else {
+  if (!topic) {
     parts.push(
       `No specific topic was requested — pick a subject this site has not written about that fits the brief and would earn organic search traffic.`
     )
@@ -388,9 +402,14 @@ function buildIdeaPrompt({
   if (existingTitles.length > 0) {
     // Recent titles matter more than ancient ones for "don't repeat yourself".
     const shown = existingTitles.slice(-80)
-    parts.push(
-      `Already covered on this site (do not duplicate or paraphrase):\n${shown.map((t) => `- ${t}`).join('\n')}`
-    )
+    const framing = topic
+      // With a typed topic the guardrail relaxes to angle-differentiation:
+      // the user may well be asking to revisit a subject deliberately, and
+      // rejecting the ask because a loosely-similar title exists is the
+      // failure mode this branch is meant to avoid.
+      ? `Titles already on this site (write to the requested topic; if it overlaps, pick a genuinely different angle rather than switching subject):`
+      : `Already covered on this site (do not duplicate or paraphrase):`
+    parts.push(`${framing}\n${shown.map((t) => `- ${t}`).join('\n')}`)
   }
 
   if (rejectedIdeas.length > 0) {
@@ -399,6 +418,15 @@ function buildIdeaPrompt({
       `Already turned down (do not suggest again; steer away from close variants):\n${shown
         .map((r) => `- ${r.title}${r.keywords?.length ? ` [${r.keywords.join(', ')}]` : ''}`)
         .join('\n')}`
+    )
+  }
+
+  // Repeating the ask right before the JSON schema so it is the last thing
+  // the model reads before generating — models weight recency and the JSON
+  // instructions were previously the only nearby signal.
+  if (topic) {
+    parts.push(
+      `Reminder: the idea must be about this exact topic — "${topic}". Do not switch subjects.`
     )
   }
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Image, Images, Loader2, RefreshCw, Download, Send, Wand2, X, ZoomIn, Users, Type } from 'lucide-react'
+import { Image, Images, Loader2, RefreshCw, Download, Send, Wand2, X, ZoomIn, Users, Type, Camera, Palette } from 'lucide-react'
 import { getSizesForModel, getDefaultSize } from '@/lib/image-gen'
 import ImageModelSelect, { LAST_IMG_MODEL_KEY } from '@/components/ui/ImageModelSelect'
 import MediaLibraryModal from '@/components/articles/MediaLibraryModal'
@@ -59,6 +59,11 @@ export default function ImageGenerator({
   // people and word-art overlays are not what these posts should carry.
   const [allowPeople, setAllowPeople] = useState(false)
   const [allowWords, setAllowWords] = useState(false)
+  // Both on by default: no style constraint, let the model decide. Turning
+  // exactly one off forces the other; both off is treated as "no preference"
+  // so a stray double-tap does not produce a contradictory prompt.
+  const [allowRealistic, setAllowRealistic] = useState(true)
+  const [allowIllustration, setAllowIllustration] = useState(true)
   const altRef = useRef<HTMLInputElement>(null)
 
   // Restore the last-used model after hydration, not during render
@@ -89,6 +94,13 @@ export default function ImageGenerator({
     const parts: string[] = [base.trim()]
     if (!allowPeople) parts.push('No people, no human figures, no faces')
     if (!allowWords) parts.push('No text, no letters, no words, no writing')
+    // Style toggles: only add a constraint when exactly one is off. Both off
+    // is contradictory in principle and gets treated the same as both on.
+    if (allowRealistic && !allowIllustration) {
+      parts.push('Photorealistic photograph, 100% realistic. No illustration, no drawing, no cartoon, no painting, no sketch, no digital art')
+    } else if (!allowRealistic && allowIllustration) {
+      parts.push('Digital illustration or drawing, 100% illustrated. No photograph, no photorealistic imagery')
+    }
     return parts.join('. ')
   }
 
@@ -284,12 +296,12 @@ export default function ImageGenerator({
 
           <div>
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Allow in image</label>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setAllowPeople((v) => !v)}
                 aria-pressed={allowPeople}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
                   allowPeople
                     ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
                     : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
@@ -302,7 +314,7 @@ export default function ImageGenerator({
                 type="button"
                 onClick={() => setAllowWords((v) => !v)}
                 aria-pressed={allowWords}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
                   allowWords
                     ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
                     : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
@@ -311,7 +323,39 @@ export default function ImageGenerator({
                 <Type className="w-3.5 h-3.5" />
                 Words {allowWords ? 'on' : 'off'}
               </button>
+              <button
+                type="button"
+                onClick={() => setAllowRealistic((v) => !v)}
+                aria-pressed={allowRealistic}
+                className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                  allowRealistic
+                    ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
+                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
+                }`}
+              >
+                <Camera className="w-3.5 h-3.5" />
+                Realistic {allowRealistic ? 'on' : 'off'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setAllowIllustration((v) => !v)}
+                aria-pressed={allowIllustration}
+                className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                  allowIllustration
+                    ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
+                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
+                }`}
+              >
+                <Palette className="w-3.5 h-3.5" />
+                Illustration {allowIllustration ? 'on' : 'off'}
+              </button>
             </div>
+            {allowRealistic && !allowIllustration && (
+              <p className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400">Forcing photorealistic — no illustrations.</p>
+            )}
+            {!allowRealistic && allowIllustration && (
+              <p className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400">Forcing illustration — no photographs.</p>
+            )}
           </div>
 
           <div className="flex gap-2">
