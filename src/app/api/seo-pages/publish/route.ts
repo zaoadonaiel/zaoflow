@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { publishPage, uploadMedia, extensionForImageUrl } from '@/lib/wordpress'
+import { publishPost, uploadMedia, extensionForImageUrl } from '@/lib/wordpress'
 
 export async function POST(req: NextRequest) {
   const supabase = createClient()
@@ -55,11 +55,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const wpResult = await publishPage({
+    const wpResult = await publishPost({
       siteUrl: site.url,
       username: site.wp_username,
       appPassword: site.wp_app_password,
-      page: {
+      post: {
         title: seoPage.title,
         content: seoPage.content,
         excerpt: seoPage.excerpt || '',
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
         yoastTitle: seoPage.yoast_title || undefined,
         yoastMetaDescription: seoPage.yoast_meta_description || undefined,
       },
-      existingPageId: seoPage.wp_page_id || undefined,
+      existingPostId: seoPage.wp_page_id || undefined,
     })
 
     await supabase.from('seo_pages').update({

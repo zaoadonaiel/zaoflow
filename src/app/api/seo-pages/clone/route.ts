@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getPage } from '@/lib/wordpress'
+import { getPostFull } from '@/lib/wordpress'
 
 /** "Los Angeles CA" → { slug: "los-angeles-ca", display: "Los Angeles" }.
  *  Strips a trailing 2-letter state code from the display form only, so the
@@ -75,14 +75,14 @@ export async function POST(req: NextRequest) {
 
   let page
   try {
-    page = await getPage({
+    page = await getPostFull({
       siteUrl: site.url,
       username: site.wp_username,
       appPassword: site.wp_app_password,
-      pageId: Number(source_page_id),
+      postId: Number(source_page_id),
     })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to load source page'
+    const msg = err instanceof Error ? err.message : 'Failed to load source post'
     return NextResponse.json({ error: msg }, { status: 502 })
   }
 

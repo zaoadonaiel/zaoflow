@@ -46,7 +46,7 @@ export default function SEOPagesPage() {
   }, [])
 
   async function deletePage(page: SEOPage) {
-    if (!confirm(`Delete "${page.title}"? This removes the draft from Zao Flo. The WordPress page (if any) stays put.`)) return
+    if (!confirm(`Delete "${page.title}"? This removes the draft from Zao Flo. The WordPress post (if any) stays put.`)) return
     setDeletingId(page.id)
     try {
       const res = await fetch(`/api/seo-pages/${page.id}`, { method: 'DELETE' })
@@ -65,7 +65,7 @@ export default function SEOPagesPage() {
     <div>
       <Header
         title="SEO Pages"
-        subtitle="Clone a WordPress page for another city and rewrite it with AI"
+        subtitle="Clone a WordPress post for another city and rewrite it with AI"
         actions={
           <Link
             href="/seo-pages/new"
@@ -150,7 +150,7 @@ export default function SEOPagesPage() {
             <div>
               <p className="font-medium text-gray-900 dark:text-white">No SEO pages yet</p>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {search || statusFilter !== 'all' || siteFilter !== 'all' ? 'Try adjusting your filters' : 'Clone an existing WordPress page for a new city to get started'}
+                {search || statusFilter !== 'all' || siteFilter !== 'all' ? 'Try adjusting your filters' : 'Clone an existing WordPress post for a new city to get started'}
               </p>
             </div>
             {!search && statusFilter === 'all' && siteFilter === 'all' && (

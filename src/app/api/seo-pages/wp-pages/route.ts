@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { listPages, getPage } from '@/lib/wordpress'
+import { listPosts, getPostFull } from '@/lib/wordpress'
 
 /**
  * Two calls in one endpoint:
- *   GET /api/seo-pages/wp-pages?site_id=…                   → list source pages
- *   GET /api/seo-pages/wp-pages?site_id=…&page_id=123       → fetch one page + content
+ *   GET /api/seo-pages/wp-pages?site_id=…                   → list source posts
+ *   GET /api/seo-pages/wp-pages?site_id=…&page_id=123       → fetch one post + content
  */
 export async function GET(req: NextRequest) {
   const supabase = createClient()
@@ -35,16 +35,16 @@ export async function GET(req: NextRequest) {
 
   try {
     if (pageId) {
-      const page = await getPage({
+      const page = await getPostFull({
         siteUrl: site.url,
         username: site.wp_username,
         appPassword: site.wp_app_password,
-        pageId: Number(pageId),
+        postId: Number(pageId),
       })
       return NextResponse.json({ page })
     }
 
-    const pages = await listPages({
+    const pages = await listPosts({
       siteUrl: site.url,
       username: site.wp_username,
       appPassword: site.wp_app_password,

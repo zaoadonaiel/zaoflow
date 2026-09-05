@@ -101,7 +101,7 @@ export default function SEOPageBuilder({ initial }: Props) {
     fetch(`/api/seo-pages/wp-pages?site_id=${siteId}`)
       .then(async (r) => {
         const d = await r.json()
-        if (!r.ok) throw new Error(d.error || 'Failed to load WordPress pages')
+        if (!r.ok) throw new Error(d.error || 'Failed to load WordPress posts')
         return d.pages as WPPageOption[]
       })
       .then((pages) => {
@@ -110,7 +110,7 @@ export default function SEOPageBuilder({ initial }: Props) {
       })
       .catch((err) => {
         if (cancelled) return
-        setWpPagesError(err instanceof Error ? err.message : 'Failed to load WordPress pages')
+        setWpPagesError(err instanceof Error ? err.message : 'Failed to load WordPress posts')
       })
       .finally(() => {
         if (!cancelled) setWpPagesLoading(false)
@@ -294,7 +294,7 @@ export default function SEOPageBuilder({ initial }: Props) {
     <div>
       <Header
         title={savedId ? 'Edit SEO page' : 'New SEO page'}
-        subtitle={savedId ? 'Update, rewrite, or republish the draft' : 'Clone a WordPress page for another city'}
+        subtitle={savedId ? 'Update, rewrite, or republish the draft' : 'Clone a WordPress post for another city'}
         actions={
           <div className="flex items-center gap-2">
             <Link
@@ -329,7 +329,7 @@ export default function SEOPageBuilder({ initial }: Props) {
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
               <MapPin className="w-4 h-4 text-brand-500" />
-              1 · Clone a source page
+              1 · Clone a source post
             </div>
 
             <div>
@@ -354,7 +354,7 @@ export default function SEOPageBuilder({ initial }: Props) {
 
             <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                Source page
+                Source post
                 {wpPagesLoading && <Loader2 className="inline-block w-3 h-3 animate-spin ml-2" />}
               </label>
               <select
@@ -364,7 +364,7 @@ export default function SEOPageBuilder({ initial }: Props) {
                 className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
               >
                 <option value="">
-                  {!siteId ? 'Pick a site first' : wpPagesLoading ? 'Loading pages…' : wpPages.length === 0 ? 'No pages found' : 'Pick a page to clone'}
+                  {!siteId ? 'Pick a site first' : wpPagesLoading ? 'Loading posts…' : wpPages.length === 0 ? 'No posts found' : 'Pick a post to clone'}
                 </option>
                 {wpPages.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -383,7 +383,7 @@ export default function SEOPageBuilder({ initial }: Props) {
                   className="inline-flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:underline mt-1.5"
                 >
                   <ExternalLink className="w-3 h-3" />
-                  View source page
+                  View source post
                 </a>
               )}
             </div>
@@ -431,7 +431,7 @@ export default function SEOPageBuilder({ initial }: Props) {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Page title</label>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Post title</label>
                 <input
                   type="text"
                   value={title}
@@ -471,11 +471,11 @@ export default function SEOPageBuilder({ initial }: Props) {
                   className="w-full mt-2 flex items-center justify-center gap-2 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
                   {contentExpanded ? (
-                    <><ChevronUp className="w-4 h-4" />Collapse page</>
+                    <><ChevronUp className="w-4 h-4" />Collapse post</>
                   ) : (
                     <>
                       <ChevronDown className="w-4 h-4" />
-                      Expand page
+                      Expand post
                       <span className="text-gray-400 dark:text-gray-500 font-normal">
                         {contentWords.toLocaleString()} words
                       </span>
@@ -576,13 +576,13 @@ export default function SEOPageBuilder({ initial }: Props) {
               Schedule publish
             </button>
             <p className="text-[11px] text-gray-400">
-              Uses your browser&apos;s local time. WordPress will publish the page at that moment.
+              Uses your browser&apos;s local time. WordPress will publish the post at that moment.
             </p>
           </div>
 
           {initial?.wp_page_url && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Live page</h3>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Live post</h3>
               <a
                 href={initial.wp_page_url}
                 target="_blank"
