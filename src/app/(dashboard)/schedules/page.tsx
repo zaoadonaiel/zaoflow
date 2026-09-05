@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Calendar, Plus, Trash2, Clock, Globe, Sparkles, FolderOpen, Loader2, Pencil, Play, ChevronDown, ChevronUp, ExternalLink, CheckCircle2, XCircle } from 'lucide-react'
+import Link from 'next/link'
+import { Calendar, Plus, Trash2, Clock, Globe, Sparkles, FolderOpen, Loader2, Pencil, Play, ChevronDown, ChevronUp, ExternalLink, CheckCircle2, XCircle, PauseCircle } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import ModelSelect from '@/components/ui/ModelSelect'
 import { AVAILABLE_MODELS } from '@/lib/openrouter'
-import type { Schedule, Site } from '@/types'
+import type { Article, Schedule, Site } from '@/types'
 import { format, formatDistanceToNow } from 'date-fns'
 import toast from 'react-hot-toast'
 
@@ -34,6 +35,7 @@ const TIMEZONES = [
 export default function SchedulesPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [sites, setSites] = useState<Site[]>([])
+  const [upcoming, setUpcoming] = useState<Article[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({
@@ -75,13 +77,25 @@ export default function SchedulesPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const [schRes, siteRes] = await Promise.all([
+      const [schRes, siteRes, artRes] = await Promise.all([
         fetch('/api/schedules'),
         fetch('/api/sites'),
+        fetch('/api/articles?status=scheduled'),
       ])
-      const [schData, siteData] = await Promise.all([schRes.json(), siteRes.json()])
+      const [schData, siteData, artData] = await Promise.all([
+        schRes.json(),
+        siteRes.json(),
+        artRes.json(),
+      ])
       setSchedules(schData.schedules || [])
       setSites(siteData.sites || [])
+      const scheduledArticles: Article[] = (artData.articles || []).slice()
+      scheduledArticles.sort((a: Article, b: Article) => {
+        const aTime = a.scheduled_at ? new Date(a.scheduled_at).getTime() : Number.POSITIVE_INFINITY
+        const bTime = b.scheduled_at ? new Date(b.scheduled_at).getTime() : Number.POSITIVE_INFINITY
+        return aTime - bTime
+      })
+      setUpcoming(scheduledArticles)
       if (siteData.sites?.length > 0 && !form.site_id) {
         setForm((f) => ({ ...f, site_id: siteData.sites[0].id }))
       }
@@ -270,6 +284,90 @@ export default function SchedulesPage() {
           </button>
         }
       />
+
+      {!loading && upcoming.length > 0 && (
+        <section className="mb-8">
+          <div className="flex items-baseline justify-between mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wide">Upcoming articles</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                {upcoming.length} scheduled to publish
+              </p>
+            </div>
+            <Link href="/articles?status=scheduled" className="text-xs font-medium text-brand-600 hover:text-brand-700">
+              View all →
+            </Link>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+            {upcoming.map((article, i) => (
+              <div
+                key={article.id}
+                className={`px-5 py-3.5 flex items-center gap-4 hover:bg-gray-50/60 dark:hover:bg-gray-700/30 transition-colors ${
+                  i > 0 ? 'border-t border-gray-50 dark:border-gray-700' : ''
+                }`}
+              >
+                <div className="flex-shrink-0 w-14 text-center">
+                  {article.scheduled_at ? (
+                    <>
+                      <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+                        {format(new Date(article.scheduled_at), 'MMM')}
+                      </div>
+                      <div className="text-lg font-semibold text-gray-900 dark:text-white leading-tight">
+                        {format(new Date(article.scheduled_at), 'd')}
+                      </div>
+                      <div className="text-[10px] text-gray-400">
+                        {format(new Date(article.scheduled_at), 'h:mmaaa')}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-xs text-gray-300">—</div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <Link
+                    href={`/articles/${article.id}`}
+                    className="block font-medium text-sm text-gray-900 dark:text-gray-100 hover:text-brand-600 dark:hover:text-brand-400 transition-colors line-clamp-1"
+                  >
+                    {article.title}
+                  </Link>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    <span className="flex items-center gap-1 truncate">
+                      <Globe className="w-3 h-3 flex-shrink-0" />
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      <span className="truncate">{(article as any).sites?.name || 'Unknown site'}</span>
+                    </span>
+                    {article.word_count ? (
+                      <span className="flex-shrink-0">{article.word_count.toLocaleString()} words</span>
+                    ) : null}
+                    {article.scheduled_at && (
+                      <span className="flex-shrink-0">
+                        {formatDistanceToNow(new Date(article.scheduled_at), { addSuffix: true })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex-shrink-0 flex items-center gap-2">
+                  {article.is_paused ? (
+                    <Badge variant="warning">
+                      <PauseCircle className="w-3 h-3 mr-1" />
+                      Paused
+                    </Badge>
+                  ) : (
+                    <Badge variant="info">Scheduled</Badge>
+                  )}
+                  <Link
+                    href={`/articles/${article.id}`}
+                    className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    title="Edit article"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {loading ? (
         <div className="space-y-3">
