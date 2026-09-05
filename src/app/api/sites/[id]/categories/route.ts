@@ -36,8 +36,30 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       count: c.count,
     }))
 
-    return NextResponse.json({ categories })
+    // "What has this site actually been publishing lately?" beats "what does
+    // WordPress hold the most legacy posts in?" — the latter picks up whatever
+    // was on the site before Zao Flo started writing to it.
+    const { data: recent } = await supabase
+      .from('articles')
+      .select('wp_category_id')
+      .eq('site_id', params.id)
+      .eq('user_id', user.id)
+      .not('wp_category_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(20)
+
+    let suggested_id: number | null = null
+    if (recent?.length) {
+      const counts = new Map<number, number>()
+      for (const r of recent) {
+        const id = r.wp_category_id as number
+        counts.set(id, (counts.get(id) ?? 0) + 1)
+      }
+      suggested_id = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0]
+    }
+
+    return NextResponse.json({ categories, suggested_id })
   } catch {
-    return NextResponse.json({ categories: [] })
+    return NextResponse.json({ categories: [], suggested_id: null })
   }
 }
