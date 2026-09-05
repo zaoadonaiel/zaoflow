@@ -880,8 +880,8 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
             </>
           )}
 
-          <div className="ml-auto flex flex-col items-end gap-1">
-          <div className="flex items-center gap-2">
+          <div className="w-full sm:w-auto sm:ml-auto flex flex-col sm:items-end gap-1">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {/* Whether the work is actually on disk. Worth saying plainly:
                 every generation on this page cost OpenRouter credits, and
                 "did that save?" is not a question to have to guess at. */}
@@ -997,7 +997,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
 
       {isEdit && editId && <CollabPanel articleId={editId} />}
 
-      <div className="flex gap-6 items-start">
+      <div className="flex flex-col lg:flex-row gap-6 lg:items-start">
         {/* Main editor */}
         <div className="flex-1 min-w-0 space-y-4">
           <IdeaGenerator
@@ -1109,7 +1109,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Focus Keyphrase</label>
                 <input
@@ -1185,7 +1185,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
         </div>
 
         {/* Sidebar */}
-        <div className="w-80 shrink-0 space-y-4">
+        <div className="w-full lg:w-80 lg:shrink-0 space-y-4">
           {/* Saved instructions — pick a set; there is no free-text box, so what
               the AI is told is always one of the saved sets */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
