@@ -209,8 +209,18 @@ export default function ArticlesPage() {
                   </div>
                   <div className="col-span-2">
                     <span className="text-xs text-gray-400">
-                      {format(new Date(article.created_at), 'MMM d, yyyy')}
+                      {format(
+                        new Date(
+                          article.status === 'scheduled' && article.scheduled_at
+                            ? article.scheduled_at
+                            : article.created_at,
+                        ),
+                        'MMM d, yyyy',
+                      )}
                     </span>
+                    {article.status === 'scheduled' && article.scheduled_at && (
+                      <p className="text-[10px] text-gray-400 mt-0.5">Publishes</p>
+                    )}
                   </div>
                   <div className="col-span-2 flex items-center gap-1 justify-end">
                     <Link
