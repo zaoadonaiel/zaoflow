@@ -142,11 +142,11 @@ export default function NodeJSSitesPage() {
                 </p>
               )}
 
-              <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-50 dark:border-gray-700">
+              <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-gray-50 dark:border-gray-700">
                 <button
                   onClick={() => testConnection(site)}
                   disabled={testingId === site.id}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50"
+                  className="flex-1 min-w-[80px] flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${testingId === site.id ? 'spin' : ''}`} />
                   {testingId === site.id ? 'Testing...' : 'Test'}
