@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { prompt, model = 'openai/gpt-image-1', articleId } = body
+  const { prompt, model = 'openai/gpt-image-1', articleId, siteId } = body
   const size = body.size || getDefaultSize(model)
 
   if (!prompt?.trim()) {
@@ -76,7 +76,30 @@ export async function POST(req: NextRequest) {
       }).eq('id', articleId).eq('user_id', user.id)
     }
 
-    return NextResponse.json({ imageUrl: publicUrl, prompt })
+    // Recorded so the Image Library can find every generation. The file is
+    // already in the bucket either way — a failed insert is worth a warning
+    // in the logs but must not fail the whole request, since the caller
+    // still needs the url to attach to the article.
+    const { data: libRow, error: libError } = await supabase
+      .from('generated_images')
+      .insert({
+        user_id: user.id,
+        article_id: articleId || null,
+        site_id: siteId || null,
+        prompt,
+        model,
+        url: publicUrl,
+        storage_path: storagePath,
+        bytes: imageBytes.length,
+      })
+      .select('id')
+      .single()
+
+    if (libError) {
+      console.warn('generated_images insert failed:', libError.message)
+    }
+
+    return NextResponse.json({ imageUrl: publicUrl, prompt, imageId: libRow?.id ?? null })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Image generation failed'
     return NextResponse.json({ error: msg }, { status: 500 })

@@ -35,6 +35,7 @@ interface Props {
 export default function ImageGenerator({
   articleId,
   articleTitle = '',
+  siteId,
   defaultPrompt = '',
   initialImageUrl = '',
   initialPrompt = '',
@@ -100,7 +101,7 @@ export default function ImageGenerator({
       const res = await fetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: finalPrompt, size, model, articleId }),
+        body: JSON.stringify({ prompt: finalPrompt, size, model, articleId, siteId }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
