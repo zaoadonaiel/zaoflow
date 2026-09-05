@@ -19,6 +19,7 @@ import {
   Archive,
   Users,
   Image as ImageIcon,
+  MapPin,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import ThemeToggle from '@/components/ui/ThemeToggle'
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { href: '/sites', label: 'Sites', icon: Globe },
   { href: '/nodejs-sites', label: 'Node JS Sites', icon: Server },
   { href: '/articles', label: 'Articles', icon: FileText },
+  { href: '/seo-pages', label: 'SEO Pages', icon: MapPin },
   { href: '/schedules', label: 'Schedules', icon: Calendar },
   { href: '/images', label: 'Images', icon: ImageIcon },
   { href: '/clients', label: 'Clients', icon: Users },

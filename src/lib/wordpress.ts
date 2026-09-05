@@ -480,6 +480,208 @@ export async function getPost({
   }
 }
 
+/**
+ * WordPress Pages — separate from posts. Same auth, same shape as posts,
+ * different endpoint (/wp/v2/pages). Used by the SEO Pages tool to clone
+ * an existing page for a new city and publish it as a fresh page.
+ */
+
+export interface WPPageSummary {
+  id: number
+  slug: string
+  title: string
+  link: string
+  status: string
+  modifiedGmt?: string
+}
+
+export interface WPPageFull extends WPPageSummary {
+  content: string
+  excerpt: string
+  featuredMediaId?: number
+  featuredMediaUrl?: string
+}
+
+/** WP renders titles/excerpts as HTML; the picker wants text. */
+function stripEntities(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&#8217;/g, '’')
+    .replace(/&#8216;/g, '‘')
+    .replace(/&#8220;/g, '“')
+    .replace(/&#8221;/g, '”')
+    .replace(/&#8211;/g, '–')
+    .replace(/&#038;/g, '&')
+    .replace(/&nbsp;/g, ' ')
+    .trim()
+}
+
+export async function listPages({
+  siteUrl,
+  username,
+  appPassword,
+  perPage = 100,
+  search,
+}: {
+  siteUrl: string
+  username: string
+  appPassword: string
+  perPage?: number
+  search?: string
+}): Promise<WPPageSummary[]> {
+  const baseUrl = normalizeUrl(siteUrl)
+  // Include drafts + published so the picker sees everything the user has.
+  const params = new URLSearchParams({
+    per_page: String(Math.min(perPage, 100)),
+    status: 'publish,draft,pending,private,future',
+    orderby: 'modified',
+    order: 'desc',
+    context: 'edit',
+    _fields: 'id,slug,title,link,status,modified_gmt',
+  })
+  if (search) params.set('search', search)
+
+  const res = await fetch(`${baseUrl}/wp-json/wp/v2/pages?${params}`, {
+    headers: { Authorization: getAuthHeader(username, appPassword), 'User-Agent': USER_AGENT },
+    signal: AbortSignal.timeout(30000),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.message || `WordPress list pages failed: ${res.status}`)
+  }
+
+  const data = await res.json()
+  if (!Array.isArray(data)) return []
+
+  return data.map((p: {
+    id: number
+    slug: string
+    title: { rendered?: string; raw?: string }
+    link: string
+    status: string
+    modified_gmt?: string
+  }) => ({
+    id: p.id,
+    slug: p.slug,
+    title: stripEntities(p.title?.raw || p.title?.rendered || p.slug),
+    link: p.link,
+    status: p.status,
+    modifiedGmt: p.modified_gmt ? `${p.modified_gmt}Z` : undefined,
+  }))
+}
+
+export async function getPage({
+  siteUrl,
+  username,
+  appPassword,
+  pageId,
+}: {
+  siteUrl: string
+  username: string
+  appPassword: string
+  pageId: number
+}): Promise<WPPageFull> {
+  const baseUrl = normalizeUrl(siteUrl)
+
+  const res = await fetch(`${baseUrl}/wp-json/wp/v2/pages/${pageId}?context=edit`, {
+    headers: { Authorization: getAuthHeader(username, appPassword), 'User-Agent': USER_AGENT },
+    signal: AbortSignal.timeout(30000),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.message || `WordPress read page failed: ${res.status}`)
+  }
+
+  const data = await res.json()
+
+  // context=edit returns raw for content/title/excerpt; fall back to rendered
+  // if a plugin strips the raw field.
+  const content: string = data.content?.raw ?? data.content?.rendered ?? ''
+  const excerpt: string = data.excerpt?.raw ?? data.excerpt?.rendered ?? ''
+  const title: string = stripEntities(data.title?.raw || data.title?.rendered || data.slug)
+
+  return {
+    id: data.id,
+    slug: data.slug,
+    title,
+    link: data.link,
+    status: data.status,
+    modifiedGmt: data.modified_gmt ? `${data.modified_gmt}Z` : undefined,
+    content,
+    excerpt,
+    featuredMediaId: typeof data.featured_media === 'number' && data.featured_media > 0 ? data.featured_media : undefined,
+  }
+}
+
+export async function publishPage({
+  siteUrl,
+  username,
+  appPassword,
+  page,
+  existingPageId,
+}: {
+  siteUrl: string
+  username: string
+  appPassword: string
+  page: WPPost
+  existingPageId?: number
+}): Promise<WPPostResult> {
+  const baseUrl = normalizeUrl(siteUrl)
+
+  const body: Record<string, unknown> = {
+    title: page.title,
+    content: page.content,
+    status: page.status,
+  }
+  if (page.excerpt) body.excerpt = page.excerpt
+  if (page.dateGmt) body.date_gmt = toWpGmt(page.dateGmt)
+  else if (page.date) body.date = page.date
+  if (page.slug) body.slug = page.slug
+  if (page.featuredMediaId) body.featured_media = page.featuredMediaId
+  if (page.author) body.author = page.author
+
+  const meta: Record<string, string> = {}
+  if (page.focusKeyphrase) meta['_yoast_wpseo_focuskw'] = page.focusKeyphrase
+  if (page.yoastMetaDescription) meta['_yoast_wpseo_metadesc'] = page.yoastMetaDescription
+  if (page.yoastTitle) meta['_yoast_wpseo_title'] = page.yoastTitle
+  if (Object.keys(meta).length > 0) body.meta = meta
+
+  const res = await fetch(
+    existingPageId
+      ? `${baseUrl}/wp-json/wp/v2/pages/${existingPageId}`
+      : `${baseUrl}/wp-json/wp/v2/pages`,
+    {
+      method: existingPageId ? 'PUT' : 'POST',
+      headers: {
+        Authorization: getAuthHeader(username, appPassword),
+        'User-Agent': USER_AGENT,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30000),
+    }
+  )
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    const failure = new Error(err?.message || `WordPress page publish failed: ${res.status}`)
+    if (existingPageId && res.status === 404) {
+      ;(failure as Error & { postMissing?: boolean }).postMissing = true
+    }
+    throw failure
+  }
+
+  const data = await res.json()
+  return {
+    id: data.id,
+    link: data.link,
+    status: data.status,
+  }
+}
+
 export async function updatePost({
   siteUrl,
   username,

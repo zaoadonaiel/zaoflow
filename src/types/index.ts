@@ -99,6 +99,51 @@ export interface Schedule {
   sites?: Site
 }
 
+export type SEOPageSimilarity = 10 | 25 | 50 | 90
+
+export interface SEOPage {
+  id: string
+  user_id: string
+  site_id: string
+  source_page_id?: number | null
+  source_slug?: string | null
+  source_title?: string | null
+  source_city?: string | null
+  target_city?: string | null
+  title: string
+  slug?: string | null
+  content: string
+  excerpt?: string | null
+  featured_image_url?: string | null
+  featured_image_prompt?: string | null
+  featured_image_alt?: string | null
+  focus_keyphrase?: string | null
+  keyphrase_synonyms?: string | null
+  yoast_title?: string | null
+  yoast_meta_description?: string | null
+  ai_model?: string | null
+  instruction_id?: string | null
+  rewrite_similarity?: SEOPageSimilarity | null
+  status: 'draft' | 'scheduled' | 'publishing' | 'published' | 'failed'
+  scheduled_at?: string | null
+  scheduled_tz?: string | null
+  published_at?: string | null
+  wp_page_id?: number | null
+  wp_page_url?: string | null
+  trigger_job_id?: string | null
+  created_at: string
+  updated_at: string
+  sites?: Site
+}
+
+export interface WPPageOption {
+  id: number
+  slug: string
+  title: string
+  link: string
+  status: string
+}
+
 export interface ArticleInstruction {
   id: string
   user_id: string
