@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Calendar, Plus, Trash2, Clock, Globe, Sparkles, FolderOpen, Loader2, Pencil, Play, ChevronDown, ChevronUp, ExternalLink, CheckCircle2, XCircle, PauseCircle } from 'lucide-react'
+import { Calendar, Plus, Trash2, Clock, Globe, Sparkles, FolderOpen, Loader2, Pencil, Play, ChevronDown, ChevronUp, ExternalLink, CheckCircle2, XCircle, PauseCircle, Filter, X } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
@@ -56,6 +56,10 @@ export default function SchedulesPage() {
   const [runningId, setRunningId] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [historyMap, setHistoryMap] = useState<Record<string, HistoryArticle[]>>({})
+  // 'all' rather than '' so the modal can pick the same slot for the reset row
+  // as it does for every other option.
+  const [upcomingFilterSiteId, setUpcomingFilterSiteId] = useState<string>('all')
+  const [upcomingFilterOpen, setUpcomingFilterOpen] = useState(false)
 
   function addTimeSlot() {
     setForm((f) => ({ ...f, times_of_day: [...f.times_of_day, '12:00'] }))
@@ -285,21 +289,68 @@ export default function SchedulesPage() {
         }
       />
 
-      {!loading && upcoming.length > 0 && (
+      {!loading && upcoming.length > 0 && (() => {
+        const activeSite = upcomingFilterSiteId === 'all'
+          ? null
+          : sites.find((s) => s.id === upcomingFilterSiteId) || null
+        const visibleUpcoming = upcomingFilterSiteId === 'all'
+          ? upcoming
+          : upcoming.filter((a) => a.site_id === upcomingFilterSiteId)
+        return (
         <section className="mb-8">
           <div className="flex items-baseline justify-between mb-3">
             <div>
               <h2 className="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wide">Upcoming articles</h2>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {upcoming.length} scheduled to publish
+                {visibleUpcoming.length} scheduled to publish{activeSite ? ` · ${activeSite.name}` : ''}
               </p>
             </div>
-            <Link href="/articles?status=scheduled" className="text-xs font-medium text-brand-600 hover:text-brand-700">
-              View all →
-            </Link>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setUpcomingFilterOpen(true)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                  activeSite
+                    ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-400'
+                    : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                <Filter className="w-3.5 h-3.5" />
+                {activeSite ? activeSite.name : 'All sites'}
+              </button>
+              {activeSite && (
+                <button
+                  type="button"
+                  onClick={() => setUpcomingFilterSiteId('all')}
+                  aria-label="Clear site filter"
+                  className="flex items-center justify-center w-7 h-7 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <Link href="/articles?status=scheduled" className="text-xs font-medium text-brand-600 hover:text-brand-700 ml-1">
+                View all →
+              </Link>
+            </div>
           </div>
+          {visibleUpcoming.length === 0 ? (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 border-dashed py-10 text-center">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                No scheduled articles{activeSite ? ` for ${activeSite.name}` : ''}.
+              </p>
+              {activeSite && (
+                <button
+                  type="button"
+                  onClick={() => setUpcomingFilterSiteId('all')}
+                  className="mt-2 text-xs font-medium text-brand-600 hover:text-brand-700"
+                >
+                  Show all sites
+                </button>
+              )}
+            </div>
+          ) : (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-            {upcoming.map((article, i) => (
+            {visibleUpcoming.map((article, i) => (
               <div
                 key={article.id}
                 className={`px-5 py-3.5 flex items-center gap-4 hover:bg-gray-50/60 dark:hover:bg-gray-700/30 transition-colors ${
@@ -366,8 +417,10 @@ export default function SchedulesPage() {
               </div>
             ))}
           </div>
+          )}
         </section>
-      )}
+        )
+      })()}
 
       {loading ? (
         <div className="space-y-3">
@@ -694,6 +747,47 @@ export default function SchedulesPage() {
               {creating ? (editingId ? 'Saving...' : 'Creating...') : (editingId ? 'Save changes' : 'Create schedule')}
             </button>
           </div>
+        </div>
+      </Modal>
+
+      {/* Site filter for Upcoming articles — counts come from the loaded upcoming
+          list so the number next to each site reflects what the user is about
+          to see, not the site's lifetime article count. */}
+      <Modal open={upcomingFilterOpen} onClose={() => setUpcomingFilterOpen(false)} title="Filter by site" maxWidth="max-w-md">
+        <div className="space-y-1">
+          <button
+            type="button"
+            onClick={() => { setUpcomingFilterSiteId('all'); setUpcomingFilterOpen(false) }}
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              upcomingFilterSiteId === 'all'
+                ? 'bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Globe className="w-4 h-4 text-gray-400" />
+              All sites
+            </span>
+            <span className="text-xs text-gray-400">{upcoming.length}</span>
+          </button>
+          {sites.map((s) => {
+            const n = upcoming.filter((a) => a.site_id === s.id).length
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => { setUpcomingFilterSiteId(s.id); setUpcomingFilterOpen(false) }}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  upcomingFilterSiteId === s.id
+                    ? 'bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                } ${n === 0 ? 'opacity-60' : ''}`}
+              >
+                <span className="truncate">{s.name}</span>
+                <span className="text-xs text-gray-400 flex-shrink-0 ml-2">{n}</span>
+              </button>
+            )
+          })}
         </div>
       </Modal>
     </div>
