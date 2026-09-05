@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Image, Images, Loader2, RefreshCw, Download, Send, Wand2, X, ZoomIn } from 'lucide-react'
-import { getSizesForModel, getDefaultSize, IMAGE_GEN_MODELS } from '@/lib/image-gen'
+import { Image, Images, Loader2, RefreshCw, Download, Send, Wand2, X, ZoomIn, Users, Type } from 'lucide-react'
+import { getSizesForModel, getDefaultSize } from '@/lib/image-gen'
 import ImageModelSelect, { LAST_IMG_MODEL_KEY } from '@/components/ui/ImageModelSelect'
 import MediaLibraryModal from '@/components/articles/MediaLibraryModal'
+import Modal from '@/components/ui/Modal'
 import type { GeneratedImage } from '@/types'
 import toast from 'react-hot-toast'
 
@@ -52,9 +53,11 @@ export default function ImageGenerator({
   const [showEdit, setShowEdit] = useState(false)
   const [lightbox, setLightbox] = useState(false)
   const [showLibrary, setShowLibrary] = useState(false)
-  // Focused the moment an image is picked from the library, because a reused
-  // image arrives describing the article it was made for and the alt is what
-  // usually needs to change first.
+  const [showModal, setShowModal] = useState(false)
+  // Off by default — the writer has said again and again that stock photos of
+  // people and word-art overlays are not what these posts should carry.
+  const [allowPeople, setAllowPeople] = useState(false)
+  const [allowWords, setAllowWords] = useState(false)
   const altRef = useRef<HTMLInputElement>(null)
 
   // Restore the last-used model after hydration, not during render
@@ -79,9 +82,19 @@ export default function ImageGenerator({
     setSize(getDefaultSize(newModel))
   }
 
+  // Toggled off means the model has to actively avoid the thing, not just be
+  // asked to leave it out — negative constraints stack after the main brief.
+  function buildPrompt(base: string): string {
+    const parts: string[] = [base.trim()]
+    if (!allowPeople) parts.push('No people, no human figures, no faces')
+    if (!allowWords) parts.push('No text, no letters, no words, no writing')
+    return parts.join('. ')
+  }
+
   async function generate(customPrompt?: string) {
-    const finalPrompt = customPrompt || prompt
-    if (!finalPrompt.trim()) { toast.error('Enter an image prompt'); return }
+    const base = customPrompt || prompt
+    if (!base.trim()) { toast.error('Enter an image prompt'); return }
+    const finalPrompt = buildPrompt(base)
     setGenerating(true)
     try {
       const res = await fetch('/api/generate-image', {
@@ -126,6 +139,7 @@ export default function ImageGenerator({
     setShowEdit(false)
     setEditText('')
     setShowLibrary(false)
+    setShowModal(false)
     onImageGenerated?.(image.url, image.prompt || prompt, newAlt)
 
     // Straight into the alt box, so the one thing that is usually wrong about
@@ -182,63 +196,16 @@ export default function ImageGenerator({
         </div>
       )}
 
+      {/* Sidebar card — compact preview + trigger; every real control lives
+          in the modal so the sidebar stays scannable. */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
         <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
           <Image className="w-4 h-4 text-gray-400" />
           Featured Image
         </h3>
 
-        {/* Model */}
-        <ImageModelSelect value={model} onChange={handleModelChange} className="mb-2" />
-
-        {/* Size */}
-        <select
-          value={size}
-          onChange={(e) => setSize(e.target.value)}
-          className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 mb-3"
-        >
-          {sizes.map((s) => (
-            <option key={s.value} value={s.value}>{s.label}</option>
-          ))}
-        </select>
-
-        {/* Prompt */}
-        <textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Describe the image (e.g. 'Professional photo of a person working on a laptop in a modern office')"
-          rows={3}
-          className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none mb-2"
-        />
-
-        {/* Generating is the first move, but not the only one — an image that
-            already exists costs nothing to use again, so the library sits
-            beside the button that spends money rather than below the fold. */}
-        <div className="flex gap-2 mb-3">
-          <button
-            onClick={() => generate()}
-            disabled={generating}
-            className="flex-1 flex items-center justify-center gap-2 bg-brand-600 text-white py-2 rounded-lg text-xs font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
-          >
-            {generating
-              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Generating…</>
-              : <><Wand2 className="w-3.5 h-3.5" />Generate Image</>}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowLibrary(true)}
-            title="Pick an image you have already generated"
-            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          >
-            <Images className="w-3.5 h-3.5" />
-            Library
-          </button>
-        </div>
-
-        {/* Preview */}
-        {imageUrl && (
+        {imageUrl ? (
           <div className="space-y-2">
-            {/* Thumbnail — click to open lightbox */}
             <div
               className="relative rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 cursor-zoom-in group"
               onClick={() => setLightbox(true)}
@@ -249,8 +216,6 @@ export default function ImageGenerator({
                 <ZoomIn className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
               </div>
             </div>
-
-            {/* Alt text */}
             <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Alt description</label>
               <input
@@ -262,54 +227,184 @@ export default function ImageGenerator({
                 className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
-
-            {/* Action bar */}
-            <div className="flex gap-1.5">
-              <button
-                onClick={() => generate()}
-                disabled={generating}
-                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 transition-colors disabled:opacity-50"
-              >
-                <RefreshCw className="w-3 h-3" />Regenerate
-              </button>
-              <button
-                onClick={() => setShowEdit(!showEdit)}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                  showEdit ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-400' : 'text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-              >
-                <Send className="w-3 h-3" />Edit
-              </button>
-              <button
-                onClick={download}
-                className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 transition-colors"
-              >
-                <Download className="w-3 h-3" />
-              </button>
-            </div>
-
-            {showEdit && (
-              <div className="flex gap-2 mt-1">
-                <input
-                  type="text"
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleEdit()}
-                  placeholder="e.g. remove the woman, add a sunset background"
-                  className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
-                <button
-                  onClick={handleEdit}
-                  disabled={generating || !editText.trim()}
-                  className="px-3 py-2 bg-brand-600 text-white rounded-lg text-xs font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
-                >
-                  Apply
-                </button>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={() => setShowModal(true)}
+              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            >
+              <Wand2 className="w-3.5 h-3.5" />
+              Change image
+            </button>
           </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowModal(true)}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-brand-600 text-white text-xs font-medium hover:bg-brand-700 transition-colors"
+          >
+            <Wand2 className="w-3.5 h-3.5" />
+            Generate featured image
+          </button>
         )}
       </div>
+
+      {/* Full-fidelity editor — model, size, prompt, toggles, preview, edit. */}
+      <Modal open={showModal} onClose={() => setShowModal(false)} title="Featured Image" maxWidth="max-w-2xl">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Model</label>
+              <ImageModelSelect value={model} onChange={handleModelChange} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Size</label>
+              <select
+                value={size}
+                onChange={(e) => setSize(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                {sizes.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Prompt</label>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Describe the image"
+              rows={4}
+              className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Allow in image</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setAllowPeople((v) => !v)}
+                aria-pressed={allowPeople}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                  allowPeople
+                    ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
+                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                People {allowPeople ? 'on' : 'off'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setAllowWords((v) => !v)}
+                aria-pressed={allowWords}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                  allowWords
+                    ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
+                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
+                }`}
+              >
+                <Type className="w-3.5 h-3.5" />
+                Words {allowWords ? 'on' : 'off'}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => generate()}
+              disabled={generating}
+              className="flex-1 flex items-center justify-center gap-2 bg-brand-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
+            >
+              {generating
+                ? <><Loader2 className="w-4 h-4 animate-spin" />Generating…</>
+                : <><Wand2 className="w-4 h-4" />Generate image</>}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowLibrary(true)}
+              className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            >
+              <Images className="w-4 h-4" />
+              Library
+            </button>
+          </div>
+
+          {imageUrl && (
+            <div className="space-y-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+              <div className="rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={imageUrl} alt={altText || 'Generated featured image'} className="w-full h-auto object-cover" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Alt description</label>
+                <input
+                  type="text"
+                  value={altText}
+                  onChange={(e) => handleAltChange(e.target.value)}
+                  placeholder="Describe the image for accessibility and SEO"
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => generate()}
+                  disabled={generating}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className="w-3 h-3" />Regenerate
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowEdit(!showEdit)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                    showEdit
+                      ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-400'
+                      : 'text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <Send className="w-3 h-3" />Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={download}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 transition-colors"
+                >
+                  <Download className="w-3 h-3" />
+                </button>
+              </div>
+
+              {showEdit && (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleEdit()}
+                    placeholder="e.g. remove the woman, add a sunset background"
+                    className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleEdit}
+                    disabled={generating || !editText.trim()}
+                    className="px-3 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
+                  >
+                    Apply
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </Modal>
 
       <MediaLibraryModal
         open={showLibrary}

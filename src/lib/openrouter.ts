@@ -512,6 +512,14 @@ Return ONLY the JSON, no markdown, no explanation. Example format:
     parsed.yoastTitle = parsed.yoastTitle || title
     parsed.slug = safeSlug(parsed.slug || title)
 
+    // Yoast flags a title over 60 characters as too long; clamp on a word
+    // boundary rather than a raw slice so we do not chop the last word in half.
+    if (parsed.yoastTitle.length > 60) {
+      const trimmed = parsed.yoastTitle.slice(0, 60)
+      const cut = trimmed.lastIndexOf(' ')
+      parsed.yoastTitle = (cut > 40 ? trimmed.slice(0, cut) : trimmed).trim()
+    }
+
     if ((parsed.yoastMetaDescription || '').length > 160) {
       parsed.yoastMetaDescription = parsed.yoastMetaDescription.slice(0, 160)
     }
