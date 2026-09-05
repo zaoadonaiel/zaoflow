@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Copy, Loader2, MapPin, Rocket, Save, Sparkles, Wand2, Calendar as CalendarIcon,
-  ExternalLink, RefreshCw,
+  ExternalLink, RefreshCw, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -66,6 +66,14 @@ export default function SEOPageBuilder({ initial }: Props) {
   const [rewriting, setRewriting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [contentExpanded, setContentExpanded] = useState(false)
+
+  const contentWords = content
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length
 
   useEffect(() => {
     setSitesLoading(true)
@@ -446,7 +454,35 @@ export default function SEOPageBuilder({ initial }: Props) {
 
             <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Content</label>
-              <ArticleEditor value={content} onChange={setContent} />
+              <ArticleEditor
+                value={content}
+                onChange={setContent}
+                bodyHeightClass={
+                  contentExpanded || !contentWords
+                    ? 'min-h-[400px]'
+                    : 'h-[340px] overflow-y-auto'
+                }
+              />
+
+              {contentWords > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setContentExpanded((v) => !v)}
+                  className="w-full mt-2 flex items-center justify-center gap-2 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  {contentExpanded ? (
+                    <><ChevronUp className="w-4 h-4" />Collapse page</>
+                  ) : (
+                    <>
+                      <ChevronDown className="w-4 h-4" />
+                      Expand page
+                      <span className="text-gray-400 dark:text-gray-500 font-normal">
+                        {contentWords.toLocaleString()} words
+                      </span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
 
