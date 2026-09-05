@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { deletePost } from '@/lib/wordpress'
+import { writeWithOptionalColumn } from '@/lib/optional-columns'
 
 export async function GET(
   _req: NextRequest,
@@ -46,15 +47,19 @@ export async function PATCH(
     if (key in body) updates[key] = body[key]
   }
 
-  const { data: article, error } = await supabase
-    .from('articles')
-    .update(updates)
-    .eq('id', params.id)
-    .eq('user_id', user.id)
-    .select()
-    .single()
+  const { data: article, error } = await writeWithOptionalColumn<{ id: string }>(
+    updates,
+    'featured_image_alt',
+    (payload) => supabase
+      .from('articles')
+      .update(payload)
+      .eq('id', params.id)
+      .eq('user_id', user.id)
+      .select()
+      .single(),
+  )
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error || !article) return NextResponse.json({ error: error?.message || 'Update failed' }, { status: 500 })
 
   // Costs paid before the row existed are attached here, the same way the
   // create route does it — so the second and later autosaves on a new article
