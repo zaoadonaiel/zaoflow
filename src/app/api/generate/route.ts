@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { title, keywords = [], instructions, instruction_id, model, site_id, city, city_focus, web_search } = body
+  const { title, keywords = [], instructions, instruction_id, model, site_id, city, city_focus, web_search, citations } = body
   const cleanedCity = typeof city === 'string' ? city.trim().slice(0, 100) : ''
   const cleanedFocus = city_focus === '100' || city_focus === '50' || city_focus === '10' ? city_focus : undefined
 
@@ -82,6 +82,7 @@ export async function POST(req: NextRequest) {
       city: cleanedCity || undefined,
       cityFocus: cleanedFocus,
       webSearch: web_search === true,
+      citations: citations === true,
       onUsage: (u) => articleCalls.push(u),
     })
 

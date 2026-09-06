@@ -144,6 +144,7 @@ export async function generateArticle({
   city,
   cityFocus,
   webSearch,
+  citations,
   onUsage,
 }: {
   apiKey: string
@@ -164,6 +165,10 @@ export async function generateArticle({
    *  results into the model's context — so the article can cite current facts
    *  rather than the model's training-cutoff view of the world. */
   webSearch?: boolean
+  /** When true, the article prompt asks for 1–5 external source links inline,
+   *  opening in a new tab. Independent of webSearch — with search off, the
+   *  model has to pick well-known URLs it already knows. */
+  citations?: boolean
   /** Fires once after a successful call so the caller can bill the tokens.
    *  Called again on the length-retry attempt — the caller should sum. */
   onUsage?: (u: UsageInfo) => void
@@ -172,7 +177,7 @@ export async function generateArticle({
 Your articles are well-structured with proper HTML, engaging, and optimized for search engines while remaining genuinely helpful for readers.
 Always output clean HTML without any markdown code blocks or document tags — just the article body HTML.`
 
-  const userPrompt = buildArticlePrompt({ title, keywords, focusKeyword, instructions, knowledgeBase, length, city, cityFocus, webSearch })
+  const userPrompt = buildArticlePrompt({ title, keywords, focusKeyword, instructions, knowledgeBase, length, city, cityFocus, webSearch, citations })
 
   const first = await callModel({ apiKey, model, systemPrompt, userPrompt, webSearch, onUsage })
 
@@ -293,6 +298,7 @@ function buildArticlePrompt({
   city,
   cityFocus,
   webSearch,
+  citations,
 }: {
   title: string
   keywords: string[]
@@ -303,6 +309,7 @@ function buildArticlePrompt({
   city?: string
   cityFocus?: CityFocus
   webSearch?: boolean
+  citations?: boolean
 }): string {
   let prompt = `Write a comprehensive, SEO-optimized blog post for the following WordPress post title:\n\n"${title}"\n\n`
 
@@ -350,6 +357,23 @@ ${lengthRule}
 - Use transition words and vary sentence length for readability
 - Output the article body ONLY. Do NOT write a meta description, SEO summary, excerpt, or any labelled front-matter such as "Meta Description:" — those fields are generated separately and anything like that here ends up published inside the post
 `
+
+  // Outbound-link SEO: 1–5 external citations rendered as anchor tags that
+  // open in a new tab. With web search on, the model has fresh URLs; without
+  // it, the model must fall back to well-known, evergreen sources it can
+  // recall — hence the "reputable, well-known" wording rather than a demand
+  // for niche primary sources it would only end up hallucinating.
+  if (citations) {
+    prompt += `
+Outbound citations (required):
+- Include between 1 and 5 external source links inline in the article body, placed where a claim, statistic, or definition benefits from a source
+- Each citation MUST be a full <a> tag with an absolute https:// URL, target="_blank", and rel="noopener noreferrer" — e.g. <a href="https://example.com/page" target="_blank" rel="noopener noreferrer">anchor text</a>
+- Anchor text must be descriptive (the linked page's topic or the source name), never bare URLs and never "click here"
+- Link ONLY to reputable, well-known domains you are confident exist — official documentation, major publications, standards bodies, well-known organisations, primary sources. Do NOT invent URLs or slugs
+- Spread the links across the body — do NOT dump them into a "Sources" section at the end
+- Do NOT link to competitors of the site being written for, and do NOT link to the site itself
+`
+  }
 
   // Only emit the section-by-section structural defaults when the caller has
   // not pinned a length. With a pinned range those numbers would push the

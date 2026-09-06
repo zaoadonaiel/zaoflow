@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   Sparkles, Save, Send, Calendar, Loader2, Globe, Search, FolderOpen,
   ExternalLink, Check, CheckCircle2, ChevronDown, ChevronUp, AlertCircle, Plus, ImageUp, Zap,
-  ClipboardList, BookMarked,
+  ClipboardList, BookMarked, Link2,
 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import ConfirmSiteModal from '@/components/ui/ConfirmSiteModal'
@@ -216,6 +216,10 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   // Off by default because it costs extra per request. When on, the API adds
   // OpenRouter's web plugin so the article can be written from current facts.
   const [webSearch, setWebSearch] = useState(false)
+  // Off by default. When on, the article prompt asks for 1–5 external source
+  // links inline — for outbound-link SEO value. Independent of web search:
+  // both, either, or neither can be on.
+  const [citations, setCitations] = useState(false)
   const [saving, setSaving] = useState(false)
 
   // SEO fields (auto-filled after generation, editable)
@@ -457,6 +461,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
           city: city.trim() || undefined,
           city_focus: city.trim() ? cityFocus : undefined,
           web_search: webSearch,
+          citations,
         }),
       })
       const data = await res.json()
@@ -1087,35 +1092,66 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
               onCityChange={setCity}
               onFocusChange={setCityFocus}
             />
-            <button
-              type="button"
-              role="switch"
-              aria-checked={webSearch}
-              onClick={() => setWebSearch((v) => !v)}
-              title={webSearch
-                ? 'Live web search on — the article will be written from current search results.'
-                : 'Live web search off — the article uses only the model’s training data.'}
-              className={`mb-2 inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full border text-xs font-medium transition-colors ${
-                webSearch
-                  ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/25 text-brand-700 dark:text-brand-300'
-                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:border-brand-300'
-              }`}
-            >
-              <Globe className={`w-3.5 h-3.5 ${webSearch ? 'text-brand-600 dark:text-brand-300' : 'text-gray-400'}`} />
-              Live web search
-              <span
-                aria-hidden
-                className={`relative inline-flex h-4 w-7 rounded-full transition-colors ${
-                  webSearch ? 'bg-brand-600' : 'bg-gray-300 dark:bg-gray-600'
+            <div className="mb-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={webSearch}
+                onClick={() => setWebSearch((v) => !v)}
+                title={webSearch
+                  ? 'Live web search on — the article will be written from current search results.'
+                  : 'Live web search off — the article uses only the model’s training data.'}
+                className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full border text-xs font-medium transition-colors ${
+                  webSearch
+                    ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/25 text-brand-700 dark:text-brand-300'
+                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:border-brand-300'
                 }`}
               >
+                <Globe className={`w-3.5 h-3.5 ${webSearch ? 'text-brand-600 dark:text-brand-300' : 'text-gray-400'}`} />
+                Live web search
                 <span
-                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${
-                    webSearch ? 'left-3.5' : 'left-0.5'
+                  aria-hidden
+                  className={`relative inline-flex h-4 w-7 rounded-full transition-colors ${
+                    webSearch ? 'bg-brand-600' : 'bg-gray-300 dark:bg-gray-600'
                   }`}
-                />
-              </span>
-            </button>
+                >
+                  <span
+                    className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${
+                      webSearch ? 'left-3.5' : 'left-0.5'
+                    }`}
+                  />
+                </span>
+              </button>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={citations}
+                onClick={() => setCitations((v) => !v)}
+                title={citations
+                  ? 'Citations on — the article will include 1–5 external source links (opening in a new tab).'
+                  : 'Citations off — the article body will not include external source links.'}
+                className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full border text-xs font-medium transition-colors ${
+                  citations
+                    ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/25 text-brand-700 dark:text-brand-300'
+                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:border-brand-300'
+                }`}
+              >
+                <Link2 className={`w-3.5 h-3.5 ${citations ? 'text-brand-600 dark:text-brand-300' : 'text-gray-400'}`} />
+                Citations
+                <span
+                  aria-hidden
+                  className={`relative inline-flex h-4 w-7 rounded-full transition-colors ${
+                    citations ? 'bg-brand-600' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${
+                      citations ? 'left-3.5' : 'left-0.5'
+                    }`}
+                  />
+                </span>
+              </button>
+            </div>
             <ModelSelect
               value={model}
               onChange={setModel}
