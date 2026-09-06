@@ -143,6 +143,7 @@ export async function generateArticle({
   length,
   city,
   cityFocus,
+  webSearch,
   onUsage,
 }: {
   apiKey: string
@@ -159,6 +160,10 @@ export async function generateArticle({
   /** Geographic anchor — how prominent the city should be is `cityFocus`. */
   city?: string
   cityFocus?: CityFocus
+  /** When true, OpenRouter's web plugin runs live searches and injects the
+   *  results into the model's context — so the article can cite current facts
+   *  rather than the model's training-cutoff view of the world. */
+  webSearch?: boolean
   /** Fires once after a successful call so the caller can bill the tokens.
    *  Called again on the length-retry attempt — the caller should sum. */
   onUsage?: (u: UsageInfo) => void
@@ -167,9 +172,9 @@ export async function generateArticle({
 Your articles are well-structured with proper HTML, engaging, and optimized for search engines while remaining genuinely helpful for readers.
 Always output clean HTML without any markdown code blocks or document tags — just the article body HTML.`
 
-  const userPrompt = buildArticlePrompt({ title, keywords, focusKeyword, instructions, knowledgeBase, length, city, cityFocus })
+  const userPrompt = buildArticlePrompt({ title, keywords, focusKeyword, instructions, knowledgeBase, length, city, cityFocus, webSearch })
 
-  const first = await callModel({ apiKey, model, systemPrompt, userPrompt, onUsage })
+  const first = await callModel({ apiKey, model, systemPrompt, userPrompt, webSearch, onUsage })
 
   // Instructions alone don't get every model to the requested length. When
   // there's an explicit target, verify and re-prompt once if the draft is
@@ -177,7 +182,7 @@ Always output clean HTML without any markdown code blocks or document tags — j
   // that ignore the ask on the first try.
   if (length && (first.wordCount < length.min || first.wordCount > length.max)) {
     const correction = buildLengthCorrectionPrompt(userPrompt, first.content, first.wordCount, length)
-    const second = await callModel({ apiKey, model, systemPrompt, userPrompt: correction, onUsage })
+    const second = await callModel({ apiKey, model, systemPrompt, userPrompt: correction, webSearch, onUsage })
     return {
       ...second,
       lengthRetried: true,
@@ -189,12 +194,13 @@ Always output clean HTML without any markdown code blocks or document tags — j
 }
 
 async function callModel({
-  apiKey, model, systemPrompt, userPrompt, onUsage,
+  apiKey, model, systemPrompt, userPrompt, webSearch, onUsage,
 }: {
   apiKey: string
   model: string
   systemPrompt: string
   userPrompt: string
+  webSearch?: boolean
   onUsage?: (u: UsageInfo) => void
 }): Promise<Omit<GenerateArticleResult, 'lengthRetried' | 'lengthOutOfRange'>> {
   const response = await fetch(OPENROUTER_API_URL, {
@@ -213,6 +219,9 @@ async function callModel({
       ],
       max_tokens: 4096,
       temperature: 0.7,
+      // OpenRouter's web plugin. Adds a small per-request search cost that
+      // flows through the same usage record; the model still bills as itself.
+      ...(webSearch ? { plugins: [{ id: 'web' }] } : {}),
     }),
   })
 
@@ -283,6 +292,7 @@ function buildArticlePrompt({
   length,
   city,
   cityFocus,
+  webSearch,
 }: {
   title: string
   keywords: string[]
@@ -292,8 +302,13 @@ function buildArticlePrompt({
   length?: LengthTarget | null
   city?: string
   cityFocus?: CityFocus
+  webSearch?: boolean
 }): string {
   let prompt = `Write a comprehensive, SEO-optimized blog post for the following WordPress post title:\n\n"${title}"\n\n`
+
+  if (webSearch) {
+    prompt += `Live web-search results have been attached to this request. Use them to ground the article in current facts, recent developments, and real named sources. Prefer specifics from those results — statistics, dated events, direct quotes — over generic claims. Do not invent citations; only reference what the search results actually contain.\n\n`
+  }
 
   // Capped at 4,000 chars for the same reason the idea prompt caps it: a very
   // long brief must not push the article rules or the author's instructions
@@ -402,6 +417,7 @@ export async function generateArticleIdea({
   rejectedIdeas,
   city,
   cityFocus,
+  webSearch,
   onUsage,
 }: {
   apiKey: string
@@ -414,10 +430,13 @@ export async function generateArticleIdea({
   /** Geographic anchor for the idea — steer only, the title is the model's. */
   city?: string
   cityFocus?: CityFocus
+  /** Runs OpenRouter's web plugin so the pitched angle can lean on current
+   *  events, releases, or trends rather than the model's training snapshot. */
+  webSearch?: boolean
   onUsage?: (u: UsageInfo) => void
 }): Promise<{ title: string; description: string; keywords: string[] }> {
   const prompt = buildIdeaPrompt({
-    siteName, knowledgeBase, topic, existingTitles, rejectedIdeas, city, cityFocus,
+    siteName, knowledgeBase, topic, existingTitles, rejectedIdeas, city, cityFocus, webSearch,
   })
 
   const response = await fetch(OPENROUTER_API_URL, {
@@ -433,6 +452,7 @@ export async function generateArticleIdea({
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 500,
       response_format: { type: 'json_object' },
+      ...(webSearch ? { plugins: [{ id: 'web' }] } : {}),
     }),
   })
 
@@ -494,6 +514,7 @@ function buildIdeaPrompt({
   rejectedIdeas,
   city,
   cityFocus,
+  webSearch,
 }: {
   siteName: string
   knowledgeBase: string
@@ -502,10 +523,17 @@ function buildIdeaPrompt({
   rejectedIdeas: RejectedIdea[]
   city?: string
   cityFocus?: CityFocus
+  webSearch?: boolean
 }): string {
   const parts: string[] = [
     `You are proposing one article for the blog of "${siteName}".`,
   ]
+
+  if (webSearch) {
+    parts.push(
+      `Live web-search results have been attached to this request. Use them to pitch an angle grounded in what is happening now — a recent development, release, trend, or dated event — rather than an evergreen topic the site could have written any time. Keep the title specific and searchable.`
+    )
+  }
 
   if (city && city.trim() && cityFocus) {
     parts.push(ideaCityInstruction(city, cityFocus))

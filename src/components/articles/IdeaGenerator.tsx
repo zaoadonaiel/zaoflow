@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { Lightbulb, Loader2, RefreshCw, Check, BookMarked, Archive, X } from 'lucide-react'
+import { Lightbulb, Loader2, RefreshCw, Check, BookMarked, Archive, X, Globe } from 'lucide-react'
 import ModelSelect from '@/components/ui/ModelSelect'
 import ConfirmSiteModal from '@/components/ui/ConfirmSiteModal'
 import Modal from '@/components/ui/Modal'
@@ -86,6 +86,9 @@ export default function IdeaGenerator({
   // leaves the model to find a subject the site has not covered.
   const [topic, setTopic] = useState('')
   const [newKeyword, setNewKeyword] = useState('')
+  // Off by default because it costs extra per request. Flipping it on tells
+  // the API to hand the model live search results before it picks the angle.
+  const [webSearch, setWebSearch] = useState(false)
 
   function addKeyword() {
     const k = newKeyword.trim()
@@ -166,6 +169,7 @@ export default function IdeaGenerator({
           topic: topic.trim(),
           city: city.trim() || undefined,
           city_focus: city.trim() ? cityFocus : undefined,
+          web_search: webSearch,
           rejected: avoid.map((r) => ({ title: r.title, keywords: r.keywords })),
         }),
       })
@@ -229,6 +233,36 @@ export default function IdeaGenerator({
         onFocusChange={(v) => onCityFocusChange?.(v)}
         variant="amber"
       />
+
+      <button
+        type="button"
+        role="switch"
+        aria-checked={webSearch}
+        onClick={() => setWebSearch((v) => !v)}
+        title={webSearch
+          ? 'Live web search on — the model will pitch angles from current results.'
+          : 'Live web search off — the model works from its training data only.'}
+        className={`mb-2 inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full border text-xs font-medium transition-colors ${
+          webSearch
+            ? 'border-amber-400 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200'
+            : 'border-amber-200 dark:border-amber-900/40 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:border-amber-300'
+        }`}
+      >
+        <Globe className={`w-3.5 h-3.5 ${webSearch ? 'text-amber-600 dark:text-amber-300' : 'text-gray-400'}`} />
+        Live web search
+        <span
+          aria-hidden
+          className={`relative inline-flex h-4 w-7 rounded-full transition-colors ${
+            webSearch ? 'bg-amber-500' : 'bg-gray-300 dark:bg-gray-600'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${
+              webSearch ? 'left-3.5' : 'left-0.5'
+            }`}
+          />
+        </span>
+      </button>
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
         {/* Takes the rest of the row rather than a fixed 176px — the model name

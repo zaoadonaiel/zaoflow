@@ -213,6 +213,9 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   // not in each generator.
   const [city, setCity] = useState('')
   const [cityFocus, setCityFocus] = useState<CityFocus | null>(null)
+  // Off by default because it costs extra per request. When on, the API adds
+  // OpenRouter's web plugin so the article can be written from current facts.
+  const [webSearch, setWebSearch] = useState(false)
   const [saving, setSaving] = useState(false)
 
   // SEO fields (auto-filled after generation, editable)
@@ -453,6 +456,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
           instruction_id: instructionSetId,
           city: city.trim() || undefined,
           city_focus: city.trim() ? cityFocus : undefined,
+          web_search: webSearch,
         }),
       })
       const data = await res.json()
@@ -1083,6 +1087,35 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
               onCityChange={setCity}
               onFocusChange={setCityFocus}
             />
+            <button
+              type="button"
+              role="switch"
+              aria-checked={webSearch}
+              onClick={() => setWebSearch((v) => !v)}
+              title={webSearch
+                ? 'Live web search on — the article will be written from current search results.'
+                : 'Live web search off — the article uses only the model’s training data.'}
+              className={`mb-2 inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full border text-xs font-medium transition-colors ${
+                webSearch
+                  ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/25 text-brand-700 dark:text-brand-300'
+                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:border-brand-300'
+              }`}
+            >
+              <Globe className={`w-3.5 h-3.5 ${webSearch ? 'text-brand-600 dark:text-brand-300' : 'text-gray-400'}`} />
+              Live web search
+              <span
+                aria-hidden
+                className={`relative inline-flex h-4 w-7 rounded-full transition-colors ${
+                  webSearch ? 'bg-brand-600' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${
+                    webSearch ? 'left-3.5' : 'left-0.5'
+                  }`}
+                />
+              </span>
+            </button>
             <ModelSelect
               value={model}
               onChange={setModel}
