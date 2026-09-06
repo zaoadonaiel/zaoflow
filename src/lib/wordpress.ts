@@ -114,6 +114,7 @@ export async function uploadMedia({
   imageUrl,
   filename,
   altText,
+  title,
 }: {
   siteUrl: string
   username: string
@@ -122,6 +123,13 @@ export async function uploadMedia({
   filename?: string
   /** Written onto the media item after upload; a failure here is not fatal. */
   altText?: string
+  /**
+   * WP media title, shown in the library and in Media details. Set
+   * explicitly rather than relying on filename derivation — WP's own
+   * sanitiser can lowercase and mangle filename-derived titles, and a
+   * user-facing title should read the way the caller wrote it.
+   */
+  title?: string
 }): Promise<number> {
   const imgRes = await fetch(imageUrl)
   if (!imgRes.ok) {
@@ -163,11 +171,14 @@ export async function uploadMedia({
 
   const data = await res.json()
 
-  // Alt text is a second call — the upload endpoint takes the bytes, not the
-  // fields. An image on the page beats an image with a description, so a
+  // Alt + title are a second call — the upload endpoint takes the bytes, not
+  // the fields. An image on the page beats an image with a description, so a
   // failure here is swallowed rather than losing the upload that succeeded.
-  if (altText && data.id) {
+  if ((altText || title) && data.id) {
     try {
+      const patch: Record<string, string> = {}
+      if (altText) patch.alt_text = altText
+      if (title) patch.title = title
       await fetch(`${baseUrl}/wp-json/wp/v2/media/${data.id}`, {
         method: 'POST',
         headers: {
@@ -175,7 +186,7 @@ export async function uploadMedia({
           'User-Agent': USER_AGENT,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ alt_text: altText }),
+        body: JSON.stringify(patch),
         signal: AbortSignal.timeout(15000),
       })
     } catch {

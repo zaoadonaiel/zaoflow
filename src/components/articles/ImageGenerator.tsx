@@ -65,6 +65,12 @@ interface Props {
     altText: string,
     usageIds?: string[] | string | null,
     records?: import('@/lib/ai-cost').UsageRecord[] | null,
+    /**
+     * generated_images row id, when the image has one — set on fresh
+     * generations and library picks, absent on plain alt updates. Downstream
+     * flows (e.g. compress-before-send) need this to address the row.
+     */
+    imageId?: string | null,
   ) => void
   /**
    * Card heading, when the same generator is reused outside the article
@@ -225,7 +231,7 @@ export default function ImageGenerator({
       setAltText(newAlt)
       setShowEdit(false)
       setEditText('')
-      onImageGenerated?.(data.imageUrl, data.prompt, newAlt, data.usage_ids, data.receipt)
+      onImageGenerated?.(data.imageUrl, data.prompt, newAlt, data.usage_ids, data.receipt, data.imageId ?? null)
       toast.success('Image generated!')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Image generation failed')
@@ -254,7 +260,7 @@ export default function ImageGenerator({
     setEditText('')
     setShowLibrary(false)
     setShowModal(false)
-    onImageGenerated?.(image.url, image.prompt || prompt, newAlt)
+    onImageGenerated?.(image.url, image.prompt || prompt, newAlt, null, null, image.id)
 
     // Straight into the alt box, so the one thing that is usually wrong about
     // a reused image is the one thing your cursor lands on.

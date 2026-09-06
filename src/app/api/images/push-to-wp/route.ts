@@ -3,6 +3,26 @@ import { createClient } from '@/lib/supabase/server'
 import { uploadMedia, extensionForImageUrl } from '@/lib/wordpress'
 
 /**
+ * Turn a human title ("IDS Maui Interior Design Latest News") into the shape
+ * WordPress wants as a filename ("IDS-Maui-Interior-Design-Latest-News").
+ *
+ * Case is kept so "IDS" doesn't become "ids" in the URL. Only alphanumerics
+ * and hyphens survive — WP will happily accept much more but a strict stem
+ * dodges the surprises that come from apostrophes, punctuation and unicode.
+ * Length capped to keep the resulting URL sensible.
+ */
+function filenameStem(text: string | null | undefined, fallback: string): string {
+  const cleaned = (text || '')
+    .trim()
+    .replace(/[^A-Za-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 100)
+  return cleaned || fallback
+}
+
+/**
  * Push a generated image into a WordPress site's media library.
  *
  * The image has to already exist in this user's generated_images table — we
@@ -66,10 +86,16 @@ export async function POST(req: NextRequest) {
 
   try {
     const ext = extensionForImageUrl(image.url)
-    // A stable filename ties the media item back to the library row and keeps
-    // WP-side filenames from colliding across pushes of the same image.
-    const filename = `zaoflow-${image.id}${ext}`
+    // Filename + title come from the alt text (or the prompt as a fallback)
+    // so a media row in WordPress reads "IDS Maui Interior Design Latest News"
+    // rather than "zaoflow-<uuid>". Title is also POSTed explicitly on the
+    // follow-up call so WP's own filename sanitiser cannot mangle it.
     const altText = (body.alt || image.prompt || '').trim() || undefined
+    const stem = filenameStem(altText, `zaoflow-${image.id}`)
+    const filename = `${stem}${ext}`
+    // A media title with visible hyphens looks like a filename; replace them
+    // with spaces for the WP library, keeping the original casing.
+    const title = stem.replace(/-/g, ' ')
 
     const mediaId = await uploadMedia({
       siteUrl: site.url,
@@ -78,6 +104,7 @@ export async function POST(req: NextRequest) {
       imageUrl: image.url,
       filename,
       altText,
+      title,
     })
 
     return NextResponse.json({

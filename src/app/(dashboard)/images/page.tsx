@@ -26,6 +26,8 @@ interface GeneratedShot {
   url: string
   prompt: string
   alt: string
+  /** generated_images row id — needed so a compress-before-send can address it. */
+  imageId: string | null
 }
 
 export default function ImagesPage() {
@@ -298,8 +300,8 @@ export default function ImagesPage() {
           <ImageGenerator
             heading="New image"
             siteId={siteId !== ALL_SITES && siteId !== UNASSIGNED ? siteId : undefined}
-            onImageGenerated={(url, prompt, alt) => {
-              setLastShot({ url, prompt, alt })
+            onImageGenerated={(url, prompt, alt, _usageIds, _records, imageId) => {
+              setLastShot({ url, prompt, alt, imageId: imageId ?? null })
               // Refresh in the background so the new image appears in the grid
               // behind the modal as soon as the user closes it.
               void fetchImages()
@@ -321,7 +323,7 @@ export default function ImagesPage() {
                 <button
                   type="button"
                   onClick={() => setSendingImage({
-                    id: 'pending',
+                    id: lastShot.imageId || 'pending',
                     url: lastShot.url,
                     prompt: lastShot.prompt,
                     created_at: new Date().toISOString(),
@@ -342,17 +344,22 @@ export default function ImagesPage() {
           open
           onClose={() => setSendingImage(null)}
           imageUrl={sendingImage.url}
+          imageId={sendingImage.id !== 'pending' ? sendingImage.id : null}
+          imageBytes={sendingImage.bytes}
           fallbackAlt={sendingImage.prompt || lastShot?.alt || null}
           sites={sites}
           defaultSiteId={
             sendingImage.site_id
             || (siteId !== ALL_SITES && siteId !== UNASSIGNED ? siteId : null)
           }
-          onSent={() => {
+          onSent={({ compressed }) => {
             setSendingImage(null)
             // Both the generator's "Send" and the card's "Send" close the
             // outer generator modal too — one push, then back to the library.
             setShowGenerator(false)
+            // A compressed send rewrote the library row, so pull the fresh
+            // size/URL back before the user sees the grid again.
+            if (compressed) void fetchImages()
           }}
         />
       )}
