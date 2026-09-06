@@ -8,7 +8,7 @@ interface TrendChartProps {
 
 export default function TrendChart({ trend }: TrendChartProps) {
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-5">
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-4 sm:p-5">
       <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Traffic Trend</h2>
 
       {trend.length === 0 ? (

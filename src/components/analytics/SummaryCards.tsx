@@ -40,19 +40,19 @@ export default function SummaryCards({ summary }: SummaryCardsProps) {
   ]
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       {cards.map(({ label, value, icon: Icon, color }) => (
         <div
           key={label}
-          className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-5"
+          className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-4 sm:p-5 min-w-0"
         >
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${color}`}>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">{label}</p>
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}>
               <Icon className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white">{value}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white truncate">{value}</p>
         </div>
       ))}
     </div>

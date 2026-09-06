@@ -152,14 +152,14 @@ export default function ClientsPage() {
         actions={
           <button
             onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 bg-brand-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-brand-700"
+            className="flex items-center gap-2 bg-brand-600 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-sm font-medium hover:bg-brand-700 whitespace-nowrap flex-shrink-0"
           >
             <Plus className="w-4 h-4" /> New link
           </button>
         }
       />
 
-      <div className="p-6 max-w-4xl">
+      <div className="p-4 sm:p-6 max-w-4xl">
         <div className="rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 px-4 py-3 mb-5">
           <p className="text-xs text-amber-800 dark:text-amber-300">
             Each link needs its own 5-digit access code, shown below and nowhere else. Send
@@ -186,18 +186,20 @@ export default function ClientsPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {portals.map((p) => (
+            {portals.map((p) => {
+              const locked = (p.failed_attempts ?? 0) >= MAX_CODE_ATTEMPTS
+              return (
               <div
                 key={p.id}
-                className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5"
+                className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 sm:p-5"
               >
-                <div className="flex items-start justify-between gap-4 mb-3">
-                  <div className="min-w-0">
-                    <p className="font-medium text-gray-900 dark:text-white">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-gray-900 dark:text-white truncate">
                       {p.sites?.name || 'Unknown site'}
                     </p>
-                    <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5">
-                      <User className="w-3 h-3" /> {p.client_name || 'Unnamed client'}
+                    <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5 truncate">
+                      <User className="w-3 h-3 flex-shrink-0" /> {p.client_name || 'Unnamed client'}
                     </p>
                   </div>
                   <span className={`px-2.5 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
@@ -209,8 +211,8 @@ export default function ClientsPage() {
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2 rounded-xl bg-gray-50 dark:bg-gray-900/50 px-3 py-2.5 mb-3">
-                  <code className="text-xs text-gray-600 dark:text-gray-300 truncate flex-1">{urlFor(p)}</code>
+                <div className="flex items-center gap-2 rounded-xl bg-gray-50 dark:bg-gray-900/50 px-3 py-2.5 mb-2">
+                  <code className="text-xs text-gray-600 dark:text-gray-300 truncate flex-1 min-w-0">{urlFor(p)}</code>
                   <button
                     onClick={() => copy(p)}
                     className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-white dark:hover:bg-gray-700 flex-shrink-0"
@@ -220,31 +222,37 @@ export default function ClientsPage() {
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2 rounded-xl bg-gray-50 dark:bg-gray-900/50 px-3 py-2.5 mb-3">
-                  <KeyRound className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                  <span className="text-xs text-gray-400">Access code</span>
-                  <code className="text-sm font-semibold tracking-[0.2em] text-gray-900 dark:text-white flex-1">
-                    {p.access_code || '—'}
-                  </code>
-                  {(p.failed_attempts ?? 0) >= MAX_CODE_ATTEMPTS && (
-                    <span className="text-[11px] font-medium text-red-600 dark:text-red-400 flex-shrink-0">
+                {/* Access code — the "Locked" warning was inline with the code
+                    on desktop, which overflowed on a phone. Broken onto its
+                    own line under the code so a locked link still reads as one
+                    tidy row. */}
+                <div className="rounded-xl bg-gray-50 dark:bg-gray-900/50 px-3 py-2.5 mb-3">
+                  <div className="flex items-center gap-2">
+                    <KeyRound className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                    <span className="text-xs text-gray-400 flex-shrink-0">Access code</span>
+                    <code className="text-sm font-semibold tracking-[0.2em] text-gray-900 dark:text-white flex-1 min-w-0 truncate">
+                      {p.access_code || '—'}
+                    </code>
+                    <button
+                      onClick={() => copyCode(p)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-white dark:hover:bg-gray-700 flex-shrink-0"
+                      title="Copy code"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {locked && (
+                    <p className="text-[11px] font-medium text-red-600 dark:text-red-400 mt-1.5">
                       Locked — issue a new code
-                    </span>
+                    </p>
                   )}
-                  <button
-                    onClick={() => copyCode(p)}
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-white dark:hover:bg-gray-700 flex-shrink-0"
-                    title="Copy code"
-                  >
-                    <Copy className="w-4 h-4" />
-                  </button>
                 </div>
 
                 <button
                   onClick={() => toggleOpens(p.id)}
                   className="w-full flex items-center justify-between gap-2 rounded-lg px-3 py-2 mb-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/40"
                 >
-                  <span className="text-xs text-gray-600 dark:text-gray-300">
+                  <span className="text-xs text-gray-600 dark:text-gray-300 min-w-0 truncate">
                     Opened <strong className="font-semibold text-gray-900 dark:text-white">{p.open_count ?? 0}</strong>
                     {(p.open_count ?? 0) === 1 ? ' time' : ' times'}
                     {p.last_viewed_at && (
@@ -279,16 +287,19 @@ export default function ClientsPage() {
                   </div>
                 )}
 
-                <div className="flex items-center gap-2">
+                {/* Action row — pipe separators + four text buttons overflowed
+                    the card on mobile, pushing Delete visually outside its
+                    rounded border. Padded pill buttons that wrap cleanly and
+                    keep Delete inside the card with ml-auto. */}
+                <div className="flex flex-wrap items-center gap-1 border-t border-gray-100 dark:border-gray-700 pt-3 -mx-1">
                   <button
                     onClick={() => patch(p.id, { is_active: !p.is_active }, p.is_active ? 'Link disabled' : 'Link enabled')}
                     disabled={busyId === p.id}
-                    className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 disabled:opacity-40"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-40"
                   >
                     {p.is_active ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                     {p.is_active ? 'Disable' : 'Enable'}
                   </button>
-                  <span className="text-gray-200 dark:text-gray-700">|</span>
                   <button
                     onClick={() => {
                       if (confirm('Issue a new URL? The current link stops working immediately.')) {
@@ -296,11 +307,10 @@ export default function ClientsPage() {
                       }
                     }}
                     disabled={busyId === p.id}
-                    className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 disabled:opacity-40"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-40"
                   >
                     <RefreshCw className="w-3.5 h-3.5" /> Rotate
                   </button>
-                  <span className="text-gray-200 dark:text-gray-700">|</span>
                   <button
                     onClick={() => {
                       if (confirm('Issue a new access code? The current one stops working immediately, anyone reading right now is asked for the new one, and a locked link is opened up again.')) {
@@ -308,22 +318,23 @@ export default function ClientsPage() {
                       }
                     }}
                     disabled={busyId === p.id}
-                    className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 disabled:opacity-40"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-40"
                   >
                     <KeyRound className="w-3.5 h-3.5" /> New code
                   </button>
-                  <span className="text-gray-200 dark:text-gray-700">|</span>
                   <button
                     onClick={() => remove(p)}
                     disabled={busyId === p.id}
-                    className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-red-600 disabled:opacity-40"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-40 ml-auto"
+                    title="Delete link"
                   >
-                    <Trash2 className="w-3.5 h-3.5" /> Delete
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
-                  {busyId === p.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
+                  {busyId === p.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400 ml-1" />}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

@@ -8,7 +8,7 @@ export default function CountriesTable({ countries }: CountriesTableProps) {
   const max = countries.length ? Math.max(...countries.map((c) => c.sessions)) : 0
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-5">
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-4 sm:p-5">
       <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Top Countries</h2>
 
       {countries.length === 0 ? (

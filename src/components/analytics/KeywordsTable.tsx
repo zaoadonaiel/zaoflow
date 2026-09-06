@@ -10,7 +10,7 @@ interface KeywordsTableProps {
 export default function KeywordsTable({ keywords, gscConnected }: KeywordsTableProps) {
   return (
     <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+      <div className="px-4 sm:px-5 py-4 border-b border-gray-100 dark:border-gray-800">
         <h2 className="font-semibold text-gray-900 dark:text-white">Search Keywords</h2>
       </div>
 
@@ -29,7 +29,7 @@ export default function KeywordsTable({ keywords, gscConnected }: KeywordsTableP
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <div className="px-5 py-2.5 border-b border-gray-50 dark:border-gray-800 min-w-[600px]">
+          <div className="px-4 sm:px-5 py-2.5 border-b border-gray-50 dark:border-gray-800 min-w-[600px]">
             <div className="grid grid-cols-12 text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide gap-4">
               <div className="col-span-5">Query</div>
               <div className="col-span-2 text-right">Clicks</div>
@@ -41,7 +41,7 @@ export default function KeywordsTable({ keywords, gscConnected }: KeywordsTableP
           {keywords.map((kw) => (
             <div
               key={kw.query}
-              className="px-5 py-3 border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors min-w-[600px]"
+              className="px-4 sm:px-5 py-3 border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors min-w-[600px]"
             >
               <div className="grid grid-cols-12 gap-4 items-center">
                 <div className="col-span-5">

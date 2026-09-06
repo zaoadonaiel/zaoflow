@@ -153,14 +153,17 @@ export default function AnalyticsDashboard({ sites, googleConnected, googleEmail
 
   return (
     <div className="space-y-6">
-      {/* Top bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-green-50 dark:bg-green-500/10 rounded-lg flex items-center justify-center">
+      {/* Top bar — stacks the connection info over the controls on mobile so
+          the site select can span the full width and the date-range pills +
+          connect/add-site buttons wrap cleanly instead of squeezing off the
+          card edge. */}
+      <div className="flex flex-col gap-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-4 md:flex-row md:flex-wrap md:items-center md:justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 bg-green-50 dark:bg-green-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
             <BarChart3 className="w-4 h-4 text-green-600" />
           </div>
-          <div>
-            <p className="text-sm font-medium text-gray-900 dark:text-white">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
               Connected{googleEmail ? ` as ${googleEmail}` : ''}
             </p>
             <button
@@ -179,7 +182,7 @@ export default function AnalyticsDashboard({ sites, googleConnected, googleEmail
             <select
               value={selectedSiteId}
               onChange={(e) => setSelectedSiteId(e.target.value)}
-              className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full md:w-auto px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
               {sites.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -196,7 +199,7 @@ export default function AnalyticsDashboard({ sites, googleConnected, googleEmail
                 <button
                   key={preset.days}
                   onClick={() => setRangeDays(preset.days)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                     rangeDays === preset.days
                       ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                       : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
@@ -211,7 +214,7 @@ export default function AnalyticsDashboard({ sites, googleConnected, googleEmail
           {selectedSite && (
             <button
               onClick={() => setConnectModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors whitespace-nowrap"
             >
               <Settings2 className="w-3.5 h-3.5" />
               {selectedSite.ga4_property_id ? 'Edit connection' : 'Connect this site'}
@@ -220,7 +223,7 @@ export default function AnalyticsDashboard({ sites, googleConnected, googleEmail
 
           <button
             onClick={() => setAddSiteModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-brand-600 text-white rounded-xl text-xs font-medium hover:bg-brand-700 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 bg-brand-600 text-white rounded-xl text-xs font-medium hover:bg-brand-700 transition-colors whitespace-nowrap ml-auto md:ml-0"
           >
             <Plus className="w-3.5 h-3.5" />
             Add Site
