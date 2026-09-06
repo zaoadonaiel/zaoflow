@@ -19,6 +19,10 @@ export interface WPPost {
    *  Application Password is authenticating the request. Requires that user
    *  to have edit_others_posts (admin/editor) capability on the site. */
   author?: number
+  /** Value written to the `_location` post meta. Undefined skips the key;
+   *  empty string writes it as an empty value. Consumed by theme/plugin
+   *  templates on the WP side. */
+  locationMeta?: string
 }
 
 export interface WPAuthor {
@@ -334,6 +338,8 @@ export async function publishPost({
   if (post.focusKeyphrase) meta['_yoast_wpseo_focuskw'] = post.focusKeyphrase
   if (post.yoastMetaDescription) meta['_yoast_wpseo_metadesc'] = post.yoastMetaDescription
   if (post.yoastTitle) meta['_yoast_wpseo_title'] = post.yoastTitle
+  // Empty string is a valid value here — the flag decides content, not presence.
+  if (post.locationMeta !== undefined) meta['_location'] = post.locationMeta
   if (Object.keys(meta).length > 0) body.meta = meta
 
   const res = await fetch(

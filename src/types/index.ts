@@ -124,6 +124,8 @@ export interface SEOPage {
   ai_model?: string | null
   instruction_id?: string | null
   rewrite_similarity?: SEOPageSimilarity | null
+  /** When true, published post gets `_location = 1`; when false, `_location = ''`. */
+  set_location_meta?: boolean
   status: 'draft' | 'scheduled' | 'publishing' | 'published' | 'failed'
   scheduled_at?: string | null
   scheduled_tz?: string | null

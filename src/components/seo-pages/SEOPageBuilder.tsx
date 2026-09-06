@@ -62,6 +62,11 @@ export default function SEOPageBuilder({ initial }: Props) {
     initial?.scheduled_at ? toLocalInputValue(initial.scheduled_at) : '',
   )
 
+  // Defaults to true — the common case is to write `_location = 1`.
+  const [setLocationMeta, setSetLocationMeta] = useState<boolean>(
+    initial?.set_location_meta ?? true,
+  )
+
   const [cloning, setCloning] = useState(false)
   const [rewriting, setRewriting] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -203,6 +208,7 @@ export default function SEOPageBuilder({ initial }: Props) {
       ai_model: model || null,
       instruction_id: instructionId,
       rewrite_similarity: similarity,
+      set_location_meta: setLocationMeta,
       status,
       scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,
     }
@@ -554,6 +560,26 @@ export default function SEOPageBuilder({ initial }: Props) {
               setFeaturedImageAlt(alt)
             }}
           />
+
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+              WordPress meta
+            </h3>
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={setLocationMeta}
+                onChange={(e) => setSetLocationMeta(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-brand-600 focus:ring-brand-500"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-200">
+                Set <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-xs">_location</code> = <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-xs">1</code>
+                <span className="block text-[11px] text-gray-400 mt-0.5">
+                  Unchecked writes the key with an empty value.
+                </span>
+              </span>
+            </label>
+          </div>
 
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 space-y-3">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">

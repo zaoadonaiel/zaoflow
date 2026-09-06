@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
     featured_image_url, featured_image_prompt, featured_image_alt,
     focus_keyphrase, keyphrase_synonyms, yoast_title, yoast_meta_description,
     ai_model, instruction_id, rewrite_similarity,
+    set_location_meta,
     status, scheduled_at, scheduled_tz,
   } = body
 
@@ -83,6 +84,7 @@ export async function POST(req: NextRequest) {
     ai_model: ai_model || null,
     instruction_id: instruction_id || null,
     rewrite_similarity: rewrite_similarity || null,
+    set_location_meta: typeof set_location_meta === 'boolean' ? set_location_meta : true,
     status: status || 'draft',
     scheduled_at: scheduled_at || null,
     scheduled_tz: scheduled_tz || null,

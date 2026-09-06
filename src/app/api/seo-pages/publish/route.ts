@@ -71,6 +71,10 @@ export async function POST(req: NextRequest) {
         keyphraseSynonyms: seoPage.keyphrase_synonyms || undefined,
         yoastTitle: seoPage.yoast_title || undefined,
         yoastMetaDescription: seoPage.yoast_meta_description || undefined,
+        // Written on every SEO-page publish; the flag only decides the value.
+        // `false` still writes the key (empty string) so downstream templates
+        // can rely on it existing.
+        locationMeta: seoPage.set_location_meta === false ? '' : '1',
       },
       existingPostId: seoPage.wp_page_id || undefined,
     })
