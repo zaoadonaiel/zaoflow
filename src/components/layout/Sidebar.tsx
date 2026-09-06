@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
@@ -46,18 +46,40 @@ interface SidebarProps {
   userName?: string
 }
 
+const NEW_MENU_ITEMS = [
+  { href: '/articles/new', label: 'Article', icon: FileText },
+  { href: '/sites?new=1', label: 'Site', icon: Globe },
+  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { href: '/seo-pages/new', label: 'SEO page', icon: MapPin },
+]
+
 export default function Sidebar({ userEmail, userName }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
+  const [newMenuOpen, setNewMenuOpen] = useState(false)
+  const newMenuRef = useRef<HTMLDivElement | null>(null)
 
-  useEffect(() => { setIsOpen(false) }, [pathname])
+  useEffect(() => { setIsOpen(false); setNewMenuOpen(false) }, [pathname])
 
   useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setIsOpen(false) }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') { setIsOpen(false); setNewMenuOpen(false) }
+    }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [])
+
+  useEffect(() => {
+    if (!newMenuOpen) return
+    function onClickOutside(e: MouseEvent) {
+      if (newMenuRef.current && !newMenuRef.current.contains(e.target as Node)) {
+        setNewMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [newMenuOpen])
 
   async function handleSignOut() {
     const supabase = createClient()
@@ -165,19 +187,43 @@ export default function Sidebar({ userEmail, userName }: SidebarProps) {
           <img src="/logo.png" alt="Zao Flo" className="w-6 h-6" />
           <span className="font-bold text-gray-900 dark:text-white">Zao Flo</span>
         </div>
-        {/* New-article shortcut sits next to the theme toggle so it is one tap
-            away from anywhere in the app, and does not have to live inside
-            the article form's action row where it crowds the primary buttons
-            on a phone. */}
+        {/* Quick-create menu sits next to the theme toggle so a new article,
+            site, SEO page, or analytics jump is one tap away from anywhere
+            in the app — it used to be an article-only shortcut, which meant
+            everything else required opening the drawer first. */}
         <div className="ml-auto flex items-center gap-1">
-          <Link
-            href="/articles/new"
-            title="New article"
-            aria-label="New article"
-            className="flex items-center justify-center w-9 h-9 rounded-full bg-brand-600 text-white hover:bg-brand-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-          </Link>
+          <div className="relative" ref={newMenuRef}>
+            <button
+              type="button"
+              onClick={() => setNewMenuOpen((v) => !v)}
+              title="New"
+              aria-label="New"
+              aria-expanded={newMenuOpen}
+              aria-haspopup="menu"
+              className="flex items-center justify-center w-9 h-9 rounded-full bg-brand-600 text-white hover:bg-brand-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+            {newMenuOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 top-full mt-2 w-44 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg py-1 z-40"
+              >
+                {NEW_MENU_ITEMS.map(({ href, label, icon: Icon }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    role="menuitem"
+                    onClick={() => setNewMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <Icon className="w-4 h-4 text-gray-400" />
+                    {label}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
           <ThemeToggle />
         </div>
       </div>
