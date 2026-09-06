@@ -171,10 +171,10 @@ export default function IdeaGenerator({ siteId, siteName, onAccept, onChangeSite
           : 'Leave blank and it picks a subject none of your titles have covered.'}
       </p>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
         {/* Takes the rest of the row rather than a fixed 176px — the model name
             and its price were both truncating away in the narrower slot. */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 w-full">
           <ModelSelect
             value={model}
             onChange={setModel}
@@ -187,7 +187,7 @@ export default function IdeaGenerator({ siteId, siteName, onAccept, onChangeSite
           <button
             onClick={() => setConfirming(true)}
             disabled={loading || !siteId}
-            className="flex items-center gap-2 bg-amber-500 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50 flex-shrink-0"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-amber-500 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50 flex-shrink-0"
           >
             {loading
               ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Thinking…</>
