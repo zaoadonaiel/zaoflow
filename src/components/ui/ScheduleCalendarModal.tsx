@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarDays, Clock, GripVertical, Loader2, AlertCircle, Pause, Play } from 'lucide-react'
 import Modal from './Modal'
 import MonthScroller from '@/components/schedules/MonthScroller'
@@ -119,9 +119,35 @@ export default function ScheduleCalendarModal({
   const [minute, setMinute] = useState(seed.minute)
   const [meridiem, setMeridiem] = useState<'AM' | 'PM'>(seed.meridiem)
   const [tzId, setTzId] = useState(initialTz)
+  // Tracks whether the user has opened the clock and pressed OK. Until they do,
+  // day picks roll a random 7–11 AM PST slot so a rushed "click date, save"
+  // does not stack every schedule on the same 9:00 hour.
+  const [timeTouched, setTimeTouched] = useState(false)
   // The clock is its own modal now: the calendar wants the whole width, and the
   // time is one line you set once, not a wall of buttons beside every month.
   const [showClock, setShowClock] = useState(false)
+
+  // Roll a fresh random morning slot for the picked day, unless the user has
+  // committed a time themselves (or is editing an existing slot). Skipped when
+  // today is already past the window — the modal's own past-time guard will
+  // then prompt the user to pick their own.
+  useEffect(() => {
+    if (currentIso || timeTouched) return
+    const pstZone = zoneById('PST')
+    const nowParts = getZonedParts(new Date(), pstZone)
+    const isToday =
+      selected.year === nowParts.year &&
+      selected.month === nowParts.month &&
+      selected.day === nowParts.day
+    const earliestHour = isToday ? Math.max(7, nowParts.hour + 1) : 7
+    if (earliestHour >= 11) return
+    const hour24 = earliestHour + Math.floor(Math.random() * (11 - earliestHour))
+    const min = Math.floor(Math.random() * 60)
+    setHour12(hour24 % 12 === 0 ? 12 : hour24 % 12)
+    setMinute(min)
+    setMeridiem(hour24 >= 12 ? 'PM' : 'AM')
+    setTzId('PST')
+  }, [selected, currentIso, timeTouched])
   // The same room, showing either the months or the queue as a list you drag
   // into order. Two panels rather than two modals: rearranging the queue and
   // picking a day out of it are the same decision seen from two sides.
@@ -245,6 +271,7 @@ export default function ScheduleCalendarModal({
             setMinute(v.minute)
             setMeridiem(v.meridiem)
             setTzId(v.tzId)
+            setTimeTouched(true)
             setShowClock(false)
           }}
         />
