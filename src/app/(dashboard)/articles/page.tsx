@@ -14,6 +14,7 @@ type StatusFilter = typeof STATUS_FILTERS[number]
 
 export default function ArticlesPage() {
   const [articles, setArticles] = useState<Article[]>([])
+  const [counts, setCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
@@ -31,6 +32,7 @@ export default function ArticlesPage() {
       const res = await fetch(`/api/articles?${params}`)
       const data = await res.json()
       setArticles(data.articles || [])
+      setCounts(data.counts || {})
     } finally {
       setLoading(false)
     }
@@ -117,19 +119,24 @@ export default function ArticlesPage() {
             </select>
           </div>
           <div className="flex items-center gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1 overflow-x-auto">
-            {STATUS_FILTERS.map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors whitespace-nowrap ${
-                  statusFilter === s
-                    ? 'bg-brand-600 text-white'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-              >
-                {s}
-              </button>
-            ))}
+            {STATUS_FILTERS.map((s) => {
+              const n = s === 'all'
+                ? Object.values(counts).reduce((sum, v) => sum + v, 0)
+                : counts[s] ?? 0
+              return (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors whitespace-nowrap ${
+                    statusFilter === s
+                      ? 'bg-brand-600 text-white'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {s} <span className={`font-normal ${statusFilter === s ? 'text-white/70' : 'text-gray-400 dark:text-gray-500'}`}>({n})</span>
+                </button>
+              )
+            })}
           </div>
         </div>
       </div>

@@ -27,10 +27,26 @@ export async function GET(req: NextRequest) {
     ? query.order('scheduled_at', { ascending: true, nullsFirst: false })
     : query.order('created_at', { ascending: false })
 
-  const { data: articles, error } = await query
+  // Counts are the same regardless of the status filter — they exist so the
+  // filter buttons can show what a click would surface. Run alongside the
+  // list query so a single request answers both.
+  const [{ data: articles, error }, { data: countRows }] = await Promise.all([
+    query,
+    supabase.rpc('get_article_status_counts', {
+      uid: user.id,
+      site_filter: siteId || null,
+      search_filter: search || null,
+    }),
+  ])
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ articles })
+
+  const counts: Record<string, number> = {}
+  for (const row of (countRows ?? []) as { status: string; count: number }[]) {
+    counts[row.status] = Number(row.count)
+  }
+
+  return NextResponse.json({ articles, counts })
 }
 
 export async function POST(req: NextRequest) {
