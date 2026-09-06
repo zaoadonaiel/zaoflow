@@ -194,14 +194,26 @@ export default function ScheduleCalendarModal({
   // The same room, showing either the months or the queue as a list you drag
   // into order. Two panels rather than two modals: rearranging the queue and
   // picking a day out of it are the same decision seen from two sides.
-  const [mode, setMode] = useState<'calendar' | 'rearrange'>('calendar')
+  //
+  // Opens on Rearrange on a phone: the seven-day calendar is unreadable at
+  // that width, and the queue-as-a-list is what a mobile picker is actually
+  // for — a title with its date and its cost, one to a row. Desktop still
+  // opens on the calendar because the whole month fits comfortably there.
+  const [mode, setMode] = useState<'calendar' | 'rearrange'>(() =>
+    typeof window !== 'undefined'
+      && window.matchMedia?.('(max-width: 639px)').matches
+      ? 'rearrange'
+      : 'calendar',
+  )
 
-  // Every open lands on the calendar, never on Rearrange. The Schedule button
-  // means "pick a slot" — the queue re-orderer is a step from there, not the
-  // thing that greets you. Belt-and-braces against a future where the modal
-  // gets held mounted between opens and the last mode would otherwise stick.
+  // Every open re-picks the mobile-vs-desktop default rather than remembering
+  // what was left last time — a modal held mounted between opens must not
+  // strand a phone user on the calendar view they cannot read.
   useEffect(() => {
-    if (open) setMode('calendar')
+    if (!open) return
+    const isMobile = typeof window !== 'undefined'
+      && window.matchMedia?.('(max-width: 639px)').matches
+    setMode(isMobile ? 'rearrange' : 'calendar')
   }, [open])
 
   const resultIso = useMemo(
