@@ -4,9 +4,11 @@ import { createClient } from '@/lib/supabase/server'
 /**
  * Reads the signed-in user's OpenRouter balance so the sidebar can show it.
  *
- * OpenRouter's `/auth/key` endpoint returns a per-key usage + limit reading,
- * both denominated in USD credits. The balance is limit - usage; a null limit
- * means the key is uncapped, in which case we can only show usage.
+ * `/credits` is account-level: `total_credits` is everything ever added to the
+ * account, `total_usage` is everything ever spent across every key. The
+ * remaining balance is the difference. `/auth/key` looks similar but reports a
+ * per-key spending cap, which is null for the common uncapped case — so it
+ * cannot answer "what's left in my account".
  */
 export async function GET() {
   const supabase = createClient()
@@ -23,7 +25,7 @@ export async function GET() {
   if (!key) return NextResponse.json({ error: 'No OpenRouter key set' }, { status: 404 })
 
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/auth/key', {
+    const res = await fetch('https://openrouter.ai/api/v1/credits', {
       headers: { Authorization: `Bearer ${key}` },
       cache: 'no-store',
       signal: AbortSignal.timeout(8000),
@@ -32,11 +34,11 @@ export async function GET() {
       return NextResponse.json({ error: `OpenRouter: ${res.status}` }, { status: 502 })
     }
     const json = await res.json()
-    const usage = Number(json?.data?.usage) || 0
-    const limit = json?.data?.limit == null ? null : Number(json.data.limit)
-    const balance = limit == null ? null : limit - usage
+    const totalCredits = Number(json?.data?.total_credits) || 0
+    const totalUsage = Number(json?.data?.total_usage) || 0
+    const balance = totalCredits - totalUsage
 
-    return NextResponse.json({ usage, limit, balance })
+    return NextResponse.json({ usage: totalUsage, limit: totalCredits, balance })
   } catch {
     return NextResponse.json({ error: 'OpenRouter unreachable' }, { status: 502 })
   }

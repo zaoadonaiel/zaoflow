@@ -71,6 +71,12 @@ export default function OpenRouterCredits() {
   const usage = state.kind === 'ok' ? state.credits.usage : null
   const limit = state.kind === 'ok' ? state.credits.limit : null
   const low = balance !== null && balance < 1
+  const tooltip =
+    state.kind === 'ok' && balance !== null
+      ? `$${balance.toFixed(4)} remaining — $${usage!.toFixed(2)} used of $${limit!.toFixed(2)} added`
+      : state.kind === 'error'
+      ? `OpenRouter: ${state.message}`
+      : 'OpenRouter balance'
 
   return (
     <div
@@ -79,13 +85,7 @@ export default function OpenRouterCredits() {
           ? 'border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/15'
           : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
       }`}
-      title={
-        state.kind === 'ok'
-          ? limit == null
-            ? `Uncapped key — $${usage!.toFixed(2)} used`
-            : `$${usage!.toFixed(2)} used of $${limit.toFixed(2)}`
-          : 'OpenRouter balance'
-      }
+      title={tooltip}
     >
       <Wallet
         className={`w-3 h-3 flex-shrink-0 ${
@@ -104,7 +104,7 @@ export default function OpenRouterCredits() {
           {state.kind === 'loading' && '···'}
           {state.kind === 'error' && '—'}
           {state.kind === 'ok' && balance !== null && formatDollars(balance)}
-          {state.kind === 'ok' && balance === null && formatDollars(usage!)}
+          {state.kind === 'ok' && balance === null && '—'}
         </span>
       </div>
       <button
