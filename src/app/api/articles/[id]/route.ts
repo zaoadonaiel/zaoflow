@@ -19,7 +19,16 @@ export async function GET(
     .single()
 
   if (error || !article) return NextResponse.json({ error: 'Article not found' }, { status: 404 })
-  return NextResponse.json({ article })
+
+  // Every billed generation attached to this article, feeds the cost receipt.
+  const { data: usage } = await supabase
+    .from('ai_usage')
+    .select('id, step, model, prompt_tokens, completion_tokens, total_tokens, cost_usd, created_at')
+    .eq('article_id', params.id)
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: true })
+
+  return NextResponse.json({ article, usage: usage ?? [] })
 }
 
 export async function PATCH(

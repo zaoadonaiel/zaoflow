@@ -42,9 +42,12 @@ export function getDefaultSize(modelId: string): string {
   return getSizesForModel(modelId)[0].value
 }
 
+import { readImageUsage, type UsageInfo } from '@/lib/ai-cost'
+
 export interface ImageResult {
   url?: string   // HTTP URL — present when OpenRouter returns a URL
   b64?: string   // raw base64 string — present when OpenRouter returns b64_json
+  usage: UsageInfo
 }
 
 export async function generateImage({
@@ -91,8 +94,9 @@ export async function generateImage({
 
   if (!item) throw new Error('Image generation returned an empty response')
 
-  if (item.url) return { url: item.url }
-  if (item.b64_json) return { b64: item.b64_json }
+  const usage = readImageUsage(data, model, 1)
+  if (item.url) return { url: item.url, usage }
+  if (item.b64_json) return { b64: item.b64_json, usage }
 
   throw new Error('Unexpected image response format — no URL or base64 data found')
 }

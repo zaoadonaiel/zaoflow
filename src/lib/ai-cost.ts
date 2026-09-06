@@ -122,8 +122,18 @@ export function costOf(usage: UsageInfo, rates: Record<string, Rate>): number | 
   return null
 }
 
+export interface UsageRecord {
+  id: string
+  step: AiStep
+  model: string
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  cost_usd: number | null
+}
+
 /**
- * Persists one step's usage, priced, and hands back the row id.
+ * Persists one step's usage, priced, and hands back the row for display.
  *
  * Rows start unattached because every generation step runs before the article
  * exists; the id is carried by the editor and attached when it saves.
@@ -143,7 +153,7 @@ export async function recordUsage({
   step: AiStep
   usage: UsageInfo
   articleId?: string | null
-}): Promise<string | null> {
+}): Promise<UsageRecord | null> {
   try {
     const rates = await fetchRates()
     const cost = costOf(usage, rates)
@@ -160,10 +170,10 @@ export async function recordUsage({
         total_tokens: usage.totalTokens,
         cost_usd: cost,
       })
-      .select('id')
+      .select('id, step, model, prompt_tokens, completion_tokens, total_tokens, cost_usd')
       .single()
 
-    return data?.id ?? null
+    return (data as UsageRecord) ?? null
   } catch {
     return null
   }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { generateSEOMeta, AVAILABLE_MODELS } from '@/lib/openrouter'
+import { recordUsage, sumUsage, type UsageInfo, type UsageRecord } from '@/lib/ai-cost'
 
 export const maxDuration = 60
 
@@ -33,10 +34,14 @@ export async function POST(req: NextRequest) {
   const resolvedModel = model || settings?.default_model || AVAILABLE_MODELS[0].id
 
   try {
+    const seoCalls: UsageInfo[] = []
     let seoMeta = null
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const candidate = await generateSEOMeta(apiKey, resolvedModel, title, content, keywords)
+        const candidate = await generateSEOMeta(
+          apiKey, resolvedModel, title, content, keywords,
+          (u) => seoCalls.push(u),
+        )
         if (candidate.focusKeyphrase && candidate.keyphraseSynonyms && candidate.yoastTitle && candidate.slug) {
           seoMeta = candidate
           break
@@ -65,7 +70,20 @@ export async function POST(req: NextRequest) {
       if (!seoMeta.slug) seoMeta.slug = titleWords.slice(0, 8).join('-').slice(0, 60)
     }
 
-    return NextResponse.json({ seo: seoMeta })
+    const receipt: UsageRecord[] = []
+    if (seoCalls.length) {
+      const rec = await recordUsage({
+        supabase, userId: user.id, step: 'seo',
+        usage: sumUsage(seoCalls, resolvedModel),
+      })
+      if (rec) receipt.push(rec)
+    }
+
+    return NextResponse.json({
+      seo: seoMeta,
+      usage_ids: receipt.map((r) => r.id),
+      receipt,
+    })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'SEO generation failed'
     return NextResponse.json({ error: msg }, { status: 500 })

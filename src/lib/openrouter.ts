@@ -125,6 +125,7 @@ export async function generateArticle({
   instructions,
   knowledgeBase,
   wordCount = 1400,
+  onUsage,
 }: {
   apiKey: string
   model: string
@@ -135,6 +136,8 @@ export async function generateArticle({
   /** Free-text brief on the company/site the article is being written for. */
   knowledgeBase?: string
   wordCount?: number
+  /** Fires once after a successful call so the caller can bill the tokens. */
+  onUsage?: (u: UsageInfo) => void
 }): Promise<{
   content: string
   wordCount: number
@@ -180,6 +183,7 @@ Always output clean HTML without any markdown code blocks or document tags — j
   }
 
   const data = await response.json()
+  onUsage?.(readUsage(data, model))
   const rawContent: string = data.choices?.[0]?.message?.content || ''
 
   // Keep the meta description out of the body — it belongs in the Yoast field.
@@ -482,7 +486,8 @@ export async function generateSEOMeta(
   model: string,
   title: string,
   content: string,
-  keywords: string[]
+  keywords: string[],
+  onUsage?: (u: UsageInfo) => void,
 ): Promise<SEOMeta> {
   const plainContent = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
 
@@ -529,6 +534,7 @@ Return ONLY the JSON, no markdown, no explanation. Example format:
   }
 
   const data = await response.json()
+  onUsage?.(readUsage(data, model))
   const raw = data.choices?.[0]?.message?.content || '{}'
 
   // Strip markdown code fences that some models wrap around JSON

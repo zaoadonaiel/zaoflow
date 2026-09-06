@@ -21,6 +21,8 @@ import { formatInZone } from '@/lib/timezone'
 import { useUnsavedWarning } from '@/lib/use-unsaved-warning'
 import InstructionSets from '@/components/articles/InstructionSets'
 import SiteKnowledgeBase from '@/components/articles/SiteKnowledgeBase'
+import CostReceipt from '@/components/articles/CostReceipt'
+import type { UsageRecord } from '@/lib/ai-cost'
 import type { Article, Site, ArticleInstruction } from '@/types'
 import toast from 'react-hot-toast'
 
@@ -113,6 +115,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   const [committedSlot, setCommittedSlot] = useState<string | null>(null)
   // Cost rows for every generation on this article, claimed when it saves.
   const [usageIds, setUsageIds] = useState<string[]>([])
+  const [receipt, setReceipt] = useState<UsageRecord[]>([])
   // Set once the article has actually been written, so leaving afterwards is
   // silent rather than nagging.
   const [savedOnce, setSavedOnce] = useState(false)
@@ -129,6 +132,17 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   function collectUsage(ids?: string[] | string | null) {
     const list = Array.isArray(ids) ? ids : ids ? [ids] : []
     if (list.length) setUsageIds((prev) => [...prev, ...list])
+  }
+
+  function pushReceipt(records?: UsageRecord[] | null) {
+    if (!records?.length) return
+    setReceipt((prev) => {
+      // Endpoints return records fresh after insert, but on edit-load the same
+      // rows come back from GET. Guard against showing a call twice.
+      const seen = new Set(prev.map((r) => r.id))
+      const additions = records.filter((r) => r && r.id && !seen.has(r.id))
+      return additions.length ? [...prev, ...additions] : prev
+    })
   }
   // The body an accepted idea leaves behind, so a one-line brief sitting in
   // the editor is not mistaken for a written article. Cleared the moment
@@ -265,6 +279,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
         if (cancelled) return
         if (!a) { setNotFound(true); return }
         setSaved(a)
+        pushReceipt(d.usage)
         setSiteId(a.site_id || '')
         setTitle(a.title || '')
         setContent(a.content || '')
@@ -331,7 +346,13 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   // An accepted idea seeds the article: the title has to land in the title
   // field or "Generate with AI" has nothing to work from, and the description
   // becomes the opening brief in the editor.
-  function applyIdea(idea: { title: string; description: string; keywords: string[]; usageId?: string | null }) {
+  function applyIdea(idea: {
+    title: string
+    description: string
+    keywords: string[]
+    usageId?: string | null
+    receipt?: UsageRecord[] | null
+  }) {
     const hasContent = content.replace(/<[^>]*>/g, '').trim().length > 0
     if (hasContent && !confirm('Replace what you have written with this idea?')) return
 
@@ -340,6 +361,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
     setContent(seeded)
     setIdeaSeed(seeded)
     collectUsage(idea.usageId)
+    pushReceipt(idea.receipt)
     if (idea.keywords?.length && keywords.length === 0) setKeywords(idea.keywords)
     toast.success('Idea applied — hit Generate with AI to write it')
   }
@@ -366,6 +388,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Generation failed')
       collectUsage(data.usage_ids)
+      pushReceipt(data.receipt)
       setContent(data.content)
       setIdeaSeed(null)
       // Auto-fill SEO fields
@@ -422,6 +445,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'SEO generation failed')
       collectUsage(data.usage_ids)
+      pushReceipt(data.receipt)
       if (data.seo) {
         setFocusKeyphrase(data.seo.focusKeyphrase || '')
         setKeyphraseSynonyms(data.seo.keyphraseSynonyms || '')
@@ -1364,11 +1388,12 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
             initialPrompt={featuredImagePrompt}
             initialAlt={featuredImageAlt}
             defaultPrompt={title ? `Professional blog featured image for: ${title}` : ''}
-            onImageGenerated={(url, prompt, altText, ids) => {
+            onImageGenerated={(url, prompt, altText, ids, records) => {
               setFeaturedImageUrl(url)
               setFeaturedImagePrompt(prompt)
               setFeaturedImageAlt(altText)
               collectUsage(ids)
+              pushReceipt(records)
             }}
           />
 
@@ -1387,6 +1412,8 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
                 : <><ImageUp className="w-4 h-4" />Send image to WordPress</>}
             </button>
           )}
+
+          <CostReceipt records={receipt} />
         </div>
       </div>
 

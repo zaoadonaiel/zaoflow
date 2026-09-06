@@ -20,15 +20,16 @@ interface Props {
   initialPrompt?: string
   initialAlt?: string
   /**
-   * 4th arg is the usage row ids the image call produced, when the endpoint
-   * eventually returns them, so the parent can bill the cost against the
-   * article. Optional so it stays compatible with today's endpoint response.
+   * 4th arg is the usage row ids so the parent can bill against the article on
+   * save; the 5th is the full records so the receipt panel can itemise the
+   * call without a re-fetch. Both optional for compatibility.
    */
   onImageGenerated?: (
     url: string,
     prompt: string,
     altText: string,
     usageIds?: string[] | string | null,
+    records?: import('@/lib/ai-cost').UsageRecord[] | null,
   ) => void
 }
 
@@ -125,7 +126,7 @@ export default function ImageGenerator({
       setAltText(newAlt)
       setShowEdit(false)
       setEditText('')
-      onImageGenerated?.(data.imageUrl, data.prompt, newAlt)
+      onImageGenerated?.(data.imageUrl, data.prompt, newAlt, data.usage_ids, data.receipt)
       toast.success('Image generated!')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Image generation failed')

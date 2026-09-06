@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
     })
 
     // Retries are billed too, so the recorded cost is every attempt combined.
-    const usageId = calls.length
+    const record = calls.length
       ? await recordUsage({
           supabase, userId: user.id, step: 'idea',
           usage: sumUsage(calls, resolvedModel),
@@ -155,7 +155,8 @@ export async function POST(req: NextRequest) {
       avoided: avoidIdeas.length,
       /** Whether this came from a typed request or the model's own choosing. */
       from_topic: !!askedFor,
-      usage_id: usageId,
+      usage_id: record?.id ?? null,
+      receipt: record ? [record] : [],
     })
   } catch (err) {
     return NextResponse.json(

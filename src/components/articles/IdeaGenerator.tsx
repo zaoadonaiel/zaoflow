@@ -7,6 +7,7 @@ import ModelSelect from '@/components/ui/ModelSelect'
 import ConfirmSiteModal from '@/components/ui/ConfirmSiteModal'
 import Modal from '@/components/ui/Modal'
 import KnowledgeBaseModal from '@/components/sites/KnowledgeBaseModal'
+import type { UsageRecord } from '@/lib/ai-cost'
 import toast from 'react-hot-toast'
 
 const IDEA_MODEL_KEY = 'zaoflo_last_model_ideas'
@@ -17,6 +18,8 @@ interface Idea {
   keywords: string[]
   /** Cost row for the call that produced this, attached when the article saves. */
   usageId?: string | null
+  /** Full usage row so the receipt can itemise this line without a re-fetch. */
+  receipt?: UsageRecord[] | null
 }
 
 interface Props {
@@ -146,7 +149,7 @@ export default function IdeaGenerator({ siteId, siteName, onAccept, onChangeSite
         return
       }
       if (!res.ok) throw new Error(data.error || 'Could not generate an idea')
-      setIdea({ ...data.idea, usageId: data.usage_id })
+      setIdea({ ...data.idea, usageId: data.usage_id, receipt: data.receipt })
       setNewKeyword('')
       // Only worth saying when the model chose the subject: told what to write
       // about, an empty back catalogue is not news.

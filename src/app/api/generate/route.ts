@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { generateArticle, generateSEOMeta, AVAILABLE_MODELS } from '@/lib/openrouter'
+import { recordUsage, sumUsage, type UsageInfo, type UsageRecord } from '@/lib/ai-cost'
 
 export const maxDuration = 300
 
@@ -47,6 +48,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const articleCalls: UsageInfo[] = []
+    const seoCalls: UsageInfo[] = []
+
     const articleResult = await generateArticle({
       apiKey,
       model: resolvedModel,
@@ -55,13 +59,17 @@ export async function POST(req: NextRequest) {
       instructions,
       knowledgeBase,
       wordCount: 1600,
+      onUsage: (u) => articleCalls.push(u),
     })
 
     // Retry SEO generation up to 3 times — required fields must be non-empty
     let seoMeta = null
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const candidate = await generateSEOMeta(apiKey, resolvedModel, title, articleResult.content, keywords)
+        const candidate = await generateSEOMeta(
+          apiKey, resolvedModel, title, articleResult.content, keywords,
+          (u) => seoCalls.push(u),
+        )
         // Accept as soon as all key fields are present
         if (candidate.focusKeyphrase && candidate.keyphraseSynonyms && candidate.yoastTitle && candidate.slug) {
           seoMeta = candidate
@@ -100,7 +108,28 @@ export async function POST(req: NextRequest) {
       seoMeta.yoastMetaDescription = lifted.slice(0, 160)
     }
 
-    return NextResponse.json({ ...articleResult, seo: seoMeta })
+    const receipt: UsageRecord[] = []
+    if (articleCalls.length) {
+      const rec = await recordUsage({
+        supabase, userId: user.id, step: 'article',
+        usage: sumUsage(articleCalls, resolvedModel),
+      })
+      if (rec) receipt.push(rec)
+    }
+    if (seoCalls.length) {
+      const rec = await recordUsage({
+        supabase, userId: user.id, step: 'seo',
+        usage: sumUsage(seoCalls, resolvedModel),
+      })
+      if (rec) receipt.push(rec)
+    }
+
+    return NextResponse.json({
+      ...articleResult,
+      seo: seoMeta,
+      usage_ids: receipt.map((r) => r.id),
+      receipt,
+    })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Generation failed'
     return NextResponse.json({ error: msg }, { status: 500 })

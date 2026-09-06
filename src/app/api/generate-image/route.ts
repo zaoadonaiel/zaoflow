@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { generateImage, getDefaultSize } from '@/lib/image-gen'
+import { recordUsage, type UsageRecord } from '@/lib/ai-cost'
 
 export const maxDuration = 120
 
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { url: imageSource, b64 } = await generateImage({
+    const { url: imageSource, b64, usage } = await generateImage({
       apiKey: settings.openrouter_api_key,
       prompt,
       model,
@@ -99,7 +100,20 @@ export async function POST(req: NextRequest) {
       console.warn('generated_images insert failed:', libError.message)
     }
 
-    return NextResponse.json({ imageUrl: publicUrl, prompt, imageId: libRow?.id ?? null })
+    const receipt: UsageRecord[] = []
+    const rec = await recordUsage({
+      supabase, userId: user.id, step: 'image',
+      usage, articleId: articleId || null,
+    })
+    if (rec) receipt.push(rec)
+
+    return NextResponse.json({
+      imageUrl: publicUrl,
+      prompt,
+      imageId: libRow?.id ?? null,
+      usage_ids: receipt.map((r) => r.id),
+      receipt,
+    })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Image generation failed'
     return NextResponse.json({ error: msg }, { status: 500 })
