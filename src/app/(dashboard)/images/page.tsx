@@ -3,19 +3,29 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import {
-  Globe, Loader2, AlertTriangle, ImageIcon, Copy, Download, ExternalLink, X,
+  Globe, Loader2, AlertTriangle, ImageIcon, Copy, Download, ExternalLink, X, Wand2, Send,
 } from 'lucide-react'
 import Header from '@/components/layout/Header'
+import Modal from '@/components/ui/Modal'
 import { ALL_SITES } from '@/lib/site-filter'
 import { formatInZone } from '@/lib/timezone'
 import { money, fileSize, tokens } from '@/lib/format'
 import SitePills from '@/components/ui/SitePills'
 import ImageUploadButton from '@/components/ui/ImageUploadButton'
+import ImageGenerator from '@/components/articles/ImageGenerator'
+import SendToWordPressModal from '@/components/images/SendToWordPressModal'
 import type { GeneratedImage, Site } from '@/types'
 import toast from 'react-hot-toast'
 
 /** Images generated before their article was saved never got a site. */
 const UNASSIGNED = 'unassigned'
+
+/** Snapshot of what the standalone generator has produced in the current session. */
+interface GeneratedShot {
+  url: string
+  prompt: string
+  alt: string
+}
 
 export default function ImagesPage() {
   const [sites, setSites] = useState<Site[]>([])
@@ -24,6 +34,15 @@ export default function ImagesPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<GeneratedImage | null>(null)
+  // Standalone generator modal — same ImageGenerator the article page uses,
+  // without an article to attach the result to.
+  const [showGenerator, setShowGenerator] = useState(false)
+  // The image the generator has just produced in this session, held so the
+  // "Send to a WordPress site" panel below the generator has something to push.
+  const [lastShot, setLastShot] = useState<GeneratedShot | null>(null)
+  // A library image the user picked "Send to site" on. Any card can drive the
+  // same modal — one push flow, whether the image is fresh or from the archive.
+  const [sendingImage, setSendingImage] = useState<GeneratedImage | null>(null)
 
   useEffect(() => {
     fetch('/api/sites')
@@ -84,6 +103,16 @@ export default function ImagesPage() {
       <Header
         title="Image Library"
         subtitle="Every image you have generated, newest first"
+        actions={
+          <button
+            type="button"
+            onClick={() => { setLastShot(null); setShowGenerator(true) }}
+            className="flex items-center gap-2 bg-brand-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-brand-700 transition-colors"
+          >
+            <Wand2 className="w-4 h-4" />
+            Generate image
+          </button>
+        }
       />
 
       <div className="p-6">
@@ -170,6 +199,7 @@ export default function ImagesPage() {
                 image={img}
                 onZoom={() => setLightbox(img)}
                 onCopy={() => copyUrl(img.url)}
+                onSend={() => setSendingImage(img)}
               />
             ))}
           </div>
@@ -197,6 +227,79 @@ export default function ImagesPage() {
           />
         </div>
       )}
+
+      {/* Standalone generator — the same ImageGenerator that sits in the
+          article editor, opened here without an article to attach the result
+          to. Every generation lands in the library on the API side, so
+          closing the modal + a refresh is all that's needed to see it. */}
+      <Modal
+        open={showGenerator}
+        onClose={() => setShowGenerator(false)}
+        title="Generate an image"
+        maxWidth="max-w-2xl"
+      >
+        <div className="space-y-4">
+          <ImageGenerator
+            heading="New image"
+            siteId={siteId !== ALL_SITES && siteId !== UNASSIGNED ? siteId : undefined}
+            onImageGenerated={(url, prompt, alt) => {
+              setLastShot({ url, prompt, alt })
+              // Refresh in the background so the new image appears in the grid
+              // behind the modal as soon as the user closes it.
+              void fetchImages()
+            }}
+          />
+
+          {lastShot && (
+            <div className="rounded-xl border border-brand-200 dark:border-brand-900/40 bg-brand-50/40 dark:bg-brand-900/10 p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Send this image to a WordPress site
+                  </h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Uploads to the site&apos;s media library — nothing publishes
+                    on its own.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSendingImage({
+                    id: 'pending',
+                    url: lastShot.url,
+                    prompt: lastShot.prompt,
+                    created_at: new Date().toISOString(),
+                  } as GeneratedImage)}
+                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 transition-colors"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  Send to site
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {sendingImage && (
+        <SendToWordPressModal
+          open
+          onClose={() => setSendingImage(null)}
+          imageUrl={sendingImage.url}
+          fallbackAlt={sendingImage.prompt || lastShot?.alt || null}
+          sites={sites}
+          defaultSiteId={
+            sendingImage.site_id
+            || (siteId !== ALL_SITES && siteId !== UNASSIGNED ? siteId : null)
+          }
+          onSent={() => {
+            setSendingImage(null)
+            // Both the generator's "Send" and the card's "Send" close the
+            // outer generator modal too — one push, then back to the library.
+            setShowGenerator(false)
+          }}
+        />
+      )}
     </>
   )
 }
@@ -205,9 +308,10 @@ interface CardProps {
   image: GeneratedImage
   onZoom: () => void
   onCopy: () => void
+  onSend: () => void
 }
 
-function ImageCard({ image, onZoom, onCopy }: CardProps) {
+function ImageCard({ image, onZoom, onCopy, onSend }: CardProps) {
   const iconBtn =
     'p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors'
 
@@ -254,6 +358,9 @@ function ImageCard({ image, onZoom, onCopy }: CardProps) {
             {formatInZone(image.created_at, 'PST')}
           </span>
           <div className="flex items-center gap-0.5 flex-shrink-0">
+            <button onClick={onSend} className={iconBtn} title="Send to a WordPress site">
+              <Send className="w-3.5 h-3.5" />
+            </button>
             <button onClick={onCopy} className={iconBtn} title="Copy image URL">
               <Copy className="w-3.5 h-3.5" />
             </button>

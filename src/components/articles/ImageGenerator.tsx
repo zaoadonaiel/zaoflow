@@ -66,6 +66,12 @@ interface Props {
     usageIds?: string[] | string | null,
     records?: import('@/lib/ai-cost').UsageRecord[] | null,
   ) => void
+  /**
+   * Card heading, when the same generator is reused outside the article
+   * editor. Defaults to "Featured Image" for the article-form case where the
+   * component was born.
+   */
+  heading?: string
 }
 
 export default function ImageGenerator({
@@ -79,6 +85,7 @@ export default function ImageGenerator({
   initialPrompt = '',
   initialAlt = '',
   onImageGenerated,
+  heading = 'Featured Image',
 }: Props) {
   const [prompt, setPrompt] = useState(initialPrompt || defaultPrompt)
   // Start empty so the first client render matches the server HTML — reading
@@ -309,7 +316,7 @@ export default function ImageGenerator({
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 space-y-3">
         <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
           <Image className="w-4 h-4 text-gray-400" />
-          Featured Image
+          {heading}
         </h3>
 
         {imageUrl && (
