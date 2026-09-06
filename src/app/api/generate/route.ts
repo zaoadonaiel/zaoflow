@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { tasks } from '@trigger.dev/sdk/v3'
 import { createClient } from '@/lib/supabase/server'
-import { AVAILABLE_MODELS } from '@/lib/openrouter'
-import type { generateArticleTask } from '@/trigger/generate-article'
+import { generateArticle, generateSEOMeta, fillSeoBlanks, AVAILABLE_MODELS } from '@/lib/openrouter'
+import { recordUsage, sumUsage, type UsageInfo, type UsageRecord } from '@/lib/ai-cost'
 
-/**
- * Manual "Generate with AI" no longer runs the write inline. The row is
- * pinned to disk as status='generating' before the task is enqueued so the
- * browser closing (or the network dropping) does not lose the work — the
- * task finishes in the cloud and rewrites the same row to 'draft'.
- *
- * Response is { articleId, runId, publicAccessToken, status }. The client
- * uses articleId to bind the form to the new row (with a URL replace) and
- * uses runId + publicAccessToken to subscribe to progress in realtime.
- */
+export const maxDuration = 300
+
 export async function POST(req: NextRequest) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -34,105 +25,108 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { title, keywords = [], instructions, model, site_id, article_id, city, city_focus } = body
+  const { title, keywords = [], instructions, model, site_id, city, city_focus } = body
   const cleanedCity = typeof city === 'string' ? city.trim().slice(0, 100) : ''
   const cleanedFocus = city_focus === '100' || city_focus === '50' || city_focus === '10' ? city_focus : undefined
 
-  if (!title?.trim()) return NextResponse.json({ error: 'Title is required' }, { status: 400 })
-  if (!site_id) return NextResponse.json({ error: 'Site is required' }, { status: 400 })
+  if (!title?.trim()) {
+    return NextResponse.json({ error: 'Title is required' }, { status: 400 })
+  }
 
   const resolvedModel = model || settings?.default_model || AVAILABLE_MODELS[0].id
 
   // Reading the site's brief here rather than trusting the client not to
-  // impersonate someone else's knowledge base — RLS on the sites table is
-  // what makes this safe to hand off into the task payload.
-  const { data: site } = await supabase
-    .from('sites')
-    .select('knowledge_base')
-    .eq('id', site_id)
-    .eq('user_id', user.id)
-    .single()
-  const knowledgeBase = (site?.knowledge_base || '').trim()
-
-  // The row is either the one the client already has (an autosave that
-  // preceded generation, or an edit-mode article) or a fresh one we mint
-  // here. Either way it lives as 'generating' from the moment the task is
-  // enqueued so the article list can show it in-flight.
-  let articleId: string
-  if (article_id) {
-    const { error } = await supabase.from('articles').update({
-      title,
-      keywords,
-      ai_model: resolvedModel,
-      status: 'generating',
-      updated_at: new Date().toISOString(),
-    }).eq('id', article_id).eq('user_id', user.id)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    articleId = article_id
-  } else {
-    const { data: created, error } = await supabase.from('articles').insert({
-      user_id: user.id,
-      site_id,
-      title,
-      keywords,
-      ai_model: resolvedModel,
-      status: 'generating',
-    }).select('id').single()
-    if (error || !created) {
-      return NextResponse.json({ error: error?.message || 'Could not create draft' }, { status: 500 })
-    }
-    articleId = created.id
+  // impersonate someone else's knowledge base — RLS on the sites table is what
+  // makes this safe to send into the prompt.
+  let knowledgeBase = ''
+  if (site_id) {
+    const { data: site } = await supabase
+      .from('sites')
+      .select('knowledge_base')
+      .eq('id', site_id)
+      .eq('user_id', user.id)
+      .single()
+    knowledgeBase = (site?.knowledge_base || '').trim()
   }
 
-  // Handoff to Trigger.dev. Importing the task instance directly is the
-  // wrong pattern for backend code — the type-only import + tasks.trigger
-  // is what keeps this file from pulling the whole task graph into the
-  // Next.js bundle.
-  let handle
   try {
-    handle = await tasks.trigger<typeof generateArticleTask>('generate-article', {
-      articleId,
-      userId: user.id,
-      siteId: site_id,
+    const articleCalls: UsageInfo[] = []
+    const seoCalls: UsageInfo[] = []
+
+    const articleResult = await generateArticle({
+      apiKey,
+      model: resolvedModel,
       title,
       keywords,
       instructions,
-      model: resolvedModel,
-      apiKey,
       knowledgeBase,
+      wordCount: 1600,
       city: cleanedCity || undefined,
       cityFocus: cleanedFocus,
+      onUsage: (u) => articleCalls.push(u),
+    })
+
+    // Retry SEO generation up to 3 times — required fields must be non-empty
+    let seoMeta = null
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const candidate = await generateSEOMeta(
+          apiKey, resolvedModel, title, articleResult.content, keywords,
+          (u) => seoCalls.push(u),
+        )
+        // Accept as soon as all key fields are present
+        if (candidate.focusKeyphrase && candidate.keyphraseSynonyms && candidate.yoastTitle && candidate.slug) {
+          seoMeta = candidate
+          break
+        }
+        // If missing fields, merge what we have and retry
+        seoMeta = candidate
+      } catch {
+        // swallow and retry
+      }
+    }
+
+    // Hard fallback — derive from title/keywords if all retries failed or fields still empty
+    // Every Yoast field must be non-empty by the time this response lands —
+    // the fallbacks derive from the article being generated so a rescued
+    // field still reads as its own, and never as a placeholder.
+    seoMeta = fillSeoBlanks(seoMeta, {
+      title,
+      keywords,
+      contentText: articleResult.excerpt || '',
+    })
+
+    // A meta description the writer model put in the body was written for this
+    // exact article, so prefer it over the separately generated one.
+    const lifted = articleResult.extractedMetaDescription
+    if (lifted && lifted.length >= 50) {
+      seoMeta.yoastMetaDescription = lifted.slice(0, 160)
+    }
+
+    const receipt: UsageRecord[] = []
+    if (articleCalls.length) {
+      const rec = await recordUsage({
+        supabase, userId: user.id, step: 'article',
+        usage: sumUsage(articleCalls, resolvedModel),
+      })
+      if (rec) receipt.push(rec)
+    }
+    if (seoCalls.length) {
+      const rec = await recordUsage({
+        supabase, userId: user.id, step: 'seo',
+        usage: sumUsage(seoCalls, resolvedModel),
+      })
+      if (rec) receipt.push(rec)
+    }
+
+    return NextResponse.json({
+      ...articleResult,
+      seo: seoMeta,
+      usage_ids: receipt.map((r) => r.id),
+      receipt,
     })
   } catch (err) {
-    // A failure here (missing TRIGGER_SECRET_KEY, task not deployed, network
-    // error against Trigger.dev) would otherwise crash the handler and hand
-    // the client an empty body — which is what triggered the "Unexpected
-    // end of JSON input" the user hit. Roll the row out of 'generating' so
-    // it does not appear in-flight forever, and return a real JSON error.
-    const msg = err instanceof Error ? err.message : 'Could not enqueue the generation task'
-    await supabase.from('articles').update({
-      status: 'draft',
-      trigger_job_id: null,
-      updated_at: new Date().toISOString(),
-    }).eq('id', articleId).eq('user_id', user.id)
-    return NextResponse.json(
-      {
-        error: `Could not start generation: ${msg}. Check that Trigger.dev is deployed (npm run trigger:deploy) and TRIGGER_SECRET_KEY is set.`,
-      },
-      { status: 502 },
-    )
+    const msg = err instanceof Error ? err.message : 'Generation failed'
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
-
-  // Remember which run wrote the article so a reopen of the row can find
-  // the run again (for status polling or realtime resubscription).
-  await supabase.from('articles').update({
-    trigger_job_id: handle.id,
-  }).eq('id', articleId).eq('user_id', user.id)
-
-  return NextResponse.json({
-    articleId,
-    runId: handle.id,
-    publicAccessToken: handle.publicAccessToken,
-    status: 'generating',
-  })
 }
