@@ -196,6 +196,14 @@ export default function ScheduleCalendarModal({
   // picking a day out of it are the same decision seen from two sides.
   const [mode, setMode] = useState<'calendar' | 'rearrange'>('calendar')
 
+  // Every open lands on the calendar, never on Rearrange. The Schedule button
+  // means "pick a slot" — the queue re-orderer is a step from there, not the
+  // thing that greets you. Belt-and-braces against a future where the modal
+  // gets held mounted between opens and the last mode would otherwise stick.
+  useEffect(() => {
+    if (open) setMode('calendar')
+  }, [open])
+
   const resultIso = useMemo(
     () => zonedWallClockToUtc(selected, to24Hour(hour12, meridiem), minute, zoneById(tzId)).toISOString(),
     [selected, hour12, minute, meridiem, tzId]

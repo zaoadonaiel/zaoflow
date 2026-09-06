@@ -18,6 +18,26 @@ interface HistoryArticle {
   wp_post_url?: string; word_count?: number; created_at: string
 }
 
+/**
+ * The article's opening sentence, stripped of HTML.
+ *
+ * Cheap to compute here rather than server-side: `content` is already on the
+ * row, and the list only needs enough of it to preview.
+ */
+function openingSentence(html: string | undefined | null): string | null {
+  if (!html) return null
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!text) return null
+  const match = text.match(/^.+?[.!?](?:\s|$)/)
+  const snippet = (match?.[0] || text).trim()
+  return snippet.length > 160 ? snippet.slice(0, 160).trimEnd() + '…' : snippet
+}
+
+function modelName(id: string | undefined | null): string | null {
+  if (!id) return null
+  return AVAILABLE_MODELS.find((m) => m.id === id)?.name || id
+}
+
 const FREQUENCY_OPTIONS = [
   { value: 'daily', label: 'Every day', desc: 'Publish once per day' },
   { value: 'every_48h', label: 'Every 48 hours', desc: 'Publish every 2 days' },
@@ -350,93 +370,133 @@ export default function SchedulesPage() {
             </div>
           ) : (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-            {visibleUpcoming.map((article, i) => (
+            {visibleUpcoming.map((article, i) => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const siteName = (article as any).sites?.name || 'Unknown site'
+              const model = modelName(article.ai_model)
+              const preview = openingSentence(article.content)
+              const statusPill = article.is_paused ? (
+                <Badge variant="warning">
+                  <PauseCircle className="w-3 h-3 mr-1" />
+                  Paused
+                </Badge>
+              ) : (
+                <Badge variant="info">Scheduled</Badge>
+              )
+              return (
               <div
                 key={article.id}
-                className={`px-4 sm:px-5 py-3.5 flex items-start sm:items-center gap-3 sm:gap-4 hover:bg-gray-50/60 dark:hover:bg-gray-700/30 transition-colors ${
+                className={`hover:bg-gray-50/60 dark:hover:bg-gray-700/30 transition-colors ${
                   i > 0 ? 'border-t border-gray-50 dark:border-gray-700' : ''
                 }`}
               >
-                <div className="flex-shrink-0 w-12 sm:w-14 text-center">
-                  {article.scheduled_at ? (
-                    <>
-                      <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
-                        {format(new Date(article.scheduled_at), 'MMM')}
-                      </div>
-                      <div className="text-lg font-semibold text-gray-900 dark:text-white leading-tight">
-                        {format(new Date(article.scheduled_at), 'd')}
-                      </div>
-                      <div className="text-[10px] text-gray-400">
-                        {format(new Date(article.scheduled_at), 'h:mmaaa')}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-xs text-gray-300">—</div>
-                  )}
+                {/* Desktop: date column, then title/meta, then status + edit.
+                    The date beside the row is where a schedule is read, so it
+                    stays outside the title block when there is room for it. */}
+                <div className="hidden sm:flex items-center gap-4 px-5 py-3.5">
+                  <div className="flex-shrink-0 w-14 text-center">
+                    {article.scheduled_at ? (
+                      <>
+                        <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+                          {format(new Date(article.scheduled_at), 'MMM')}
+                        </div>
+                        <div className="text-lg font-semibold text-gray-900 dark:text-white leading-tight">
+                          {format(new Date(article.scheduled_at), 'd')}
+                        </div>
+                        <div className="text-[10px] text-gray-400">
+                          {format(new Date(article.scheduled_at), 'h:mmaaa')}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-xs text-gray-300">—</div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <Link
+                      href={`/articles/${article.id}`}
+                      className="block font-medium text-sm text-gray-900 dark:text-gray-100 hover:text-brand-600 dark:hover:text-brand-400 transition-colors line-clamp-1"
+                    >
+                      {article.title}
+                    </Link>
+                    <div className="flex items-center gap-x-3 gap-y-1 flex-wrap mt-1 text-xs text-gray-400 dark:text-gray-500">
+                      <span className="flex items-center gap-1 truncate min-w-0 max-w-full">
+                        <Globe className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">{siteName}</span>
+                      </span>
+                      {article.word_count ? (
+                        <span className="flex-shrink-0">{article.word_count.toLocaleString()} words</span>
+                      ) : null}
+                      {article.scheduled_at && (
+                        <span className="flex-shrink-0">
+                          {formatDistanceToNow(new Date(article.scheduled_at), { addSuffix: true })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex-shrink-0 flex items-center gap-2">
+                    {statusPill}
+                    <Link
+                      href={`/articles/${article.id}`}
+                      className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                      title="Edit article"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start gap-2">
+
+                {/* Mobile: one block spanning the row, top to bottom. The date
+                    that used to sit in its own column reads as a chip inline
+                    with the site name instead — the width belongs to the
+                    title, the model, and a first-sentence preview so a phone
+                    can actually scan what is queued. */}
+                <div className="sm:hidden px-4 py-3.5">
+                  <div className="flex items-start justify-between gap-3">
                     <Link
                       href={`/articles/${article.id}`}
                       className="block font-medium text-sm text-gray-900 dark:text-gray-100 hover:text-brand-600 dark:hover:text-brand-400 transition-colors line-clamp-2 flex-1 min-w-0"
                     >
                       {article.title}
                     </Link>
-                    {/* Status pill lives next to the title on mobile so the row
-                        does not stack an unrelated pill under the meta line. */}
-                    <div className="sm:hidden flex-shrink-0">
-                      {article.is_paused ? (
-                        <Badge variant="warning">
-                          <PauseCircle className="w-3 h-3 mr-1" />
-                          Paused
-                        </Badge>
-                      ) : (
-                        <Badge variant="info">Scheduled</Badge>
-                      )}
-                    </div>
+                    <div className="flex-shrink-0">{statusPill}</div>
                   </div>
-                  <div className="flex items-center gap-x-3 gap-y-1 flex-wrap mt-1 text-xs text-gray-400 dark:text-gray-500">
-                    <span className="flex items-center gap-1 truncate min-w-0 max-w-full">
-                      <Globe className="w-3 h-3 flex-shrink-0" />
-                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                      <span className="truncate">{(article as any).sites?.name || 'Unknown site'}</span>
-                    </span>
-                    {article.word_count ? (
-                      <span className="flex-shrink-0">{article.word_count.toLocaleString()} words</span>
-                    ) : null}
+                  <div className="flex items-center gap-x-3 gap-y-1 flex-wrap mt-1.5 text-xs text-gray-400 dark:text-gray-500">
                     {article.scheduled_at && (
-                      <span className="flex-shrink-0">
-                        {formatDistanceToNow(new Date(article.scheduled_at), { addSuffix: true })}
+                      <span className="inline-flex items-center gap-1 font-medium text-gray-500 dark:text-gray-400">
+                        <Calendar className="w-3 h-3 flex-shrink-0" />
+                        {format(new Date(article.scheduled_at), 'MMM d, h:mmaaa')}
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1 truncate min-w-0">
+                      <Globe className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate">{siteName}</span>
+                    </span>
+                    {model && (
+                      <span className="inline-flex items-center gap-1 truncate min-w-0">
+                        <Sparkles className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">{model}</span>
                       </span>
                     )}
                   </div>
-                </div>
-                <div className="hidden sm:flex flex-shrink-0 items-center gap-2">
-                  {article.is_paused ? (
-                    <Badge variant="warning">
-                      <PauseCircle className="w-3 h-3 mr-1" />
-                      Paused
-                    </Badge>
-                  ) : (
-                    <Badge variant="info">Scheduled</Badge>
+                  {preview && (
+                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
+                      {preview}
+                    </p>
                   )}
-                  <Link
-                    href={`/articles/${article.id}`}
-                    className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                    title="Edit article"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </Link>
+                  <div className="flex items-center gap-1 -ml-1.5 mt-2">
+                    <Link
+                      href={`/articles/${article.id}`}
+                      className="inline-flex items-center gap-1.5 px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                      title="Edit article"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Edit
+                    </Link>
+                  </div>
                 </div>
-                <Link
-                  href={`/articles/${article.id}`}
-                  className="sm:hidden flex-shrink-0 p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                  title="Edit article"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </Link>
               </div>
-            ))}
+              )
+            })}
           </div>
           )}
         </section>
