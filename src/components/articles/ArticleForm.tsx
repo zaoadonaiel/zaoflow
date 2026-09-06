@@ -110,9 +110,11 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   const [model, setModel] = useState('')
   const [seoModel, setSeoModel] = useState('')
 
-  // Restore whichever model was last used — preset or custom. Anything the
-  // picker saved is safe to reload; the previous "custom only" rule silently
-  // reset the choice every reload when a preset was picked.
+  // The model each picker opens on. Most-used wins — the model the user has
+  // run the most times for that step — with localStorage last-used as an
+  // immediate fallback while the fetch is in flight, and as a stand-in for
+  // users with no usage history yet.
+  const [preferredModels, setPreferredModels] = useState<Record<string, string>>({})
   useEffect(() => {
     try {
       const saved = localStorage.getItem(LAST_MODEL_KEY)
@@ -122,7 +124,20 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
       const savedSeo = localStorage.getItem(SEO_LAST_MODEL_KEY)
       if (savedSeo) setSeoModel(savedSeo)
     } catch {}
-  }, [])
+
+    // Loading an existing article skips the preference lookup — that row's
+    // ai_model is what should be shown, and it lands via the edit-mode fetch.
+    if (editId) return
+    fetch('/api/preferences/models')
+      .then((r) => r.json())
+      .then((d) => {
+        const m: Record<string, string> = d?.models || {}
+        setPreferredModels(m)
+        if (m.article) setModel(m.article)
+        if (m.seo) setSeoModel(m.seo)
+      })
+      .catch(() => {})
+  }, [editId])
   const [instructions, setInstructions] = useState('')
   const [instructionSetId, setInstructionSetId] = useState<string | null>(null)
   const [wpCategoryId, setWpCategoryId] = useState<number | ''>('')
@@ -1025,6 +1040,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
             siteName={selectedSite?.name || null}
             onAccept={applyIdea}
             onChangeSite={() => setShowSitePicker(true)}
+            defaultModel={preferredModels.idea}
           />
 
           {/* Matching the SEO / Yoast card treatment so this reads as the
@@ -1224,6 +1240,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
             initialPrompt={featuredImagePrompt}
             initialAlt={featuredImageAlt}
             defaultPrompt={title ? `Professional blog featured image for: ${title}` : ''}
+            defaultModel={preferredModels.image}
             onImageGenerated={(url, prompt, altText, ids, records) => {
               setFeaturedImageUrl(url)
               setFeaturedImagePrompt(prompt)

@@ -30,6 +30,11 @@ interface Props {
   onAccept: (idea: Idea) => void
   /** Opens the site picker, for when the confirmation says it is the wrong one. */
   onChangeSite?: () => void
+  /**
+   * The user's most-used idea model, preferred over localStorage's last-used
+   * so the picker opens on the habit rather than the last one-off.
+   */
+  defaultModel?: string
 }
 
 /**
@@ -38,8 +43,15 @@ interface Props {
  * Has its own model picker because idea generation is a cheap, short call —
  * there is no reason to spend the article model's rate on it.
  */
-export default function IdeaGenerator({ siteId, siteName, onAccept, onChangeSite }: Props) {
+export default function IdeaGenerator({ siteId, siteName, onAccept, onChangeSite, defaultModel }: Props) {
   const [model, setModel] = useState('')
+
+  // Most-used wins over localStorage last-used. Fires once when the parent
+  // hands us the preferred model — the picker still updates freely after
+  // that, since setModel from the picker will overwrite this.
+  useEffect(() => {
+    if (defaultModel) setModel(defaultModel)
+  }, [defaultModel])
   // The site is named back before anything is generated for it — see
   // ConfirmSiteModal. Only the first ask: turning down an idea and asking for
   // another is already inside a confirmed run.

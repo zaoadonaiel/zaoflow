@@ -38,6 +38,12 @@ interface Props {
   /** Site the article belongs to. Reserved for future per-site image settings. */
   siteId?: string
   defaultPrompt?: string
+  /**
+   * The user's most-used image model. Preferred over localStorage's
+   * last-used, so a fresh article opens on the habit rather than the last
+   * one-off pick.
+   */
+  defaultModel?: string
   /** Restores previously generated image state when re-opening an article. */
   initialImageUrl?: string
   initialPrompt?: string
@@ -61,6 +67,7 @@ export default function ImageGenerator({
   articleTitle = '',
   siteId,
   defaultPrompt = '',
+  defaultModel,
   initialImageUrl = '',
   initialPrompt = '',
   initialAlt = '',
@@ -113,15 +120,23 @@ export default function ImageGenerator({
     // of the two is chosen; both on or both off adds no constraint.
     ((allowRealistic ? 1 : 0) + (allowIllustration ? 1 : 0) === 1 ? 1 : 0)
 
-  // Restore the last-used model after hydration, not during render
+  // Most-used wins over localStorage last-used; the localStorage read is the
+  // fallback for users with no image-generation history yet. Hydration-safe:
+  // localStorage is not read during render, so the first client HTML matches
+  // the server.
   useEffect(() => {
+    if (defaultModel) {
+      setModel(defaultModel)
+      setSize(getDefaultSize(defaultModel))
+      return
+    }
     let saved = ''
     try { saved = localStorage.getItem(LAST_IMG_MODEL_KEY) || '' } catch {}
     if (saved) {
       setModel(saved)
       setSize(getDefaultSize(saved))
     }
-  }, [])
+  }, [defaultModel])
 
   // Update prompt when articleTitle changes and prompt is still default/empty
   useEffect(() => {
