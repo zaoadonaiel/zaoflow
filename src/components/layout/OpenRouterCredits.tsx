@@ -60,10 +60,10 @@ export default function OpenRouterCredits() {
     return (
       <Link
         href="/settings"
-        className="mx-3 mt-3 flex items-center gap-2 px-3 py-2 rounded-xl border border-dashed border-amber-300 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/10 text-xs text-amber-800 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
+        className="mt-4 flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-dashed border-amber-300 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/10 text-[11px] text-amber-800 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
         title="Add your OpenRouter API key in Settings"
       >
-        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+        <AlertCircle className="w-3 h-3 flex-shrink-0" />
         <span className="flex-1 truncate">Add OpenRouter key</span>
       </Link>
     )
@@ -76,7 +76,7 @@ export default function OpenRouterCredits() {
 
   return (
     <div
-      className={`mx-3 mt-3 flex items-center gap-2 px-3 py-2 rounded-xl border transition-colors ${
+      className={`mt-4 flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-colors ${
         low
           ? 'border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/15'
           : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
@@ -90,38 +90,33 @@ export default function OpenRouterCredits() {
       }
     >
       <Wallet
-        className={`w-4 h-4 flex-shrink-0 ${
+        className={`w-3 h-3 flex-shrink-0 ${
           low ? 'text-red-500' : 'text-brand-600 dark:text-brand-400'
         }`}
       />
-      <div className="flex-1 min-w-0">
-        <div className="text-[10px] uppercase tracking-wide font-medium text-gray-400 dark:text-gray-500 leading-tight">
+      <div className="flex-1 min-w-0 flex items-baseline gap-1.5">
+        <span className="text-[9px] uppercase tracking-wide font-medium text-gray-400 dark:text-gray-500">
           OpenRouter
-        </div>
-        <div
-          className={`text-sm font-semibold leading-tight truncate ${
-            low ? 'text-red-700 dark:text-red-400' : 'text-gray-900 dark:text-white'
+        </span>
+        <span
+          className={`text-[11px] font-semibold truncate ${
+            low ? 'text-red-700 dark:text-red-400' : 'text-gray-700 dark:text-gray-200'
           }`}
         >
           {state.kind === 'loading' && '···'}
           {state.kind === 'error' && '—'}
           {state.kind === 'ok' && balance !== null && formatDollars(balance)}
-          {state.kind === 'ok' && balance === null && (
-            <>
-              {formatDollars(usage!)}{' '}
-              <span className="text-[9pt] font-normal text-gray-500 dark:text-gray-400">(Balance)</span>
-            </>
-          )}
-        </div>
+          {state.kind === 'ok' && balance === null && formatDollars(usage!)}
+        </span>
       </div>
       <button
         type="button"
         onClick={() => load(true)}
         aria-label="Refresh OpenRouter balance"
         title="Refresh"
-        className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors p-1 rounded flex-shrink-0"
+        className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors p-0.5 rounded flex-shrink-0"
       >
-        <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+        <RefreshCw className={`w-3 h-3 ${refreshing ? 'animate-spin' : ''}`} />
       </button>
     </div>
   )

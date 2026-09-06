@@ -82,10 +82,6 @@ export default function Sidebar({ userEmail, userName }: SidebarProps) {
         </button>
       </div>
 
-      {/* Live OpenRouter balance so a generation that is about to fail for
-          "no credits" is visible before the click, not after. */}
-      <OpenRouterCredits />
-
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto">
         <div className="space-y-0.5">
@@ -122,6 +118,12 @@ export default function Sidebar({ userEmail, userName }: SidebarProps) {
             Settings
           </Link>
         </div>
+
+        {/* Live OpenRouter balance parked at the bottom of the nav so it
+            scrolls with everything else instead of being pinned under the
+            logo — a "no credits" state is still visible before a generation
+            click, just without eating a permanent slot. */}
+        <OpenRouterCredits />
       </nav>
 
       {/* User section */}
