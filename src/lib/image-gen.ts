@@ -22,10 +22,12 @@ const GPT_IMAGE_SIZES: SizeOption[] = [
 ]
 
 // 1920×1080 is not on the OpenAI native list — routed here for models like
-// Krea/Gemini/Qwen that accept an arbitrary width×height.
+// Krea/Gemini/Qwen that accept an arbitrary width×height. Listed first so
+// getDefaultSize picks it — HD widescreen is what the writer wants on the
+// featured-image slot.
 const DEFAULT_SIZES: SizeOption[] = [
-  { value: '1024x1024', label: 'Square — 1024×1024' },
   { value: '1920x1080', label: 'Widescreen — 1920×1080 (HD)' },
+  { value: '1024x1024', label: 'Square — 1024×1024' },
 ]
 
 const MODEL_SIZES: Record<string, SizeOption[]> = {
