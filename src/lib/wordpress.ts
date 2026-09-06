@@ -325,6 +325,10 @@ export async function publishPost({
     title: post.title,
     content: post.content,
     status: post.status,
+    // Every post this app publishes has comments off. Kept on the create *and*
+    // update path so re-publishing an existing post with comments left open in
+    // WP also closes them.
+    comment_status: 'closed',
   }
   if (post.excerpt) body.excerpt = post.excerpt
   if (post.dateGmt) body.date_gmt = toWpGmt(post.dateGmt)
@@ -640,7 +644,7 @@ export async function updatePost({
   // `post` is the camelCase shape used across this file; WordPress wants its own
   // field names, so translate the ones we actually send on an update.
   const { dateGmt, featuredMediaId, ...rest } = post
-  const body: Record<string, unknown> = { ...rest }
+  const body: Record<string, unknown> = { ...rest, comment_status: 'closed' }
   if (dateGmt) {
     body.date_gmt = toWpGmt(dateGmt)
     delete body.date
