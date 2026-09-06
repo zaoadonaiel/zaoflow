@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { generateArticleIdea, AVAILABLE_MODELS, type RejectedIdea } from '@/lib/openrouter'
-import { recordUsage, sumUsage, type UsageInfo } from '@/lib/ai-cost'
+import { recordUsage, sumUsage, webSearchReceiptRow, type UsageInfo, type UsageRecord } from '@/lib/ai-cost'
 import { isNoRowsError } from '@/lib/knowledge-base'
 import { MAX_ARCHIVED_IN_PROMPT } from '@/lib/idea-archive'
 
@@ -152,6 +152,12 @@ export async function POST(req: NextRequest) {
         })
       : null
 
+    const receipt: UsageRecord[] = record ? [record] : []
+    if (web_search === true) {
+      const webRow = webSearchReceiptRow(calls.length, `idea-${Date.now()}`)
+      if (webRow) receipt.push(webRow)
+    }
+
     return NextResponse.json({
       idea,
       compared_against: titles.length,
@@ -159,7 +165,7 @@ export async function POST(req: NextRequest) {
       /** Whether this came from a typed request or the model's own choosing. */
       from_topic: !!askedFor,
       usage_id: record?.id ?? null,
-      receipt: record ? [record] : [],
+      receipt,
     })
   } catch (err) {
     return NextResponse.json(

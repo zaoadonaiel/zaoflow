@@ -7,7 +7,37 @@
 
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models'
 
-export type AiStep = 'idea' | 'article' | 'seo' | 'image'
+/** Persistable steps — the DB check constraint on ai_usage.step accepts these. */
+export type PersistedStep = 'idea' | 'article' | 'seo' | 'image'
+/** Everything a receipt row can carry, including the client-only web search line. */
+export type AiStep = PersistedStep | 'web_search'
+
+/**
+ * OpenRouter's `web` plugin bills via Exa: $4 per 1,000 results, default 5
+ * results per call. That's the flat per-call estimate we show on the receipt.
+ * Not persisted to ai_usage — the DB check constraint doesn't know this step
+ * and the stats page doesn't need to break it out.
+ */
+export const WEB_SEARCH_COST_PER_CALL = 0.02
+
+/**
+ * Synthetic UsageRecord for the receipt when live web search was on. Sits
+ * alongside the persisted rows without going through recordUsage — its cost is
+ * a flat estimate, not a token calculation, and it never carries an article id
+ * back to Supabase.
+ */
+export function webSearchReceiptRow(calls: number, keySuffix: string): UsageRecord | null {
+  if (calls <= 0) return null
+  return {
+    id: `web:${keySuffix}`,
+    step: 'web_search',
+    model: 'openrouter/web',
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    cost_usd: calls * WEB_SEARCH_COST_PER_CALL,
+  }
+}
 
 export interface UsageInfo {
   model: string
@@ -150,7 +180,7 @@ export async function recordUsage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any
   userId: string
-  step: AiStep
+  step: PersistedStep
   usage: UsageInfo
   articleId?: string | null
 }): Promise<UsageRecord | null> {

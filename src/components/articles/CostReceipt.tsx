@@ -9,6 +9,7 @@ const STEP_LABEL: Record<UsageRecord['step'], string> = {
   article: 'Article body',
   seo: 'SEO / Yoast',
   image: 'Image',
+  web_search: 'Live web search',
 }
 
 interface Props {

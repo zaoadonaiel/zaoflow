@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { generateArticle, generateSEOMeta, fillSeoBlanks, AVAILABLE_MODELS } from '@/lib/openrouter'
-import { recordUsage, sumUsage, type UsageInfo, type UsageRecord } from '@/lib/ai-cost'
+import { recordUsage, sumUsage, webSearchReceiptRow, type UsageInfo, type UsageRecord } from '@/lib/ai-cost'
 import { resolveLengthTarget } from '@/lib/article-length'
 
 export const maxDuration = 300
@@ -136,6 +136,13 @@ export async function POST(req: NextRequest) {
         usage: sumUsage(seoCalls, resolvedModel),
       })
       if (rec) receipt.push(rec)
+    }
+
+    // The web plugin only ran on the article calls (SEO doesn't use it). One
+    // flat charge per call, so a length-retry counts twice.
+    if (web_search === true) {
+      const webRow = webSearchReceiptRow(articleCalls.length, `article-${Date.now()}`)
+      if (webRow) receipt.push(webRow)
     }
 
     return NextResponse.json({
