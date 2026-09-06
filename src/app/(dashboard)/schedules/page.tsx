@@ -7,6 +7,7 @@ import Header from '@/components/layout/Header'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import ModelSelect from '@/components/ui/ModelSelect'
+import ScheduleCalendarOverview from '@/components/schedules/ScheduleCalendarOverview'
 import { AVAILABLE_MODELS } from '@/lib/openrouter'
 import type { Article, Schedule, Site } from '@/types'
 import { format, formatDistanceToNow } from 'date-fns'
@@ -80,6 +81,9 @@ export default function SchedulesPage() {
   // as it does for every other option.
   const [upcomingFilterSiteId, setUpcomingFilterSiteId] = useState<string>('all')
   const [upcomingFilterOpen, setUpcomingFilterOpen] = useState(false)
+  // Whichever site is having its publishing calendar looked at, so the same
+  // grid + list modal the /sites page uses is one click away here too.
+  const [calendarFor, setCalendarFor] = useState<Site | null>(null)
 
   function addTimeSlot() {
     setForm((f) => ({ ...f, times_of_day: [...f.times_of_day, '12:00'] }))
@@ -339,14 +343,28 @@ export default function SchedulesPage() {
                 {activeSite ? activeSite.name : 'All sites'}
               </button>
               {activeSite && (
-                <button
-                  type="button"
-                  onClick={() => setUpcomingFilterSiteId('all')}
-                  aria-label="Clear site filter"
-                  className="flex items-center justify-center w-7 h-7 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setUpcomingFilterSiteId('all')}
+                    aria-label="Clear site filter"
+                    className="flex items-center justify-center w-7 h-7 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                  {/* The picked site's grid/list calendar — same modal the
+                      /sites page opens, so a filter and a calendar view of
+                      that filter live one click apart. */}
+                  <button
+                    type="button"
+                    onClick={() => setCalendarFor(activeSite)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-600 dark:text-gray-300 hover:text-brand-600 dark:hover:text-brand-400 hover:border-brand-400 dark:hover:border-brand-500 transition-colors"
+                    title={`Open the publishing calendar for ${activeSite.name}`}
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    Calendar
+                  </button>
+                </>
               )}
               <Link href="/articles?status=scheduled" className="text-xs font-medium text-brand-600 hover:text-brand-700 ml-auto sm:ml-1">
                 View all →
@@ -560,11 +578,28 @@ export default function SchedulesPage() {
                 {/* Meta chips — wrap freely on mobile so long times/model
                     names do not push the row out of the viewport. */}
                 <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-gray-500 dark:text-gray-400 mb-2">
-                  <span className="flex items-center gap-1.5 min-w-0">
-                    <Globe className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                    <span className="truncate">{(schedule as any).sites?.name || 'Unknown site'}</span>
-                  </span>
+                  {(() => {
+                    const scheduleSite =
+                      sites.find((s) => s.id === schedule.site_id)
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      || (((schedule as any).sites as Site | undefined) ?? null)
+                    const siteName = scheduleSite?.name || 'Unknown site'
+                    // The site chip is a button rather than a plain span so
+                    // clicking a site opens its publishing calendar — same
+                    // grid + list the /sites page shows for it.
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => scheduleSite && setCalendarFor(scheduleSite)}
+                        disabled={!scheduleSite}
+                        title={scheduleSite ? `Open the publishing calendar for ${siteName}` : 'This schedule is not linked to a known site'}
+                        className="flex items-center gap-1.5 min-w-0 rounded-md px-1 -mx-1 text-left hover:text-brand-600 dark:hover:text-brand-400 hover:bg-brand-50/60 dark:hover:bg-brand-900/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-500"
+                      >
+                        <Globe className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                        <span className="truncate">{siteName}</span>
+                      </button>
+                    )
+                  })()}
                   <span className="flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                     {FREQUENCY_OPTIONS.find((f) => f.value === schedule.frequency)?.label}
@@ -621,6 +656,23 @@ export default function SchedulesPage() {
                     {expandedId === schedule.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                     {expandedId === schedule.id ? 'Hide history' : 'History'}
                   </button>
+                  {(() => {
+                    const scheduleSite =
+                      sites.find((s) => s.id === schedule.site_id)
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      || (((schedule as any).sites as Site | undefined) ?? null)
+                    if (!scheduleSite) return null
+                    return (
+                      <button
+                        onClick={() => setCalendarFor(scheduleSite)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-colors"
+                        title={`Open the publishing calendar for ${scheduleSite.name}`}
+                      >
+                        <Calendar className="w-3.5 h-3.5" />
+                        Calendar
+                      </button>
+                    )
+                  })()}
                   <button
                     onClick={() => deleteSchedule(schedule.id, schedule.name)}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-auto"
@@ -882,6 +934,22 @@ export default function SchedulesPage() {
           })}
         </div>
       </Modal>
+
+      {/* The same grid + list calendar the /sites page opens on a site card,
+          reused here so a schedule can be checked and rearranged next to its
+          own row. Refreshes the Upcoming list on close so a drag made inside
+          the modal shows up straight away on the page behind it. */}
+      {calendarFor && (
+        <ScheduleCalendarOverview
+          key={calendarFor.id}
+          open
+          onClose={() => setCalendarFor(null)}
+          siteId={calendarFor.id}
+          siteName={calendarFor.name}
+          sites={sites}
+          onChanged={fetchData}
+        />
+      )}
     </div>
   )
 }
