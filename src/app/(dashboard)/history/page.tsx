@@ -35,40 +35,40 @@ export default async function HistoryPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">History</h1>
-        <p className="text-sm text-gray-500 mt-1">Publishing history and performance</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">History</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Publishing history and performance</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {stats.map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="bg-white rounded-2xl border border-gray-100 p-5">
+          <div key={label} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm text-gray-500">{label}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${color}`}>
                 <Icon className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-3xl font-bold text-gray-900">{value}</p>
+            <p className="text-3xl font-bold text-gray-900 dark:text-white">{value}</p>
           </div>
         ))}
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-900">Publish Log</h2>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+          <h2 className="font-semibold text-gray-900 dark:text-white">Publish Log</h2>
         </div>
 
         {!logs || logs.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
-              <BarChart3 className="w-6 h-6 text-gray-400" />
+            <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center">
+              <BarChart3 className="w-6 h-6 text-gray-400 dark:text-gray-500" />
             </div>
-            <p className="text-sm text-gray-500">No publish events yet</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">No publish events yet</p>
           </div>
         ) : (
           <div>
-            <div className="px-6 py-3 border-b border-gray-50">
-              <div className="grid grid-cols-12 text-xs font-medium text-gray-400 uppercase tracking-wide gap-4">
+            <div className="px-6 py-3 border-b border-gray-50 dark:border-gray-700">
+              <div className="grid grid-cols-12 text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide gap-4">
                 <div className="col-span-4">Article</div>
                 <div className="col-span-2">Site</div>
                 <div className="col-span-2">Status</div>
@@ -77,31 +77,31 @@ export default async function HistoryPage() {
               </div>
             </div>
             {logs.map((log) => (
-              <div key={log.id} className="px-6 py-4 border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
+              <div key={log.id} className="px-6 py-4 border-b border-gray-50 dark:border-gray-700 last:border-0 hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors">
                 <div className="grid grid-cols-12 gap-4 items-center">
                   <div className="col-span-4">
                     {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                    <p className="text-sm font-medium text-gray-900 truncate">{(log as any).articles?.title || 'Unknown'}</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{(log as any).articles?.title || 'Unknown'}</p>
                     {log.error_message && (
-                      <p className="text-xs text-red-500 mt-0.5 truncate">{log.error_message}</p>
+                      <p className="text-xs text-red-500 dark:text-red-400 mt-0.5 truncate">{log.error_message}</p>
                     )}
                   </div>
                   <div className="col-span-2">
                     {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                    <span className="text-sm text-gray-500">{(log as any).sites?.name || '—'}</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">{(log as any).sites?.name || '—'}</span>
                   </div>
                   <div className="col-span-2">
                     <Badge variant={statusToBadgeVariant(log.status)}>{log.status}</Badge>
                   </div>
                   <div className="col-span-3">
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-gray-400 dark:text-gray-500">
                       {format(new Date(log.created_at), 'MMM d, yyyy h:mm a')}
                     </span>
                   </div>
                   <div className="col-span-1">
                     {log.wp_post_url && (
                       <a href={log.wp_post_url} target="_blank" rel="noopener noreferrer"
-                        className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors inline-flex">
+                        className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors inline-flex">
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                     )}
