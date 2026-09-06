@@ -148,6 +148,12 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   // not looked at again, and writing for the wrong one is only discovered
   // after it has been paid for.
   const [confirmGenerate, setConfirmGenerate] = useState(false)
+  // The site the user has already confirmed in this workflow session. Once
+  // said "yes" to on any of the AI actions (idea generation or article
+  // generation), we do not ask again for the same site — it stays valid
+  // until they switch site, at which point we ask afresh.
+  const [siteConfirmedFor, setSiteConfirmedFor] = useState<string | null>(null)
+  useEffect(() => { setSiteConfirmedFor(null) }, [siteId])
   const [showCategoryPicker, setShowCategoryPicker] = useState(false)
   const [categoryQuery, setCategoryQuery] = useState('')
   const [publishMode, setPublishMode] = useState<PublishMode>('draft')
@@ -1041,6 +1047,8 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
             onAccept={applyIdea}
             onChangeSite={() => setShowSitePicker(true)}
             defaultModel={preferredModels.idea}
+            siteConfirmed={siteConfirmedFor === siteId}
+            onSiteConfirmed={() => setSiteConfirmedFor(siteId)}
           />
 
           {/* Matching the SEO / Yoast card treatment so this reads as the
@@ -1057,6 +1065,10 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
                 <button
                   onClick={() => {
                     if (!siteId) { toast.error('Select a site before generating'); return }
+                    // Already confirmed this site earlier in the session —
+                    // asking again would just be a step the user learns to
+                    // dismiss reflexively.
+                    if (siteConfirmedFor === siteId) { handleGenerate(); return }
                     setConfirmGenerate(true)
                   }}
                   disabled={generating || !title.trim()}
@@ -1309,7 +1321,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
         siteName={selectedSite?.name || null}
         onClose={() => setConfirmGenerate(false)}
         onChange={() => { setConfirmGenerate(false); setShowSitePicker(true) }}
-        onConfirm={() => { setConfirmGenerate(false); handleGenerate() }}
+        onConfirm={() => { setConfirmGenerate(false); setSiteConfirmedFor(siteId); handleGenerate() }}
       />
 
       <Modal

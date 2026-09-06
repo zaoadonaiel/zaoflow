@@ -35,6 +35,10 @@ interface Props {
    * so the picker opens on the habit rather than the last one-off.
    */
   defaultModel?: string
+  /** True when the parent has already asked "generate for X?" this session. */
+  siteConfirmed?: boolean
+  /** Told when the user confirms in this generator so siblings can skip it. */
+  onSiteConfirmed?: () => void
 }
 
 /**
@@ -43,7 +47,10 @@ interface Props {
  * Has its own model picker because idea generation is a cheap, short call —
  * there is no reason to spend the article model's rate on it.
  */
-export default function IdeaGenerator({ siteId, siteName, onAccept, onChangeSite, defaultModel }: Props) {
+export default function IdeaGenerator({
+  siteId, siteName, onAccept, onChangeSite, defaultModel,
+  siteConfirmed = false, onSiteConfirmed,
+}: Props) {
   const [model, setModel] = useState('')
 
   // Most-used wins over localStorage last-used. Fires once when the parent
@@ -220,7 +227,13 @@ export default function IdeaGenerator({ siteId, siteName, onAccept, onChangeSite
 
         {!idea && (
           <button
-            onClick={() => setConfirming(true)}
+            onClick={() => {
+              // Confirmation already given for this site this session; skip
+              // the modal and go straight to the generation the user asked
+              // for. See ArticleForm's siteConfirmedFor.
+              if (siteConfirmed) { fetchIdea(); return }
+              setConfirming(true)
+            }}
             disabled={loading || !siteId}
             className="w-full sm:w-auto flex items-center justify-center gap-2 bg-amber-500 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50 flex-shrink-0"
           >
@@ -353,7 +366,7 @@ export default function IdeaGenerator({ siteId, siteName, onAccept, onChangeSite
         siteName={siteName || null}
         onClose={() => setConfirming(false)}
         onChange={() => { setConfirming(false); onChangeSite?.() }}
-        onConfirm={() => { setConfirming(false); fetchIdea() }}
+        onConfirm={() => { setConfirming(false); onSiteConfirmed?.(); fetchIdea() }}
       />
 
       {editingKnowledge && (
