@@ -15,9 +15,7 @@ interface Credits {
 const POLL_MS = 60_000
 
 function formatDollars(v: number): string {
-  if (v >= 1000) return `$${v.toFixed(0)}`
-  if (v >= 10) return `$${v.toFixed(1)}`
-  return `$${v.toFixed(2)}`
+  return `$${v.toFixed(4)}`
 }
 
 export default function OpenRouterCredits() {
