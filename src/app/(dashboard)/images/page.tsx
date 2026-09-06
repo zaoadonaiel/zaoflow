@@ -91,12 +91,32 @@ export default function ImagesPage() {
             same way in both places. */}
         <div className="mb-5">
           <div className="flex items-start justify-between gap-3">
-            <SitePills
-              sites={sites}
-              value={siteId}
-              onChange={setSiteId}
-              extra={[{ id: UNASSIGNED, name: 'No site' }]}
-            />
+            <div className="flex-1 min-w-0">
+              {/* Pills wrap ungracefully on a phone; the same choices fit as a
+                  native select on small screens and stay as pills on desktop. */}
+              <div className="sm:hidden relative">
+                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <select
+                  value={siteId}
+                  onChange={(e) => setSiteId(e.target.value)}
+                  className="w-full appearance-none pl-10 pr-8 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent cursor-pointer"
+                >
+                  <option value={ALL_SITES}>All sites</option>
+                  {sites.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                  <option value={UNASSIGNED}>No site</option>
+                </select>
+              </div>
+              <div className="hidden sm:block">
+                <SitePills
+                  sites={sites}
+                  value={siteId}
+                  onChange={setSiteId}
+                  extra={[{ id: UNASSIGNED, name: 'No site' }]}
+                />
+              </div>
+            </div>
             {/* The library is not only what the models made — a photograph or a
                 client's own artwork belongs in the same place, and is pickable
                 for an article from there like anything else. */}
