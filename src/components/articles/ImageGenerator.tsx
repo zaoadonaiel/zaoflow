@@ -209,16 +209,17 @@ export default function ImageGenerator({
         </div>
       )}
 
-      {/* Sidebar card — compact preview + trigger; every real control lives
-          in the modal so the sidebar stays scannable. */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+      {/* Sidebar card — prompt + toggles are inline so mobile users can drive
+          image generation without ever opening the modal. The modal is kept for
+          model/size selection, the library, and post-generation edits. */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
           <Image className="w-4 h-4 text-gray-400" />
           Featured Image
         </h3>
 
-        {imageUrl ? (
-          <div className="space-y-2">
+        {imageUrl && (
+          <>
             <div
               className="relative rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 cursor-zoom-in group"
               onClick={() => setLightbox(true)}
@@ -240,25 +241,103 @@ export default function ImageGenerator({
                 className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
+          </>
+        )}
+
+        <div>
+          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+            {imageUrl ? 'New prompt' : 'Prompt'}
+          </label>
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Describe the image you want"
+            rows={3}
+            className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+          />
+        </div>
+
+        {/* Same grid as the modal, kept inline so mobile isn't hunting for it.
+            grid-cols-2 stays 2 columns at every width — the four buttons make
+            two rows even on the narrowest phone. */}
+        <div>
+          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Allow in image</label>
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={() => setShowModal(true)}
-              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              onClick={() => setAllowPeople((v) => !v)}
+              aria-pressed={allowPeople}
+              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                allowPeople
+                  ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
+                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
+              }`}
             >
-              <Wand2 className="w-3.5 h-3.5" />
-              Change image
+              <Users className="w-3.5 h-3.5" />
+              People {allowPeople ? 'on' : 'off'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setAllowWords((v) => !v)}
+              aria-pressed={allowWords}
+              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                allowWords
+                  ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
+                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
+              }`}
+            >
+              <Type className="w-3.5 h-3.5" />
+              Words {allowWords ? 'on' : 'off'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setAllowRealistic((v) => !v)}
+              aria-pressed={allowRealistic}
+              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                allowRealistic
+                  ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
+                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
+              }`}
+            >
+              <Camera className="w-3.5 h-3.5" />
+              Realistic {allowRealistic ? 'on' : 'off'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setAllowIllustration((v) => !v)}
+              aria-pressed={allowIllustration}
+              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                allowIllustration
+                  ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
+                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
+              }`}
+            >
+              <Palette className="w-3.5 h-3.5" />
+              Illustration {allowIllustration ? 'on' : 'off'}
             </button>
           </div>
-        ) : (
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => generate()}
+            disabled={generating}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-brand-600 text-white text-xs font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
+          >
+            {generating
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Generating…</>
+              : <><Wand2 className="w-3.5 h-3.5" />{imageUrl ? 'Regenerate' : 'Generate'}</>}
+          </button>
           <button
             type="button"
             onClick={() => setShowModal(true)}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-brand-600 text-white text-xs font-medium hover:bg-brand-700 transition-colors"
+            className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           >
             <Wand2 className="w-3.5 h-3.5" />
-            Generate featured image
+            More
           </button>
-        )}
+        </div>
       </div>
 
       {/* Full-fidelity editor — model, size, prompt, toggles, preview, edit. */}
