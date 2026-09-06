@@ -105,6 +105,7 @@ export default function ImageGenerator({
   const [allowIllustration, setAllowIllustration] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
+  const [customLocation, setCustomLocation] = useState('')
   const altRef = useRef<HTMLInputElement>(null)
 
   // Sync the location filter to the article's city. Overwrites any manual
@@ -631,6 +632,28 @@ export default function ImageGenerator({
               }
               value={filters.location}
               onSelect={(v) => setFilter('location', v)}
+            />
+            <input
+              type="text"
+              value={customLocation}
+              onChange={(e) => setCustomLocation(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  const v = customLocation.trim()
+                  if (!v) return
+                  setFilters((prev) => ({ ...prev, location: v }))
+                  setCustomLocation('')
+                }
+              }}
+              onBlur={() => {
+                const v = customLocation.trim()
+                if (!v) return
+                setFilters((prev) => ({ ...prev, location: v }))
+                setCustomLocation('')
+              }}
+              placeholder="Or type a city…"
+              className="mt-2 w-full sm:max-w-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-xs text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
           </FilterSection>
           <FilterSection title="Setting">
