@@ -1,13 +1,36 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Image, Images, Loader2, RefreshCw, Download, Send, Wand2, X, ZoomIn, Users, Type, Camera, Palette } from 'lucide-react'
+import { Image, Images, Loader2, RefreshCw, Download, Send, Wand2, X, ZoomIn, Users, Type, Camera, Palette, SlidersHorizontal, Eraser } from 'lucide-react'
 import { getSizesForModel, getDefaultSize } from '@/lib/image-gen'
 import ImageModelSelect, { LAST_IMG_MODEL_KEY } from '@/components/ui/ImageModelSelect'
 import MediaLibraryModal from '@/components/articles/MediaLibraryModal'
 import Modal from '@/components/ui/Modal'
 import type { GeneratedImage } from '@/types'
 import toast from 'react-hot-toast'
+
+const GROUP_SIZES = ['One person', 'More than one person'] as const
+const AGE_RANGES = ['20-30', '30-40', '40-50', '50-60', '60-70', '70+'] as const
+const EXPRESSIONS = ['Serious', 'Laughing', 'Smiling', 'Surprised', 'Shocked', 'Sad', 'Stressed'] as const
+const ERAS = ['Modern', "Early 2000's", '1950s', '1960-1970', '1980s', '1990s'] as const
+const CLASSES = ['Professional', 'Middle-class', 'Luxury'] as const
+const LOCATIONS = ['New York', 'Hawaii', 'Miami', 'Los Angeles', 'Atlanta', 'Puerto Rico', 'Midwest', 'Chicago'] as const
+const SETTINGS = ['Indoor', 'Outdoor'] as const
+
+interface Filters {
+  groupSize: string | null
+  ageRange: string | null
+  expression: string | null
+  era: string | null
+  socioClass: string | null
+  location: string | null
+  setting: string | null
+}
+
+const EMPTY_FILTERS: Filters = {
+  groupSize: null, ageRange: null, expression: null, era: null,
+  socioClass: null, location: null, setting: null,
+}
 
 interface Props {
   articleId?: string
@@ -66,7 +89,29 @@ export default function ImageGenerator({
   // so a stray double-tap does not produce a contradictory prompt.
   const [allowRealistic, setAllowRealistic] = useState(true)
   const [allowIllustration, setAllowIllustration] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
   const altRef = useRef<HTMLInputElement>(null)
+
+  function setFilter<K extends keyof Filters>(key: K, value: Filters[K]) {
+    // Clicking the active chip clears it — "choose one" means one, or none.
+    setFilters((prev) => ({ ...prev, [key]: prev[key] === value ? null : value }))
+  }
+
+  function clearFilters() {
+    setFilters(EMPTY_FILTERS)
+    setAllowPeople(false)
+    setAllowWords(false)
+    setAllowRealistic(true)
+    setAllowIllustration(false)
+  }
+
+  const activeFilterCount =
+    (Object.values(filters).filter(Boolean).length) +
+    (allowPeople ? 1 : 0) + (allowWords ? 1 : 0) +
+    // Realistic/Illustration are only "on" (i.e., filtering) when exactly one
+    // of the two is chosen; both on or both off adds no constraint.
+    ((allowRealistic ? 1 : 0) + (allowIllustration ? 1 : 0) === 1 ? 1 : 0)
 
   // Restore the last-used model after hydration, not during render
   useEffect(() => {
@@ -92,8 +137,22 @@ export default function ImageGenerator({
 
   // Toggled off means the model has to actively avoid the thing, not just be
   // asked to leave it out — negative constraints stack after the main brief.
+  // Person-shape filters (group, age, expression) only apply when People is on
+  // so we do not describe a face for an image that is not supposed to have one.
   function buildPrompt(base: string): string {
     const parts: string[] = [base.trim()]
+
+    if (allowPeople) {
+      if (filters.groupSize === 'One person') parts.push('A single person in the frame')
+      else if (filters.groupSize === 'More than one person') parts.push('A group of people in the frame')
+      if (filters.ageRange) parts.push(`Aged ${filters.ageRange}`)
+      if (filters.expression) parts.push(`${filters.expression} expression`)
+    }
+    if (filters.era) parts.push(filters.era === 'Modern' ? 'Modern-day aesthetic' : `${filters.era} aesthetic and fashion`)
+    if (filters.socioClass) parts.push(`${filters.socioClass} styling, clothing and setting details`)
+    if (filters.location) parts.push(`Set in ${filters.location} — reflect the atmosphere and cultural context`)
+    if (filters.setting) parts.push(filters.setting === 'Indoor' ? 'Indoor scene' : 'Outdoor scene')
+
     if (!allowPeople) parts.push('No people, no human figures, no faces')
     if (!allowWords) parts.push('No text, no letters, no words, no writing')
     // Style toggles: only add a constraint when exactly one is off. Both off
@@ -282,66 +341,13 @@ export default function ImageGenerator({
           />
         </div>
 
-        {/* Same grid as the modal, kept inline so mobile isn't hunting for it.
-            grid-cols-2 stays 2 columns at every width — the four buttons make
-            two rows even on the narrowest phone. */}
-        <div>
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Allow in image</label>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setAllowPeople((v) => !v)}
-              aria-pressed={allowPeople}
-              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                allowPeople
-                  ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
-                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              People {allowPeople ? 'on' : 'off'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setAllowWords((v) => !v)}
-              aria-pressed={allowWords}
-              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                allowWords
-                  ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
-                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
-              }`}
-            >
-              <Type className="w-3.5 h-3.5" />
-              Words {allowWords ? 'on' : 'off'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setAllowRealistic((v) => !v)}
-              aria-pressed={allowRealistic}
-              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                allowRealistic
-                  ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
-                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
-              }`}
-            >
-              <Camera className="w-3.5 h-3.5" />
-              Realistic {allowRealistic ? 'on' : 'off'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setAllowIllustration((v) => !v)}
-              aria-pressed={allowIllustration}
-              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                allowIllustration
-                  ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
-                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
-              }`}
-            >
-              <Palette className="w-3.5 h-3.5" />
-              Illustration {allowIllustration ? 'on' : 'off'}
-            </button>
-          </div>
-        </div>
+        <ActiveFiltersSummary
+          filters={filters}
+          allowPeople={allowPeople}
+          allowWords={allowWords}
+          allowRealistic={allowRealistic}
+          allowIllustration={allowIllustration}
+        />
 
         <div className="flex gap-2">
           <button
@@ -353,6 +359,20 @@ export default function ImageGenerator({
             {generating
               ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Generating…</>
               : <><Wand2 className="w-3.5 h-3.5" />{imageUrl ? 'Regenerate' : 'Generate'}</>}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowFilters(true)}
+            aria-label="Image filters"
+            className="relative flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[1.15rem] h-[1.15rem] px-1 flex items-center justify-center rounded-full bg-brand-600 text-white text-[10px] font-semibold">
+                {activeFilterCount}
+              </span>
+            )}
           </button>
           <button
             type="button"
@@ -398,68 +418,20 @@ export default function ImageGenerator({
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Allow in image</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setAllowPeople((v) => !v)}
-                aria-pressed={allowPeople}
-                className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                  allowPeople
-                    ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
-                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
-                }`}
-              >
-                <Users className="w-3.5 h-3.5" />
-                People {allowPeople ? 'on' : 'off'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setAllowWords((v) => !v)}
-                aria-pressed={allowWords}
-                className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                  allowWords
-                    ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
-                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
-                }`}
-              >
-                <Type className="w-3.5 h-3.5" />
-                Words {allowWords ? 'on' : 'off'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setAllowRealistic((v) => !v)}
-                aria-pressed={allowRealistic}
-                className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                  allowRealistic
-                    ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
-                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
-                }`}
-              >
-                <Camera className="w-3.5 h-3.5" />
-                Realistic {allowRealistic ? 'on' : 'off'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setAllowIllustration((v) => !v)}
-                aria-pressed={allowIllustration}
-                className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                  allowIllustration
-                    ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
-                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
-                }`}
-              >
-                <Palette className="w-3.5 h-3.5" />
-                Illustration {allowIllustration ? 'on' : 'off'}
-              </button>
-            </div>
-            {allowRealistic && !allowIllustration && (
-              <p className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400">Forcing photorealistic — no illustrations.</p>
-            )}
-            {!allowRealistic && allowIllustration && (
-              <p className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400">Forcing illustration — no photographs.</p>
-            )}
+          <div className="flex flex-wrap items-center gap-2 justify-between">
+            <button
+              type="button"
+              onClick={() => { setShowModal(false); setShowFilters(true) }}
+              className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:text-brand-600 dark:hover:text-brand-400"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="min-w-[1.15rem] h-[1.15rem] px-1 flex items-center justify-center rounded-full bg-brand-600 text-white text-[10px] font-semibold">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
           </div>
 
           <div className="flex gap-2">
@@ -561,6 +533,194 @@ export default function ImageGenerator({
         onSelect={selectFromLibrary}
         currentUrl={imageUrl}
       />
+
+      <Modal
+        open={showFilters}
+        onClose={() => setShowFilters(false)}
+        title="Image filters"
+        maxWidth="max-w-2xl"
+      >
+        <div className="space-y-5">
+          <FilterSection title="Style">
+            <div className="grid grid-cols-2 gap-2">
+              <ToggleButton pressed={allowPeople} onClick={() => setAllowPeople((v) => !v)} icon={<Users className="w-3.5 h-3.5" />}>
+                People {allowPeople ? 'on' : 'off'}
+              </ToggleButton>
+              <ToggleButton pressed={allowWords} onClick={() => setAllowWords((v) => !v)} icon={<Type className="w-3.5 h-3.5" />}>
+                Words {allowWords ? 'on' : 'off'}
+              </ToggleButton>
+              <ToggleButton pressed={allowRealistic} onClick={() => setAllowRealistic((v) => !v)} icon={<Camera className="w-3.5 h-3.5" />}>
+                Realistic {allowRealistic ? 'on' : 'off'}
+              </ToggleButton>
+              <ToggleButton pressed={allowIllustration} onClick={() => setAllowIllustration((v) => !v)} icon={<Palette className="w-3.5 h-3.5" />}>
+                Illustration {allowIllustration ? 'on' : 'off'}
+              </ToggleButton>
+            </div>
+            {allowRealistic && !allowIllustration && (
+              <p className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400">Forcing photorealistic — no illustrations.</p>
+            )}
+            {!allowRealistic && allowIllustration && (
+              <p className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400">Forcing illustration — no photographs.</p>
+            )}
+          </FilterSection>
+
+          {/* Person-shape sections stay collapsed when People is off — describing
+              a face for an image with no people just gets ignored by the model
+              at best, or confuses it at worst. */}
+          {allowPeople && (
+            <>
+              <FilterSection title="Group size">
+                <ChipRow options={GROUP_SIZES} value={filters.groupSize} onSelect={(v) => setFilter('groupSize', v)} />
+              </FilterSection>
+              <FilterSection title="Age range">
+                <ChipRow options={AGE_RANGES} value={filters.ageRange} onSelect={(v) => setFilter('ageRange', v)} />
+              </FilterSection>
+              <FilterSection title="Expression">
+                <ChipRow options={EXPRESSIONS} value={filters.expression} onSelect={(v) => setFilter('expression', v)} />
+              </FilterSection>
+            </>
+          )}
+
+          <FilterSection title="Era / style">
+            <ChipRow options={ERAS} value={filters.era} onSelect={(v) => setFilter('era', v)} />
+          </FilterSection>
+          <FilterSection title="Socioeconomic class">
+            <ChipRow options={CLASSES} value={filters.socioClass} onSelect={(v) => setFilter('socioClass', v)} />
+          </FilterSection>
+          <FilterSection title="Location">
+            <ChipRow options={LOCATIONS} value={filters.location} onSelect={(v) => setFilter('location', v)} />
+          </FilterSection>
+          <FilterSection title="Setting">
+            <ChipRow options={SETTINGS} value={filters.setting} onSelect={(v) => setFilter('setting', v)} />
+          </FilterSection>
+
+          <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t border-gray-100 dark:border-gray-700">
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            >
+              <Eraser className="w-4 h-4" />
+              Clear filters
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowFilters(false)}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              Done
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowFilters(false); generate() }}
+              disabled={generating}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
+            >
+              <Wand2 className="w-4 h-4" />
+              {imageUrl ? 'Regenerate' : 'Generate'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </>
+  )
+}
+
+function FilterSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">{title}</label>
+      {children}
+    </div>
+  )
+}
+
+function ToggleButton({
+  pressed, onClick, icon, children,
+}: {
+  pressed: boolean
+  onClick: () => void
+  icon: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={pressed}
+      className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
+        pressed
+          ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
+          : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
+      }`}
+    >
+      {icon}
+      {children}
+    </button>
+  )
+}
+
+function ChipRow({
+  options, value, onSelect,
+}: {
+  options: readonly string[]
+  value: string | null
+  onSelect: (v: string) => void
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((opt) => {
+        const active = value === opt
+        return (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onSelect(opt)}
+            aria-pressed={active}
+            className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-colors ${
+              active
+                ? 'bg-brand-600 border-brand-600 text-white'
+                : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
+            }`}
+          >
+            {opt}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function ActiveFiltersSummary({
+  filters, allowPeople, allowWords, allowRealistic, allowIllustration,
+}: {
+  filters: Filters
+  allowPeople: boolean
+  allowWords: boolean
+  allowRealistic: boolean
+  allowIllustration: boolean
+}) {
+  const chips: string[] = []
+  if (allowPeople) chips.push('People')
+  if (allowWords) chips.push('Words')
+  // Only surface the style toggle when it will actually constrain — same rule
+  // used in buildPrompt so the badge and the prompt cannot disagree.
+  if (allowRealistic && !allowIllustration) chips.push('Realistic')
+  else if (!allowRealistic && allowIllustration) chips.push('Illustration')
+  for (const v of Object.values(filters)) if (v) chips.push(v)
+
+  if (chips.length === 0) return null
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {chips.map((c) => (
+        <span
+          key={c}
+          className="px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-700 text-[11px] text-gray-600 dark:text-gray-300"
+        >
+          {c}
+        </span>
+      ))}
+    </div>
   )
 }
