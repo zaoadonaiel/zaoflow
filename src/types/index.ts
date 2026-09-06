@@ -94,6 +94,8 @@ export interface Schedule {
   ai_model: string
   topic_prompt: string
   wp_category_id?: number
+  /** Instruction set that scopes length/tone/structure for this schedule's runs. */
+  instruction_id?: string | null
   created_at: string
   updated_at: string
   sites?: Site
@@ -151,6 +153,11 @@ export interface ArticleInstruction {
   user_id: string
   name: string
   instructions: string
+  /** Explicit length target — reliable source of truth for the article prompt.
+   *  Null on legacy sets; those fall back to parsing `instructions` text. */
+  min_words?: number | null
+  target_words?: number | null
+  max_words?: number | null
   created_at: string
   updated_at: string
 }

@@ -30,6 +30,9 @@ export default function InstructionSets({ selectedId, onSelect, autoSelectDefaul
   const [editing, setEditing] = useState<ArticleInstruction | null>(null)
   const [name, setName] = useState('')
   const [instructions, setInstructions] = useState('')
+  const [minWords, setMinWords] = useState<string>('')
+  const [targetWords, setTargetWords] = useState<string>('')
+  const [maxWords, setMaxWords] = useState<string>('')
   const [saving, setSaving] = useState(false)
 
   // Delete modal — `deleteTarget` holds the set awaiting confirmation
@@ -41,6 +44,14 @@ export default function InstructionSets({ selectedId, onSelect, autoSelectDefaul
   // Live check so the cap is visible while typing, not only on save
   const limitError = wordCountLimitError(instructions)
   const codeMatches = codeInput === deleteCode
+
+  // Validate the explicit length fields. All three are optional; when set they
+  // must be positive integers, ordered min ≤ target ≤ max, and respect the
+  // per-article ceiling. Same rules as the DB check constraint.
+  const minN = parseIntOrNull(minWords)
+  const targetN = parseIntOrNull(targetWords)
+  const maxN = parseIntOrNull(maxWords)
+  const lengthError = validateLengthTriple(minN, targetN, maxN)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -83,6 +94,9 @@ export default function InstructionSets({ selectedId, onSelect, autoSelectDefaul
     setEditing(null)
     setName('')
     setInstructions('')
+    setMinWords('')
+    setTargetWords('')
+    setMaxWords('')
     setFormOpen(true)
   }
 
@@ -90,6 +104,9 @@ export default function InstructionSets({ selectedId, onSelect, autoSelectDefaul
     setEditing(set)
     setName(set.name)
     setInstructions(set.instructions)
+    setMinWords(set.min_words != null ? String(set.min_words) : '')
+    setTargetWords(set.target_words != null ? String(set.target_words) : '')
+    setMaxWords(set.max_words != null ? String(set.max_words) : '')
     setFormOpen(true)
   }
 
@@ -98,6 +115,7 @@ export default function InstructionSets({ selectedId, onSelect, autoSelectDefaul
     if (!name.trim()) { toast.error('Give this instruction set a name'); return }
     if (!instructions.trim()) { toast.error('Add some instructions'); return }
     if (limitError) { toast.error(limitError); return }
+    if (lengthError) { toast.error(lengthError); return }
 
     setSaving(true)
     try {
@@ -106,7 +124,13 @@ export default function InstructionSets({ selectedId, onSelect, autoSelectDefaul
         {
           method: editing ? 'PATCH' : 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: name.trim(), instructions: instructions.trim() }),
+          body: JSON.stringify({
+            name: name.trim(),
+            instructions: instructions.trim(),
+            min_words: minN,
+            target_words: targetN,
+            max_words: maxN,
+          }),
         }
       )
       const data = await res.json()
@@ -300,6 +324,29 @@ export default function InstructionSets({ selectedId, onSelect, autoSelectDefaul
             )}
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              Length target (optional)
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <LengthInput label="Min" value={minWords} onChange={setMinWords} placeholder="800" />
+              <LengthInput label="Target" value={targetWords} onChange={setTargetWords} placeholder="900" />
+              <LengthInput label="Max" value={maxWords} onChange={setMaxWords} placeholder="1000" />
+            </div>
+            {lengthError ? (
+              <p className="flex items-start gap-1.5 text-xs text-red-600 dark:text-red-400 mt-1.5">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+                {lengthError}
+              </p>
+            ) : (
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                When set, the article prompt promotes this to a hard rule and re-prompts once
+                if the draft falls outside min–max. Leave blank to fall back to whatever the
+                instructions text says.
+              </p>
+            )}
+          </div>
+
           <div className="flex gap-3 pt-1">
             <button
               type="button"
@@ -311,7 +358,7 @@ export default function InstructionSets({ selectedId, onSelect, autoSelectDefaul
             </button>
             <button
               type="submit"
-              disabled={saving || Boolean(limitError)}
+              disabled={saving || Boolean(limitError) || Boolean(lengthError)}
               className="flex-1 flex items-center justify-center gap-2 bg-brand-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
             >
               {saving ? <><Loader2 className="w-4 h-4 animate-spin" />Saving…</> : 'Save'}
@@ -386,4 +433,43 @@ export default function InstructionSets({ selectedId, onSelect, autoSelectDefaul
       </Modal>
     </>
   )
+}
+
+function LengthInput({ label, value, onChange, placeholder }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder: string
+}) {
+  return (
+    <label className="block">
+      <span className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</span>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={1}
+        max={MAX_ARTICLE_WORDS}
+        value={value}
+        onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ''))}
+        placeholder={placeholder}
+        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+      />
+    </label>
+  )
+}
+
+function parseIntOrNull(v: string): number | null {
+  const t = v.trim()
+  if (!t) return null
+  const n = parseInt(t, 10)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+function validateLengthTriple(min: number | null, target: number | null, max: number | null): string | null {
+  for (const [name, n] of [['Min', min], ['Target', target], ['Max', max]] as const) {
+    if (n !== null && n > MAX_ARTICLE_WORDS) {
+      return `${name} exceeds the ${MAX_ARTICLE_WORDS.toLocaleString()}-word article ceiling.`
+    }
+  }
+  if (min !== null && max !== null && min > max) return 'Min must be less than or equal to max.'
+  if (min !== null && target !== null && target < min) return 'Target must be greater than or equal to min.'
+  if (target !== null && max !== null && target > max) return 'Target must be less than or equal to max.'
+  return null
 }

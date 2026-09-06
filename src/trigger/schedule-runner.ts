@@ -73,6 +73,7 @@ export const scheduleRunnerTask = schedules.task({
           secretToken: site.secret_token,
           wpCategoryId: schedule.wp_category_id || undefined,
           publishImmediately: true,
+          instructionId: schedule.instruction_id || null,
         })
 
         logger.log(`Triggered generation for schedule ${schedule.id}`)

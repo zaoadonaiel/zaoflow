@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { wordCountLimitError } from '@/lib/instruction-limits'
+import { readLengthTriple } from '../route'
 
 export async function PATCH(
   req: NextRequest,
@@ -20,9 +21,19 @@ export async function PATCH(
   const limitError = wordCountLimitError(instructions)
   if (limitError) return NextResponse.json({ error: limitError }, { status: 400 })
 
+  const parsed = readLengthTriple(body)
+  if (parsed.error) return NextResponse.json({ error: parsed.error }, { status: 400 })
+
   const { data: instruction, error } = await supabase
     .from('article_instructions')
-    .update({ name, instructions, updated_at: new Date().toISOString() })
+    .update({
+      name,
+      instructions,
+      min_words: parsed.min,
+      target_words: parsed.target,
+      max_words: parsed.max,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', params.id)
     .eq('user_id', user.id)
     .select()

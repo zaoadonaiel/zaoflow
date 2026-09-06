@@ -1,5 +1,6 @@
 import { MAX_ARTICLE_WORDS } from '@/lib/instruction-limits'
 import { readUsage, type UsageInfo } from '@/lib/ai-cost'
+import type { LengthTarget } from '@/lib/article-length'
 
 export const AVAILABLE_MODELS = [
   { id: 'anthropic/claude-sonnet-4.5', name: 'Claude Sonnet 4.5', badge: 'Best' },
@@ -118,6 +119,19 @@ export async function generateTopic(
 
 export type CityFocus = '100' | '50' | '10'
 
+export interface GenerateArticleResult {
+  content: string
+  wordCount: number
+  excerpt: string
+  metaDescription: string
+  /** Non-null when the model put a meta description in the body and we lifted it out */
+  extractedMetaDescription: string | null
+  /** True when the length gate rejected the first draft and we re-prompted. */
+  lengthRetried: boolean
+  /** True when the final draft is still outside the requested min–max range. */
+  lengthOutOfRange: boolean
+}
+
 export async function generateArticle({
   apiKey,
   model,
@@ -126,7 +140,7 @@ export async function generateArticle({
   focusKeyword,
   instructions,
   knowledgeBase,
-  wordCount = 1400,
+  length,
   city,
   cityFocus,
   onUsage,
@@ -139,26 +153,50 @@ export async function generateArticle({
   instructions?: string
   /** Free-text brief on the company/site the article is being written for. */
   knowledgeBase?: string
-  wordCount?: number
+  /** Explicit min/target/max — promotes length to a hard rule and drives the
+   *  post-generation retry. When absent the prompt keeps its old defaults. */
+  length?: LengthTarget | null
   /** Geographic anchor — how prominent the city should be is `cityFocus`. */
   city?: string
   cityFocus?: CityFocus
-  /** Fires once after a successful call so the caller can bill the tokens. */
+  /** Fires once after a successful call so the caller can bill the tokens.
+   *  Called again on the length-retry attempt — the caller should sum. */
   onUsage?: (u: UsageInfo) => void
-}): Promise<{
-  content: string
-  wordCount: number
-  excerpt: string
-  metaDescription: string
-  /** Non-null when the model put a meta description in the body and we lifted it out */
-  extractedMetaDescription: string | null
-}> {
+}): Promise<GenerateArticleResult> {
   const systemPrompt = `You are an expert SEO content writer who creates high-quality, comprehensive blog posts.
 Your articles are well-structured with proper HTML, engaging, and optimized for search engines while remaining genuinely helpful for readers.
 Always output clean HTML without any markdown code blocks or document tags — just the article body HTML.`
 
-  const userPrompt = buildArticlePrompt({ title, keywords, focusKeyword, instructions, knowledgeBase, wordCount, city, cityFocus })
+  const userPrompt = buildArticlePrompt({ title, keywords, focusKeyword, instructions, knowledgeBase, length, city, cityFocus })
 
+  const first = await callModel({ apiKey, model, systemPrompt, userPrompt, onUsage })
+
+  // Instructions alone don't get every model to the requested length. When
+  // there's an explicit target, verify and re-prompt once if the draft is
+  // outside the range. One retry caps the cost while catching the models
+  // that ignore the ask on the first try.
+  if (length && (first.wordCount < length.min || first.wordCount > length.max)) {
+    const correction = buildLengthCorrectionPrompt(userPrompt, first.content, first.wordCount, length)
+    const second = await callModel({ apiKey, model, systemPrompt, userPrompt: correction, onUsage })
+    return {
+      ...second,
+      lengthRetried: true,
+      lengthOutOfRange: second.wordCount < length.min || second.wordCount > length.max,
+    }
+  }
+
+  return { ...first, lengthRetried: false, lengthOutOfRange: false }
+}
+
+async function callModel({
+  apiKey, model, systemPrompt, userPrompt, onUsage,
+}: {
+  apiKey: string
+  model: string
+  systemPrompt: string
+  userPrompt: string
+  onUsage?: (u: UsageInfo) => void
+}): Promise<Omit<GenerateArticleResult, 'lengthRetried' | 'lengthOutOfRange'>> {
   const response = await fetch(OPENROUTER_API_URL, {
     method: 'POST',
     headers: {
@@ -193,8 +231,6 @@ Always output clean HTML without any markdown code blocks or document tags — j
   onUsage?.(readUsage(data, model))
   const rawContent: string = data.choices?.[0]?.message?.content || ''
 
-  // Keep the meta description out of the body — it belongs in the Yoast field.
-  // Doing this before the word/excerpt maths also keeps those counts honest.
   const { content, metaDescription: extracted } = extractMetaDescription(rawContent)
 
   const plainText = htmlToText(content)
@@ -204,6 +240,27 @@ Always output clean HTML without any markdown code blocks or document tags — j
   const wc = plainText.split(/\s+/).filter(Boolean).length
 
   return { content, wordCount: wc, excerpt, metaDescription, extractedMetaDescription: extracted }
+}
+
+function buildLengthCorrectionPrompt(
+  originalPrompt: string,
+  previousDraft: string,
+  previousWordCount: number,
+  length: LengthTarget,
+): string {
+  const direction = previousWordCount > length.max ? 'too long' : 'too short'
+  return `${originalPrompt}
+
+Your previous draft was ${direction} — it came out at ${previousWordCount.toLocaleString('en-US')} words, but the article MUST be between ${length.min.toLocaleString('en-US')} and ${length.max.toLocaleString('en-US')} words (aim for ${length.target.toLocaleString('en-US')}).
+
+Rewrite the article from scratch to fit the range exactly. ${
+    previousWordCount > length.max
+      ? 'Cut sections, tighten paragraphs, and remove filler — do not just chop off the ending. Every section must still reach a natural close.'
+      : 'Add depth to each section — worked examples, specifics, a second angle — rather than padding the intro or conclusion.'
+  } Output only the HTML body, same rules as before.
+
+For reference, this was your previous draft (do NOT copy it verbatim — rewrite):
+${previousDraft.slice(0, 4000)}`
 }
 
 function cityInstruction(city: string, focus: CityFocus): string {
@@ -223,7 +280,7 @@ function buildArticlePrompt({
   focusKeyword,
   instructions,
   knowledgeBase,
-  wordCount,
+  length,
   city,
   cityFocus,
 }: {
@@ -232,7 +289,7 @@ function buildArticlePrompt({
   focusKeyword?: string
   instructions?: string
   knowledgeBase?: string
-  wordCount: number
+  length?: LengthTarget | null
   city?: string
   cityFocus?: CityFocus
 }): string {
@@ -260,33 +317,64 @@ function buildArticlePrompt({
   const authorInstructions = instructions?.trim() || ''
   const hasAuthorInstructions = authorInstructions.length > 0
 
+  // When a length target is set, it becomes a hard rule and the default
+  // length/structure block is dropped — the old prompt had both, so a
+  // "target 800–1,000" author instruction had to fight a "target 1,500–1,800"
+  // default. The result was models anchoring on the bigger number.
+  const lengthRule = length
+    ? `- Article length MUST be between ${length.min.toLocaleString('en-US')} and ${length.max.toLocaleString('en-US')} words, aiming for ${length.target.toLocaleString('en-US')}. This overrides every other length signal below and is checked after generation`
+    : `- NEVER exceed ${MAX_ARTICLE_WORDS.toLocaleString('en-US')} words total. If anything below asks for more, write ${MAX_ARTICLE_WORDS.toLocaleString('en-US')} words and make sure the article still reaches a complete conclusion`
+
   prompt += `
 Hard rules (never break these):
-- NEVER exceed ${MAX_ARTICLE_WORDS.toLocaleString('en-US')} words total. If anything below asks for more, write ${MAX_ARTICLE_WORDS.toLocaleString('en-US')} words and make sure the article still reaches a complete conclusion
+${lengthRule}
 - The WordPress post title is used as the page <h1>, so DO NOT include any <h1> tag in your output — start the body with an <h2>
 - Use proper HTML tags: <h2>, <h3> for headings; <p> for paragraphs; <ul>/<ol>/<li> for lists; <strong>/<em> for emphasis
 - Focus keyword must appear in the intro paragraph AND in the text of the first <h2>
 - Write naturally — avoid keyword stuffing
 - Use transition words and vary sentence length for readability
 - Output the article body ONLY. Do NOT write a meta description, SEO summary, excerpt, or any labelled front-matter such as "Meta Description:" — those fields are generated separately and anything like that here ends up published inside the post
+`
 
+  // Only emit the section-by-section structural defaults when the caller has
+  // not pinned a length. With a pinned range those numbers would push the
+  // model past the max — 3-5 sections at 300-400 words each is already 900-2000.
+  if (!length) {
+    prompt += `
 Defaults${hasAuthorInstructions ? " — follow these ONLY where the author's instructions below do not say otherwise" : ''}:
-- Target length: 1,500–1,800 words total (the wordCount hint is ${wordCount})
+- Target length: 1,500–1,800 words total
 - Structure:
   1. Intro section (150–200 words): hook the reader, state the problem, and explain what they will learn — written as <p> tags, no heading
   2. 3–5 main <h2> sections (300–400 words each), with 1–2 <h3> subsections per <h2> where they fit naturally
   3. A final <h2> "Conclusion" or call-to-action section (150–200 words)
 - Include bulleted or numbered lists where they add clarity — at least one list in the article
 - Do NOT use <h4> or deeper heading tags
-${hasAuthorInstructions ? `
+`
+  } else {
+    // When the length is pinned, still give minimal structural guidance so a
+    // 500-word article does not come back as one giant paragraph, but scale
+    // it so it fits the target rather than dictating a fixed section count.
+    prompt += `
+Structure (fit these to the length range above):
+- Open with a short intro (roughly 10–15% of the target) as <p> tags with no heading
+- Break the body into <h2> sections sized to the total — a short article may only need 2 sections, a long one 4–5
+- Close with a brief conclusion or call-to-action <h2> (roughly 10–15% of the target)
+- Add at least one bulleted or numbered list where it adds clarity
+- Do NOT use <h4> or deeper heading tags
+`
+  }
+
+  if (hasAuthorInstructions) {
+    prompt += `
 AUTHOR'S INSTRUCTIONS — these take priority over the defaults above, but never over the hard rules.
-Where they specify a word count, heading structure, tone, or format, follow them exactly
-and ignore the conflicting default. If they ask for a single <h1>, that requirement is
-already satisfied by the WordPress post title — still do not emit an <h1> tag yourself.
+Where they specify heading structure, tone, or format, follow them exactly.
+If they ask for a single <h1>, that requirement is already satisfied by the WordPress post title — still do not emit an <h1> tag yourself.
 
 ${authorInstructions}
-` : ''}
-Output ONLY the HTML body content, starting with the first <p> of the intro. Do not include <html>, <head>, <body>, <h1>, any code block wrappers, or a "Meta Description:" line.`
+`
+  }
+
+  prompt += `\nOutput ONLY the HTML body content, starting with the first <p> of the intro. Do not include <html>, <head>, <body>, <h1>, any code block wrappers, or a "Meta Description:" line.`
 
   return prompt
 }

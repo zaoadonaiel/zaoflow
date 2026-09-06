@@ -2,6 +2,7 @@ import { task, logger } from '@trigger.dev/sdk/v3'
 import { generateArticle } from '@/lib/openrouter'
 import { publishPost } from '@/lib/wordpress'
 import { publishPost as publishNodePost } from '@/lib/nodejs-site'
+import { resolveLengthTarget } from '@/lib/article-length'
 
 interface GenerateAndPublishPayload {
   scheduleId: string
@@ -18,6 +19,8 @@ interface GenerateAndPublishPayload {
   secretToken: string
   wpCategoryId?: number
   publishImmediately?: boolean
+  /** Optional link to the article_instructions row that scopes length/tone/structure. */
+  instructionId?: string | null
 }
 
 // Generates a unique article topic from a general prompt using AI
@@ -60,7 +63,7 @@ export const generateAndPublishTask = task({
     const {
       scheduleId, siteId, userId, topicPrompt, aiModel, apiKey,
       siteType = 'wordpress', siteUrl, wpUsername, wpAppPassword, nodeApiUrl, secretToken,
-      wpCategoryId, publishImmediately = true,
+      wpCategoryId, publishImmediately = true, instructionId,
     } = payload
 
     logger.log('Starting generate-and-publish task', { scheduleId, siteId })
@@ -68,6 +71,37 @@ export const generateAndPublishTask = task({
     // Dynamically import Supabase to avoid Edge Runtime issues
     const { createServiceClient } = await import('@/lib/supabase/server')
     const supabase = createServiceClient()
+
+    // Instruction set that scopes length/tone/structure. Falls back to the
+    // user's oldest set when the schedule has no explicit link — this used to
+    // be dropped entirely, which is why scheduled runs ignored the ask.
+    let instructionRow: {
+      instructions?: string | null
+      min_words?: number | null
+      target_words?: number | null
+      max_words?: number | null
+    } | null = null
+    if (instructionId) {
+      const { data } = await supabase
+        .from('article_instructions')
+        .select('instructions, min_words, target_words, max_words')
+        .eq('id', instructionId)
+        .eq('user_id', userId)
+        .single()
+      instructionRow = data
+    }
+    if (!instructionRow) {
+      const { data } = await supabase
+        .from('article_instructions')
+        .select('instructions, min_words, target_words, max_words')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      instructionRow = data
+    }
+    const instructionText = instructionRow?.instructions || undefined
+    const length = resolveLengthTarget(instructionRow)
 
     try {
       // Step 1: Generate a specific topic from the general prompt
@@ -77,14 +111,15 @@ export const generateAndPublishTask = task({
 
       // Step 2: Generate the full article
       logger.log('Generating article content...')
-      const { content, wordCount, excerpt, metaDescription } = await generateArticle({
+      const { content, wordCount, excerpt, metaDescription, lengthRetried, lengthOutOfRange } = await generateArticle({
         apiKey,
         model: aiModel,
         title,
         keywords,
-        wordCount: 1400,
+        instructions: instructionText,
+        length,
       })
-      logger.log('Article generated', { wordCount })
+      logger.log('Article generated', { wordCount, lengthRetried, lengthOutOfRange, target: length })
 
       // Step 3: Save as article in DB
       const { data: article, error: articleError } = await supabase.from('articles').insert({

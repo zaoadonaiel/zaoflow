@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { generateTopic, generateArticle } from '@/lib/openrouter'
 import { publishPost } from '@/lib/wordpress'
 import { calcNextRunMulti } from '@/lib/schedule-utils'
+import { resolveLengthTarget } from '@/lib/article-length'
 
 export const maxDuration = 300
 
@@ -45,6 +46,38 @@ export async function POST(
 
   const model = schedule.ai_model || apiSettings.default_model || 'anthropic/claude-sonnet-4.5'
 
+  // The instruction set that scoped generation to the user's rules was
+  // previously not loaded here, so length/tone/structure was silently ignored
+  // on every scheduled run. Explicit link on the schedule wins; fall back to
+  // the user's oldest set so accounts with one set at all still get honoured.
+  let instructionRow: {
+    instructions?: string | null
+    min_words?: number | null
+    target_words?: number | null
+    max_words?: number | null
+  } | null = null
+  if (schedule.instruction_id) {
+    const { data } = await supabase
+      .from('article_instructions')
+      .select('instructions, min_words, target_words, max_words')
+      .eq('id', schedule.instruction_id)
+      .eq('user_id', user.id)
+      .single()
+    instructionRow = data
+  }
+  if (!instructionRow) {
+    const { data } = await supabase
+      .from('article_instructions')
+      .select('instructions, min_words, target_words, max_words')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    instructionRow = data
+  }
+  const instructionText = instructionRow?.instructions || undefined
+  const length = resolveLengthTarget(instructionRow)
+
   try {
     // 1. Generate topic from the schedule's prompt
     const { title, keywords } = await generateTopic(
@@ -59,7 +92,8 @@ export async function POST(
       model,
       title,
       keywords,
-      wordCount: 1400,
+      instructions: instructionText,
+      length,
     })
 
     // 3. Save article to DB

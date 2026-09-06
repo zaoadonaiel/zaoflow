@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { generateArticle, generateSEOMeta, fillSeoBlanks, AVAILABLE_MODELS } from '@/lib/openrouter'
 import { recordUsage, sumUsage, type UsageInfo, type UsageRecord } from '@/lib/ai-cost'
+import { resolveLengthTarget } from '@/lib/article-length'
 
 export const maxDuration = 300
 
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { title, keywords = [], instructions, model, site_id, city, city_focus } = body
+  const { title, keywords = [], instructions, instruction_id, model, site_id, city, city_focus } = body
   const cleanedCity = typeof city === 'string' ? city.trim().slice(0, 100) : ''
   const cleanedFocus = city_focus === '100' || city_focus === '50' || city_focus === '10' ? city_focus : undefined
 
@@ -49,6 +50,23 @@ export async function POST(req: NextRequest) {
     knowledgeBase = (site?.knowledge_base || '').trim()
   }
 
+  // The length target lives on the instruction set row so it survives the
+  // client sending only free-text `instructions`. Load the row, prefer the
+  // explicit columns, fall back to parsing the text.
+  let length = null
+  if (instruction_id) {
+    const { data: set } = await supabase
+      .from('article_instructions')
+      .select('min_words, target_words, max_words, instructions')
+      .eq('id', instruction_id)
+      .eq('user_id', user.id)
+      .single()
+    if (set) length = resolveLengthTarget(set)
+  }
+  if (!length && typeof instructions === 'string' && instructions.trim()) {
+    length = resolveLengthTarget({ instructions })
+  }
+
   try {
     const articleCalls: UsageInfo[] = []
     const seoCalls: UsageInfo[] = []
@@ -60,7 +78,7 @@ export async function POST(req: NextRequest) {
       keywords,
       instructions,
       knowledgeBase,
-      wordCount: 1600,
+      length,
       city: cleanedCity || undefined,
       cityFocus: cleanedFocus,
       onUsage: (u) => articleCalls.push(u),

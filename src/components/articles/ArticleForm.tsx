@@ -448,6 +448,9 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
         body: JSON.stringify({
           title, keywords, instructions, model,
           site_id: siteId,
+          // The server reads the length target off this row; without the id
+          // it has to fall back to regex-parsing the instructions text.
+          instruction_id: instructionSetId,
           city: city.trim() || undefined,
           city_focus: city.trim() ? cityFocus : undefined,
         }),
