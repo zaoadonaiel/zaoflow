@@ -23,6 +23,7 @@ import { useUnsavedWarning } from '@/lib/use-unsaved-warning'
 import InstructionSets from '@/components/articles/InstructionSets'
 import SiteKnowledgeBase from '@/components/articles/SiteKnowledgeBase'
 import CostReceipt from '@/components/articles/CostReceipt'
+import CityFocusInput, { type CityFocus } from '@/components/articles/CityFocusInput'
 import type { UsageRecord } from '@/lib/ai-cost'
 import type { Article, Site, ArticleInstruction } from '@/types'
 import toast from 'react-hot-toast'
@@ -206,6 +207,12 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   const [pushingImage, setPushingImage] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [generatingSEO, setGeneratingSEO] = useState(false)
+  // City steers both the idea and the article prompts, and feeds the image
+  // generator's location filter. One state, shared across the whole flow —
+  // "if user changes city, region updates" is the reason it lives here and
+  // not in each generator.
+  const [city, setCity] = useState('')
+  const [cityFocus, setCityFocus] = useState<CityFocus | null>(null)
   // The article row that is currently being written by a Trigger.dev task.
   // Set when the /api/generate handoff succeeds or when an edit-mode load
   // finds a row already in 'generating' — kept until the row transitions
@@ -507,6 +514,8 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
           // When we already have a row (edit mode or an autosave has landed)
           // the task rewrites that row rather than creating a second.
           article_id: boundId,
+          city: city.trim() || undefined,
+          city_focus: city.trim() ? cityFocus : undefined,
         }),
       })
       const data = await res.json()
@@ -1120,6 +1129,10 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
             defaultModel={preferredModels.idea}
             siteConfirmed={siteConfirmedFor === siteId}
             onSiteConfirmed={() => setSiteConfirmedFor(siteId)}
+            city={city}
+            cityFocus={cityFocus}
+            onCityChange={setCity}
+            onCityFocusChange={setCityFocus}
           />
 
           {/* Matching the SEO / Yoast card treatment so this reads as the
@@ -1129,6 +1142,12 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
               <Zap className="w-4 h-4 text-brand-500" />
               Generate Article
             </h3>
+            <CityFocusInput
+              city={city}
+              cityFocus={cityFocus}
+              onCityChange={setCity}
+              onFocusChange={setCityFocus}
+            />
             <ModelSelect
               value={model}
               onChange={setModel}
@@ -1324,6 +1343,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
             initialAlt={featuredImageAlt}
             defaultPrompt={title ? `Professional blog featured image for: ${title}` : ''}
             defaultModel={preferredModels.image}
+            city={city.trim() || undefined}
             onImageGenerated={(url, prompt, altText, ids, records) => {
               setFeaturedImageUrl(url)
               setFeaturedImagePrompt(prompt)

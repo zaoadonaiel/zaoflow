@@ -116,6 +116,8 @@ export async function generateTopic(
   try { return JSON.parse(content) } catch { return { title: prompt.slice(0, 80), keywords: [] } }
 }
 
+export type CityFocus = '100' | '50' | '10'
+
 export async function generateArticle({
   apiKey,
   model,
@@ -125,6 +127,8 @@ export async function generateArticle({
   instructions,
   knowledgeBase,
   wordCount = 1400,
+  city,
+  cityFocus,
   onUsage,
 }: {
   apiKey: string
@@ -136,6 +140,9 @@ export async function generateArticle({
   /** Free-text brief on the company/site the article is being written for. */
   knowledgeBase?: string
   wordCount?: number
+  /** Geographic anchor — how prominent the city should be is `cityFocus`. */
+  city?: string
+  cityFocus?: CityFocus
   /** Fires once after a successful call so the caller can bill the tokens. */
   onUsage?: (u: UsageInfo) => void
 }): Promise<{
@@ -150,7 +157,7 @@ export async function generateArticle({
 Your articles are well-structured with proper HTML, engaging, and optimized for search engines while remaining genuinely helpful for readers.
 Always output clean HTML without any markdown code blocks or document tags — just the article body HTML.`
 
-  const userPrompt = buildArticlePrompt({ title, keywords, focusKeyword, instructions, knowledgeBase, wordCount })
+  const userPrompt = buildArticlePrompt({ title, keywords, focusKeyword, instructions, knowledgeBase, wordCount, city, cityFocus })
 
   const response = await fetch(OPENROUTER_API_URL, {
     method: 'POST',
@@ -199,6 +206,17 @@ Always output clean HTML without any markdown code blocks or document tags — j
   return { content, wordCount: wc, excerpt, metaDescription, extractedMetaDescription: extracted }
 }
 
+function cityInstruction(city: string, focus: CityFocus): string {
+  const c = city.trim()
+  if (focus === '100') {
+    return `Geographic focus (heavy): The article is anchored to ${c}. The WordPress post title above already carries "${c}" — mirror that in the article body by mentioning ${c} multiple times (roughly one reference per 300 words, without keyword-stuffing) and by devoting at least one <h2> section to something specific to ${c} (a local example, statistic, venue, or regulation).`
+  }
+  if (focus === '50') {
+    return `Geographic context (moderate): Reference ${c} in the intro paragraph and in the text of the first <h2>. Return to it in another two or three places across the body so a reader can tell the article is written with ${c} in mind, without letting the city crowd out the subject.`
+  }
+  return `Geographic flavour (subtle): Mention ${c} once or twice in the body, casually — as an example, a passing reference, or a closing note. Do not lead with it; it is not the main subject.`
+}
+
 function buildArticlePrompt({
   title,
   keywords,
@@ -206,6 +224,8 @@ function buildArticlePrompt({
   instructions,
   knowledgeBase,
   wordCount,
+  city,
+  cityFocus,
 }: {
   title: string
   keywords: string[]
@@ -213,6 +233,8 @@ function buildArticlePrompt({
   instructions?: string
   knowledgeBase?: string
   wordCount: number
+  city?: string
+  cityFocus?: CityFocus
 }): string {
   let prompt = `Write a comprehensive, SEO-optimized blog post for the following WordPress post title:\n\n"${title}"\n\n`
 
@@ -222,6 +244,10 @@ function buildArticlePrompt({
   const brief = (knowledgeBase || '').trim()
   if (brief) {
     prompt += `About the company / brief the article must sit inside:\n${brief.slice(0, 4000)}\n\n`
+  }
+
+  if (city && city.trim() && cityFocus) {
+    prompt += `${cityInstruction(city, cityFocus)}\n\n`
   }
 
   if (focusKeyword) {
@@ -286,6 +312,8 @@ export async function generateArticleIdea({
   knowledgeBase,
   topic,
   rejectedIdeas,
+  city,
+  cityFocus,
   onUsage,
 }: {
   apiKey: string
@@ -295,10 +323,13 @@ export async function generateArticleIdea({
   knowledgeBase: string
   topic: string
   rejectedIdeas: RejectedIdea[]
+  /** Geographic anchor for the idea — steer only, the title is the model's. */
+  city?: string
+  cityFocus?: CityFocus
   onUsage?: (u: UsageInfo) => void
 }): Promise<{ title: string; description: string; keywords: string[] }> {
   const prompt = buildIdeaPrompt({
-    siteName, knowledgeBase, topic, existingTitles, rejectedIdeas,
+    siteName, knowledgeBase, topic, existingTitles, rejectedIdeas, city, cityFocus,
   })
 
   const response = await fetch(OPENROUTER_API_URL, {
@@ -356,22 +387,41 @@ export async function generateArticleIdea({
   return { title, description, keywords }
 }
 
+function ideaCityInstruction(city: string, focus: CityFocus): string {
+  const c = city.trim()
+  if (focus === '100') {
+    return `Geographic focus (heavy): The proposed article is anchored to ${c}. The title MUST include "${c}" verbatim. Keywords should include at least one ${c}-specific phrase.`
+  }
+  if (focus === '50') {
+    return `Geographic context (moderate): The article should be written with ${c} in mind — reflect that in the description. The title does not need to include "${c}"; keywords may.`
+  }
+  return `Geographic flavour (subtle): ${c} is a passing reference, not the subject. Do not put it in the title. Description may allude to it once.`
+}
+
 function buildIdeaPrompt({
   siteName,
   knowledgeBase,
   topic,
   existingTitles,
   rejectedIdeas,
+  city,
+  cityFocus,
 }: {
   siteName: string
   knowledgeBase: string
   topic: string
   existingTitles: string[]
   rejectedIdeas: RejectedIdea[]
+  city?: string
+  cityFocus?: CityFocus
 }): string {
   const parts: string[] = [
     `You are proposing one article for the blog of "${siteName}".`,
   ]
+
+  if (city && city.trim() && cityFocus) {
+    parts.push(ideaCityInstruction(city, cityFocus))
+  }
 
   // A typed topic is the primary instruction. Lead with it so the model
   // sees it before the knowledge base or the back catalogue drown it out --

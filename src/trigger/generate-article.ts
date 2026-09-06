@@ -1,5 +1,5 @@
 import { task, logger } from '@trigger.dev/sdk/v3'
-import { generateArticle, generateSEOMeta, fillSeoBlanks } from '@/lib/openrouter'
+import { generateArticle, generateSEOMeta, fillSeoBlanks, type CityFocus } from '@/lib/openrouter'
 import { recordUsage, sumUsage, type UsageInfo } from '@/lib/ai-cost'
 
 interface Payload {
@@ -12,6 +12,8 @@ interface Payload {
   model: string
   apiKey: string
   knowledgeBase: string
+  city?: string
+  cityFocus?: CityFocus
 }
 
 /**
@@ -43,6 +45,8 @@ export const generateArticleTask = task({
         instructions: payload.instructions,
         knowledgeBase: payload.knowledgeBase,
         wordCount: 1600,
+        city: payload.city,
+        cityFocus: payload.cityFocus,
         onUsage: (u) => articleCalls.push(u),
       })
 

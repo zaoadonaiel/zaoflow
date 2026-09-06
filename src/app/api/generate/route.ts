@@ -34,7 +34,9 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { title, keywords = [], instructions, model, site_id, article_id } = body
+  const { title, keywords = [], instructions, model, site_id, article_id, city, city_focus } = body
+  const cleanedCity = typeof city === 'string' ? city.trim().slice(0, 100) : ''
+  const cleanedFocus = city_focus === '100' || city_focus === '50' || city_focus === '10' ? city_focus : undefined
 
   if (!title?.trim()) return NextResponse.json({ error: 'Title is required' }, { status: 400 })
   if (!site_id) return NextResponse.json({ error: 'Site is required' }, { status: 400 })
@@ -96,6 +98,8 @@ export async function POST(req: NextRequest) {
     model: resolvedModel,
     apiKey,
     knowledgeBase,
+    city: cleanedCity || undefined,
+    cityFocus: cleanedFocus,
   })
 
   // Remember which run wrote the article so a reopen of the row can find

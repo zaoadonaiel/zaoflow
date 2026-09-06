@@ -7,6 +7,7 @@ import ModelSelect from '@/components/ui/ModelSelect'
 import ConfirmSiteModal from '@/components/ui/ConfirmSiteModal'
 import Modal from '@/components/ui/Modal'
 import KnowledgeBaseModal from '@/components/sites/KnowledgeBaseModal'
+import CityFocusInput, { type CityFocus } from '@/components/articles/CityFocusInput'
 import type { UsageRecord } from '@/lib/ai-cost'
 import toast from 'react-hot-toast'
 
@@ -39,6 +40,11 @@ interface Props {
   siteConfirmed?: boolean
   /** Told when the user confirms in this generator so siblings can skip it. */
   onSiteConfirmed?: () => void
+  /** Shared city state so the idea and the article ride the same anchor. */
+  city?: string
+  cityFocus?: CityFocus | null
+  onCityChange?: (v: string) => void
+  onCityFocusChange?: (v: CityFocus | null) => void
 }
 
 /**
@@ -50,6 +56,7 @@ interface Props {
 export default function IdeaGenerator({
   siteId, siteName, onAccept, onChangeSite, defaultModel,
   siteConfirmed = false, onSiteConfirmed,
+  city = '', cityFocus = null, onCityChange, onCityFocusChange,
 }: Props) {
   const [model, setModel] = useState('')
 
@@ -157,6 +164,8 @@ export default function IdeaGenerator({
           // Sent on every request, regenerate included: turning an idea down
           // rejects the idea, not the subject that was asked for.
           topic: topic.trim(),
+          city: city.trim() || undefined,
+          city_focus: city.trim() ? cityFocus : undefined,
           rejected: avoid.map((r) => ({ title: r.title, keywords: r.keywords })),
         }),
       })
@@ -212,6 +221,14 @@ export default function IdeaGenerator({
           ? 'It will write to this, checking your titles so it does not repeat one.'
           : 'Leave blank and it picks a subject none of your titles have covered.'}
       </p>
+
+      <CityFocusInput
+        city={city}
+        cityFocus={cityFocus}
+        onCityChange={(v) => onCityChange?.(v)}
+        onFocusChange={(v) => onCityFocusChange?.(v)}
+        variant="amber"
+      />
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
         {/* Takes the rest of the row rather than a fixed 176px — the model name

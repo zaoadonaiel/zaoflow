@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { site_id, model, rejected, topic } = await req.json()
+  const { site_id, model, rejected, topic, city, city_focus } = await req.json()
   if (!site_id) return NextResponse.json({ error: 'Pick a site first' }, { status: 400 })
 
   // What the user typed in the idea box, when they typed anything. Blank is the
@@ -138,6 +138,8 @@ export async function POST(req: NextRequest) {
       knowledgeBase,
       topic: askedFor,
       rejectedIdeas: avoidIdeas,
+      city: typeof city === 'string' ? city.trim().slice(0, 100) : undefined,
+      cityFocus: city_focus === '100' || city_focus === '50' || city_focus === '10' ? city_focus : undefined,
       onUsage: (u) => calls.push(u),
     })
 

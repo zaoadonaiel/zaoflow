@@ -44,6 +44,12 @@ interface Props {
    * one-off pick.
    */
   defaultModel?: string
+  /**
+   * The article's city — auto-fills the location filter so the featured
+   * image matches wherever the article is anchored. User can still
+   * override in the Filters modal; the next city change re-syncs.
+   */
+  city?: string
   /** Restores previously generated image state when re-opening an article. */
   initialImageUrl?: string
   initialPrompt?: string
@@ -68,6 +74,7 @@ export default function ImageGenerator({
   siteId,
   defaultPrompt = '',
   defaultModel,
+  city,
   initialImageUrl = '',
   initialPrompt = '',
   initialAlt = '',
@@ -99,6 +106,16 @@ export default function ImageGenerator({
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
   const altRef = useRef<HTMLInputElement>(null)
+
+  // Sync the location filter to the article's city. Overwrites any manual
+  // pick on purpose — the user's spec is "if user changes city, region
+  // updates". The user can still ovveride in the Filters modal after; the
+  // next city change wins again.
+  useEffect(() => {
+    if (typeof city === 'string') {
+      setFilters((prev) => ({ ...prev, location: city.trim() || null }))
+    }
+  }, [city])
 
   function setFilter<K extends keyof Filters>(key: K, value: Filters[K]) {
     // Clicking the active chip clears it — "choose one" means one, or none.
@@ -603,7 +620,18 @@ export default function ImageGenerator({
             <ChipRow options={CLASSES} value={filters.socioClass} onSelect={(v) => setFilter('socioClass', v)} />
           </FilterSection>
           <FilterSection title="Location">
-            <ChipRow options={LOCATIONS} value={filters.location} onSelect={(v) => setFilter('location', v)} />
+            {/* A custom city typed on the article surfaces at the head of the
+                row so it can be cleared with a click, same as any predefined
+                option — the "choose one" semantics stay honest. */}
+            <ChipRow
+              options={
+                filters.location && !(LOCATIONS as readonly string[]).includes(filters.location)
+                  ? [filters.location, ...LOCATIONS]
+                  : LOCATIONS
+              }
+              value={filters.location}
+              onSelect={(v) => setFilter('location', v)}
+            />
           </FilterSection>
           <FilterSection title="Setting">
             <ChipRow options={SETTINGS} value={filters.setting} onSelect={(v) => setFilter('setting', v)} />
