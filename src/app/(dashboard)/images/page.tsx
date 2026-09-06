@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import {
-  Globe, Loader2, AlertTriangle, ImageIcon, Copy, Download, ExternalLink, X, Wand2, Send,
+  Globe, Loader2, AlertTriangle, ImageIcon, Copy, Download, ExternalLink, X, Wand2, Send, Minimize2,
 } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import Modal from '@/components/ui/Modal'
@@ -14,6 +14,7 @@ import SitePills from '@/components/ui/SitePills'
 import ImageUploadButton from '@/components/ui/ImageUploadButton'
 import ImageGenerator from '@/components/articles/ImageGenerator'
 import SendToWordPressModal from '@/components/images/SendToWordPressModal'
+import { compressImage, TARGET_BYTES } from '@/lib/image-compression'
 import type { GeneratedImage, Site } from '@/types'
 import toast from 'react-hot-toast'
 
@@ -85,6 +86,59 @@ export default function ImagesPage() {
       toast.success('Image URL copied')
     } catch {
       toast.error('Could not copy the URL')
+    }
+  }
+
+  // The single id currently being compressed, so its own card can show a
+  // spinner while everything else stays interactive.
+  const [compressingId, setCompressingId] = useState<string | null>(null)
+  async function compress(image: GeneratedImage) {
+    if (compressingId) return
+    setCompressingId(image.id)
+    const toastId = toast.loading('Compressing…')
+    try {
+      const result = await compressImage(image.url)
+      const form = new FormData()
+      const ext = result.format === 'webp' ? 'webp' : 'jpg'
+      form.append('file', new File([result.blob], `${image.id}.${ext}`, { type: result.blob.type }))
+
+      const res = await fetch(`/api/images/${image.id}/compress`, {
+        method: 'POST',
+        body: form,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not save the compressed image')
+
+      // Update this row in place so the new size/URL show without a full
+      // refetch — the grid stays where it was, the card gets smaller.
+      setImages((prev) => prev.map((i) =>
+        i.id === image.id
+          ? { ...i, url: data.url, storage_path: data.storage_path, bytes: data.bytes }
+          : i,
+      ))
+
+      const before = result.originalBytes
+      const after = data.bytes as number
+      const pct = before ? Math.round(((before - after) / before) * 100) : 0
+      const detail = [
+        `${result.format.toUpperCase()} · quality ${Math.round(result.quality * 100)}%`,
+        result.resized ? `resized to ${result.width}×${result.height}` : 'original dimensions kept',
+      ].join(' · ')
+      if (result.overTarget) {
+        toast.error(
+          `Compressed to ${fileSize(after)} (${pct}% smaller) — could not reach 1 MB without visible quality loss. ${detail}`,
+          { id: toastId, duration: 8000 },
+        )
+      } else {
+        toast.success(
+          `Compressed: ${fileSize(before)} → ${fileSize(after)} (${pct}% smaller). ${detail}`,
+          { id: toastId, duration: 6000 },
+        )
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not compress the image', { id: toastId })
+    } finally {
+      setCompressingId(null)
     }
   }
 
@@ -200,6 +254,8 @@ export default function ImagesPage() {
                 onZoom={() => setLightbox(img)}
                 onCopy={() => copyUrl(img.url)}
                 onSend={() => setSendingImage(img)}
+                onCompress={() => compress(img)}
+                compressing={compressingId === img.id}
               />
             ))}
           </div>
@@ -309,11 +365,19 @@ interface CardProps {
   onZoom: () => void
   onCopy: () => void
   onSend: () => void
+  onCompress: () => void
+  compressing: boolean
 }
 
-function ImageCard({ image, onZoom, onCopy, onSend }: CardProps) {
+function ImageCard({ image, onZoom, onCopy, onSend, onCompress, compressing }: CardProps) {
   const iconBtn =
     'p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors'
+  // Compression only makes sense above the 1 MB target — a smaller image gets
+  // the button in the disabled state with a tooltip explaining why. Rows that
+  // never carried a size (older uploads) still get the option, since we can
+  // measure the file mid-flow and warn if it is already fine.
+  const overTarget = (image.bytes ?? 0) > TARGET_BYTES
+  const sizeKnown = image.bytes !== null && image.bytes !== undefined
 
   return (
     <div className="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800 overflow-hidden flex flex-col">
@@ -358,6 +422,22 @@ function ImageCard({ image, onZoom, onCopy, onSend }: CardProps) {
             {formatInZone(image.created_at, 'PST')}
           </span>
           <div className="flex items-center gap-0.5 flex-shrink-0">
+            <button
+              onClick={onCompress}
+              disabled={compressing || (sizeKnown && !overTarget)}
+              className={iconBtn}
+              title={
+                compressing
+                  ? 'Compressing…'
+                  : sizeKnown && !overTarget
+                    ? `Already ${fileSize(image.bytes)} — under the 1 MB target`
+                    : 'Compress to under 1 MB'
+              }
+            >
+              {compressing
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Minimize2 className="w-3.5 h-3.5" />}
+            </button>
             <button onClick={onSend} className={iconBtn} title="Send to a WordPress site">
               <Send className="w-3.5 h-3.5" />
             </button>
