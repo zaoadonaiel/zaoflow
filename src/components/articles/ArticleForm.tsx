@@ -206,6 +206,11 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   const [pushingImage, setPushingImage] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [generatingSEO, setGeneratingSEO] = useState(false)
+  // The article row that is currently being written by a Trigger.dev task.
+  // Set when the /api/generate handoff succeeds or when an edit-mode load
+  // finds a row already in 'generating' — kept until the row transitions
+  // out of that status, at which point the form hydrates from the results.
+  const [generatingArticleId, setGeneratingArticleId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   // SEO fields (auto-filled after generation, editable)
@@ -359,11 +364,69 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
           // Loaded from the row, so it is committed by definition.
           if (a.status === 'scheduled') setCommittedSlot(a.scheduled_at)
         }
+        // An article whose body is still being written on the server keeps
+        // running whether or not the tab is open. Pick the poll back up so
+        // the form hydrates the moment the task lands.
+        if (a.status === 'generating') {
+          setGenerating(true)
+          setGeneratingArticleId(a.id)
+        }
       })
       .catch(() => { if (!cancelled) { setNotFound(true); toast.error('Could not load the article') } })
       .finally(() => { if (!cancelled) setLoadingArticle(false) })
     return () => { cancelled = true }
   }, [editId])
+
+  // Poll the row while a Trigger.dev task is writing to it. Kept simple —
+  // one request every few seconds is plenty when the underlying write takes
+  // 30–90s. When the row lands as anything other than 'generating' we
+  // hydrate whatever fields the task produced.
+  useEffect(() => {
+    if (!generatingArticleId) return
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/articles/${generatingArticleId}`)
+        const data = await res.json()
+        if (cancelled) return
+        const a = data.article
+        if (!a) return
+        if (a.status === 'generating') {
+          timer = setTimeout(poll, 4000)
+          return
+        }
+        // Hydrate everything the task might have written. Left alone: title,
+        // keywords, site_id — those came from the form and the task is not
+        // supposed to overwrite them.
+        setContent(a.content || '')
+        setIdeaSeed(null)
+        if (a.ai_model) setModel(a.ai_model)
+        setFocusKeyphrase(a.focus_keyphrase || '')
+        setKeyphraseSynonyms(a.keyphrase_synonyms || '')
+        setYoastTitle(a.yoast_title || '')
+        setYoastMetaDescription(a.yoast_meta_description || '')
+        setSlug(a.slug || '')
+        setSaved(a)
+        pushReceipt(data.usage)
+        setGeneratingArticleId(null)
+        setGenerating(false)
+        toast.success('Article + SEO fields generated!')
+      } catch {
+        // A transient failure just tries again a bit later — the task is
+        // still running on the server regardless.
+        if (!cancelled) timer = setTimeout(poll, 6000)
+      }
+    }
+
+    timer = setTimeout(poll, 2000)
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generatingArticleId])
 
   useEffect(() => {
     if (!siteId || isNodeSite) { setCatsSettled(true); setCategories([]); setWpCategoryId(''); return }
@@ -438,28 +501,36 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, keywords, instructions, model, site_id: siteId }),
+        body: JSON.stringify({
+          title, keywords, instructions, model,
+          site_id: siteId,
+          // When we already have a row (edit mode or an autosave has landed)
+          // the task rewrites that row rather than creating a second.
+          article_id: boundId,
+        }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Generation failed')
-      collectUsage(data.usage_ids)
-      pushReceipt(data.receipt)
-      setContent(data.content)
-      setIdeaSeed(null)
-      // Auto-fill SEO fields
-      if (data.seo) {
-        setFocusKeyphrase(data.seo.focusKeyphrase || '')
-        setKeyphraseSynonyms(data.seo.keyphraseSynonyms || '')
-        setYoastTitle(data.seo.yoastTitle || '')
-        setYoastMetaDescription(data.seo.yoastMetaDescription || '')
-        setSlug(data.seo.slug || '')
+      if (!res.ok) throw new Error(data.error || 'Could not start generation')
+
+      // A brand new article now has a server-side row — take over its URL
+      // without a navigation so a reload lands on the article being written
+      // instead of on /new. Matches the pattern autosave uses.
+      if (data.articleId && data.articleId !== boundId) {
+        if (!editId) {
+          setAutoCreatedId(data.articleId)
+          window.history.replaceState({}, '', `/articles/${data.articleId}`)
+        }
       }
-      toast.success('Article + SEO fields generated!')
+      setIdeaSeed(null)
+      setGeneratingArticleId(data.articleId)
+      toast.success('Generating in the cloud — it will save as a draft when done. Safe to close this tab.', { duration: 6000 })
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Generation failed')
-    } finally {
+      toast.error(err instanceof Error ? err.message : 'Could not start generation')
       setGenerating(false)
     }
+    // setGenerating(false) is called by the poll effect when the row
+    // transitions out of 'generating'; leaving it here would clear the
+    // in-flight state before the article is actually written.
   }
 
   /**
@@ -928,7 +999,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
 
           <button
             onClick={() => { setPublishMode('draft'); handleSave('draft') }}
-            disabled={saving}
+            disabled={saving || generating}
             className={`${PILL_BASE} ${PILL_ACTION}`}
           >
             <Save className="w-3.5 h-3.5" />
@@ -948,7 +1019,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
 
           <button
             onClick={() => { setPublishMode('now'); handleSave('now') }}
-            disabled={saving}
+            disabled={saving || generating}
             className={`${PILL_BASE} ${PILL_PRIMARY}`}
           >
             <Send className="w-3.5 h-3.5" />
@@ -1026,7 +1097,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
               <button
                 type="button"
                 onClick={handleClearSchedule}
-                disabled={saving}
+                disabled={saving || generating}
                 className="text-gray-400 hover:text-red-500 disabled:opacity-50"
               >
                 {slotCommitted ? 'Unschedule' : 'Clear'}
@@ -1290,7 +1361,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
       <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-800 flex flex-col sm:flex-row sm:flex-wrap sm:justify-end gap-2">
         <button
           onClick={() => { setPublishMode('draft'); handleSave('draft') }}
-          disabled={saving}
+          disabled={saving || generating}
           className={`w-full sm:w-auto justify-center ${PILL_BASE} ${PILL_ACTION}`}
         >
           <Save className="w-3.5 h-3.5" />
@@ -1310,7 +1381,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
 
         <button
           onClick={() => { setPublishMode('now'); handleSave('now') }}
-          disabled={saving}
+          disabled={saving || generating}
           className={`w-full sm:w-auto justify-center ${PILL_BASE} ${PILL_PRIMARY}`}
         >
           <Send className="w-3.5 h-3.5" />

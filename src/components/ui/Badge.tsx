@@ -34,6 +34,7 @@ export default function Badge({ children, variant = 'default', className }: Badg
 export function statusToBadgeVariant(status: string): BadgeVariant {
   const map: Record<string, BadgeVariant> = {
     draft: 'default',
+    generating: 'warning',
     scheduled: 'info',
     publishing: 'warning',
     published: 'success',

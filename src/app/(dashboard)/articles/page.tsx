@@ -9,7 +9,7 @@ import type { Article, Site } from '@/types'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
-const STATUS_FILTERS = ['all', 'draft', 'scheduled', 'published', 'failed'] as const
+const STATUS_FILTERS = ['all', 'draft', 'generating', 'scheduled', 'published', 'failed'] as const
 type StatusFilter = typeof STATUS_FILTERS[number]
 
 export default function ArticlesPage() {
