@@ -155,6 +155,10 @@ export default function IdeaGenerator({ siteId, siteName, onAccept, onChangeSite
     // it — without this the browser scrolls the textarea to viewport top and
     // it lands behind the fixed mobile header (56px + a small buffer).
     <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/60 dark:bg-amber-900/10 p-3 scroll-mt-20 md:scroll-mt-0">
+      <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-2">
+        <Lightbulb className="w-4 h-4 text-amber-500" />
+        Generate Idea
+      </h3>
       {/* Two ways to ask, one control. Type a subject and it writes to that;
           leave it empty and it goes looking for one the site has never
           published, which is what it always did. */}

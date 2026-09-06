@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Sparkles, Save, Send, Calendar, Loader2, Globe, Search, FolderOpen,
-  ExternalLink, Check, CheckCircle2, ChevronDown, ChevronUp, AlertCircle, Plus, ImageUp,
+  ExternalLink, Check, CheckCircle2, ChevronDown, ChevronUp, AlertCircle, Plus, ImageUp, Zap,
 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import ConfirmSiteModal from '@/components/ui/ConfirmSiteModal'
@@ -1143,27 +1143,32 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
             onChangeSite={() => setShowSitePicker(true)}
           />
 
-          {/* The model, what it costs and the button that spends it, in one
-              row of thirds. No heading: a model name over two prices next to
-              Generate with AI does not need to be told what it is. */}
-          <ModelSelect
-            value={model}
-            onChange={setModel}
-            action={
-              <button
-                onClick={() => {
-                  if (!siteId) { toast.error('Select a site before generating'); return }
-                  setConfirmGenerate(true)
-                }}
-                disabled={generating || !title.trim()}
-                className="flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 text-white text-xs font-medium px-2 py-1.5 hover:bg-brand-700 transition-colors disabled:opacity-50"
-              >
-                {generating
-                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />Generating…</>
-                  : <><Sparkles className="w-3.5 h-3.5 flex-shrink-0" />Generate with AI</>}
-              </button>
-            }
-          />
+          {/* Matching the SEO / Yoast card treatment so this reads as the
+              distinct "write the article" step rather than a lone tile. */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-2">
+              <Zap className="w-4 h-4 text-brand-500" />
+              Generate Article
+            </h3>
+            <ModelSelect
+              value={model}
+              onChange={setModel}
+              action={
+                <button
+                  onClick={() => {
+                    if (!siteId) { toast.error('Select a site before generating'); return }
+                    setConfirmGenerate(true)
+                  }}
+                  disabled={generating || !title.trim()}
+                  className="flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 text-white text-xs font-medium px-2 py-1.5 hover:bg-brand-700 transition-colors disabled:opacity-50"
+                >
+                  {generating
+                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />Generating…</>
+                    : <><Sparkles className="w-3.5 h-3.5 flex-shrink-0" />Generate with AI</>}
+                </button>
+              }
+            />
+          </div>
 
           <div>
             <label
