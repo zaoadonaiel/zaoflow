@@ -782,7 +782,11 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
           and what happens to it — none of it a scroll away at the moment of
           saving, and none of it taller than it needs to be. `top-14` clears
           the fixed mobile header. */}
-      <div className="sticky top-14 md:top-0 z-20 -mx-4 md:-mx-8 -mt-6 md:-mt-8 px-4 md:px-8 pt-2.5 pb-2 mb-3 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur border-b border-gray-200 dark:border-gray-800">
+      {/* Sticky on desktop only. On mobile the flex-wrap contents (chips +
+          pickers + save/schedule/publish + status) can wrap to 4-5 rows —
+          sticking that at top-14 covers most of the phone viewport and hides
+          the first form field behind it. Let it scroll away with the page. */}
+      <div className="md:sticky md:top-0 z-20 -mx-4 md:-mx-8 -mt-6 md:-mt-8 px-4 md:px-8 pt-2.5 pb-2 mb-3 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur border-b border-gray-200 dark:border-gray-800">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           {steps.map((step) => (
             <div
