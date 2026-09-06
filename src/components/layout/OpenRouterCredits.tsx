@@ -106,7 +106,12 @@ export default function OpenRouterCredits() {
           {state.kind === 'loading' && '···'}
           {state.kind === 'error' && '—'}
           {state.kind === 'ok' && balance !== null && formatDollars(balance)}
-          {state.kind === 'ok' && balance === null && `${formatDollars(usage!)} used`}
+          {state.kind === 'ok' && balance === null && (
+            <>
+              {formatDollars(usage!)}{' '}
+              <span className="text-[9pt] font-normal text-gray-500 dark:text-gray-400">(Balance)</span>
+            </>
+          )}
         </div>
       </div>
       <button
