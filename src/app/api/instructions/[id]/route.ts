@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { wordCountLimitError } from '@/lib/instruction-limits'
-import { readLengthTriple } from '../route'
+import { readLengthTriple } from '@/lib/instruction-length-input'
 
 export async function PATCH(
   req: NextRequest,
