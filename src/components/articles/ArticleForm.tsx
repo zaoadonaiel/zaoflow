@@ -1282,6 +1282,42 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
         </div>
       </div>
 
+      {/* Bottom action bar — mirrors the header's Save/Schedule/Publish so a
+          user who has scrolled to the foot of a long article does not have
+          to page back to the top just to publish. Same handlers; on mobile
+          the three buttons stack full-width so the primary action is a
+          thumb-reach away. */}
+      <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-800 flex flex-col sm:flex-row sm:flex-wrap sm:justify-end gap-2">
+        <button
+          onClick={() => { setPublishMode('draft'); handleSave('draft') }}
+          disabled={saving}
+          className={`w-full sm:w-auto justify-center ${PILL_BASE} ${PILL_ACTION}`}
+        >
+          <Save className="w-3.5 h-3.5" />
+          {saved?.status === 'published' ? 'Save changes' : 'Save draft'}
+        </button>
+
+        {!isNodeSite && (
+          <button
+            type="button"
+            onClick={() => setShowScheduler(true)}
+            className={`w-full sm:w-auto justify-center ${PILL_BASE} ${publishMode === 'scheduled' ? PILL_ACTION_ACTIVE : PILL_ACTION}`}
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            Schedule for later
+          </button>
+        )}
+
+        <button
+          onClick={() => { setPublishMode('now'); handleSave('now') }}
+          disabled={saving}
+          className={`w-full sm:w-auto justify-center ${PILL_BASE} ${PILL_PRIMARY}`}
+        >
+          <Send className="w-3.5 h-3.5" />
+          {saved?.status === 'published' ? 'Republish' : 'Publish now'}
+        </button>
+      </div>
+
       {scheduler}
 
       <Modal
