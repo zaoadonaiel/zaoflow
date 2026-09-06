@@ -272,7 +272,11 @@ function isMovable(a: PortalArticle): boolean {
 }
 
 export default function PortalView({ token, clientName, siteName, articles, onRefresh }: Props) {
-  const [view, setView] = useState<'list' | 'grid'>('list')
+  // Opens on the grid: it shows the title, the state, the opening snippet and
+  // the pause switch on one tile per article — enough to skim what is queued
+  // without opening anything. The list is the same articles in a denser row
+  // for anyone reordering the queue, and is a click away when it is wanted.
+  const [view, setView] = useState<'list' | 'grid'>('grid')
   // The calendar is a modal rather than a third view: it answers "what lands
   // when" across every month at once, which the month tags below cannot.
   const [showCalendar, setShowCalendar] = useState(false)
