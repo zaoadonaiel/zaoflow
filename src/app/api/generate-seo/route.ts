@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { generateSEOMeta, AVAILABLE_MODELS } from '@/lib/openrouter'
+import { generateSEOMeta, fillSeoBlanks, AVAILABLE_MODELS } from '@/lib/openrouter'
 import { recordUsage, sumUsage, type UsageInfo, type UsageRecord } from '@/lib/ai-cost'
 
 export const maxDuration = 60
@@ -52,23 +52,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const titleWords = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean)
-
-    if (!seoMeta) {
-      const plainContent = content.replace(/<[^>]+>/g, ' ').trim()
-      seoMeta = {
-        focusKeyphrase: keywords[0] || titleWords.slice(0, 3).join(' '),
-        keyphraseSynonyms: keywords[1] || titleWords.slice(-3).join(' '),
-        yoastTitle: title,
-        yoastMetaDescription: plainContent.slice(0, 155) || title,
-        slug: titleWords.slice(0, 8).join('-').slice(0, 60),
-      }
-    } else {
-      if (!seoMeta.focusKeyphrase) seoMeta.focusKeyphrase = keywords[0] || titleWords.slice(0, 3).join(' ')
-      if (!seoMeta.keyphraseSynonyms) seoMeta.keyphraseSynonyms = keywords[1] || titleWords.slice(-3).join(' ')
-      if (!seoMeta.yoastTitle) seoMeta.yoastTitle = title
-      if (!seoMeta.slug) seoMeta.slug = titleWords.slice(0, 8).join('-').slice(0, 60)
-    }
+    // Every Yoast field must be non-empty by the time this response lands.
+    const plainContent = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    seoMeta = fillSeoBlanks(seoMeta, { title, keywords, contentText: plainContent })
 
     const receipt: UsageRecord[] = []
     if (seoCalls.length) {

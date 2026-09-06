@@ -481,6 +481,34 @@ export interface SEOMeta {
   slug: string
 }
 
+/**
+ * The five Yoast fields must never leave this codebase blank. The article
+ * generator lands them via one prompt; retries fill the ones the model
+ * skipped; and this final pass covers everything the retries missed —
+ * whitespace, missing keys, models that dropped a field.
+ *
+ * Every fallback is derived from the article itself (title, keywords, body)
+ * rather than a placeholder, so a shipped article that hits this fallback
+ * still reads as though it were written for.
+ */
+export function fillSeoBlanks(
+  seo: Partial<SEOMeta> | null | undefined,
+  { title, keywords, contentText }: { title: string; keywords: string[]; contentText: string },
+): SEOMeta {
+  const titleWords = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean)
+  const clean = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+  const focusKeyphrase =
+    clean(seo?.focusKeyphrase) || keywords[0] || titleWords.slice(0, 3).join(' ') || title
+  const keyphraseSynonyms =
+    clean(seo?.keyphraseSynonyms) || keywords[1] || titleWords.slice(-3).join(' ') || focusKeyphrase
+  const yoastTitle = (clean(seo?.yoastTitle) || title).slice(0, 60)
+  const yoastMetaDescription =
+    (clean(seo?.yoastMetaDescription) || contentText.slice(0, 155) || title).slice(0, 160)
+  const slug =
+    (clean(seo?.slug) || titleWords.slice(0, 8).join('-') || 'article').slice(0, 60)
+  return { focusKeyphrase, keyphraseSynonyms, yoastTitle, yoastMetaDescription, slug }
+}
+
 export async function generateSEOMeta(
   apiKey: string,
   model: string,

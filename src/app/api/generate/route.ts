@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { generateArticle, generateSEOMeta, AVAILABLE_MODELS } from '@/lib/openrouter'
+import { generateArticle, generateSEOMeta, fillSeoBlanks, AVAILABLE_MODELS } from '@/lib/openrouter'
 import { recordUsage, sumUsage, type UsageInfo, type UsageRecord } from '@/lib/ai-cost'
 
 export const maxDuration = 300
@@ -83,26 +83,17 @@ export async function POST(req: NextRequest) {
     }
 
     // Hard fallback — derive from title/keywords if all retries failed or fields still empty
-    if (!seoMeta) {
-      const titleWords = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean)
-      seoMeta = {
-        focusKeyphrase: keywords[0] || titleWords.slice(0, 3).join(' '),
-        keyphraseSynonyms: keywords[1] || titleWords.slice(-3).join(' '),
-        yoastTitle: title,
-        yoastMetaDescription: articleResult.excerpt?.slice(0, 155) || title,
-        slug: titleWords.slice(0, 8).join('-').slice(0, 60),
-      }
-    } else {
-      // Fill any remaining empty fields from fallback
-      const titleWords = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean)
-      if (!seoMeta.focusKeyphrase) seoMeta.focusKeyphrase = keywords[0] || titleWords.slice(0, 3).join(' ')
-      if (!seoMeta.keyphraseSynonyms) seoMeta.keyphraseSynonyms = keywords[1] || titleWords.slice(-3).join(' ')
-      if (!seoMeta.yoastTitle) seoMeta.yoastTitle = title
-      if (!seoMeta.slug) seoMeta.slug = titleWords.slice(0, 8).join('-').slice(0, 60)
-    }
+    // Every Yoast field must be non-empty by the time this response lands —
+    // the fallbacks derive from the article being generated so a rescued
+    // field still reads as its own, and never as a placeholder.
+    seoMeta = fillSeoBlanks(seoMeta, {
+      title,
+      keywords,
+      contentText: articleResult.excerpt || '',
+    })
 
     // A meta description the writer model put in the body was written for this
-    // exact article, so prefer it over the separately generated one
+    // exact article, so prefer it over the separately generated one.
     const lifted = articleResult.extractedMetaDescription
     if (lifted && lifted.length >= 50) {
       seoMeta.yoastMetaDescription = lifted.slice(0, 160)
