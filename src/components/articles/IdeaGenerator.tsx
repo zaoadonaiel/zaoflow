@@ -151,7 +151,10 @@ export default function IdeaGenerator({ siteId, siteName, onAccept, onChangeSite
   }
 
   return (
-    <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/60 dark:bg-amber-900/10 p-3">
+    // `scroll-mt-*` keeps the field visible when the mobile keyboard focuses
+    // it — without this the browser scrolls the textarea to viewport top and
+    // it lands behind the fixed mobile header + sticky steps bar (~104px).
+    <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/60 dark:bg-amber-900/10 p-3 scroll-mt-28 md:scroll-mt-0">
       {/* Two ways to ask, one control. Type a subject and it writes to that;
           leave it empty and it goes looking for one the site has never
           published, which is what it always did. */}
@@ -163,7 +166,7 @@ export default function IdeaGenerator({ siteId, siteName, onAccept, onChangeSite
         rows={2}
         maxLength={600}
         placeholder="Optional — tell it what to write about. e.g. why companies are better off with a web designer with a strong portfolio than a local one"
-        className="w-full px-3 py-2 mb-2 rounded-lg border border-amber-200 dark:border-amber-900/40 bg-white dark:bg-gray-800 text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+        className="w-full px-3 py-2 mb-2 rounded-lg border border-amber-200 dark:border-amber-900/40 bg-white dark:bg-gray-800 text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none scroll-mt-28 md:scroll-mt-0"
       />
       <p className="text-[11px] text-amber-800/70 dark:text-amber-300/60 mb-2.5">
         {topic.trim()

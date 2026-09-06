@@ -782,7 +782,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
           and what happens to it — none of it a scroll away at the moment of
           saving, and none of it taller than it needs to be. `top-14` clears
           the fixed mobile header. */}
-      <div className="sticky top-14 md:top-0 z-20 -mx-4 md:-mx-8 -mt-6 md:-mt-8 px-4 md:px-8 py-2 mb-4 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur border-b border-gray-200 dark:border-gray-800">
+      <div className="sticky top-14 md:top-0 z-20 -mx-4 md:-mx-8 -mt-6 md:-mt-8 px-4 md:px-8 pt-2.5 pb-2 mb-3 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur border-b border-gray-200 dark:border-gray-800">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           {steps.map((step) => (
             <div
