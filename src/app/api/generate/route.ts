@@ -88,19 +88,40 @@ export async function POST(req: NextRequest) {
   // wrong pattern for backend code — the type-only import + tasks.trigger
   // is what keeps this file from pulling the whole task graph into the
   // Next.js bundle.
-  const handle = await tasks.trigger<typeof generateArticleTask>('generate-article', {
-    articleId,
-    userId: user.id,
-    siteId: site_id,
-    title,
-    keywords,
-    instructions,
-    model: resolvedModel,
-    apiKey,
-    knowledgeBase,
-    city: cleanedCity || undefined,
-    cityFocus: cleanedFocus,
-  })
+  let handle
+  try {
+    handle = await tasks.trigger<typeof generateArticleTask>('generate-article', {
+      articleId,
+      userId: user.id,
+      siteId: site_id,
+      title,
+      keywords,
+      instructions,
+      model: resolvedModel,
+      apiKey,
+      knowledgeBase,
+      city: cleanedCity || undefined,
+      cityFocus: cleanedFocus,
+    })
+  } catch (err) {
+    // A failure here (missing TRIGGER_SECRET_KEY, task not deployed, network
+    // error against Trigger.dev) would otherwise crash the handler and hand
+    // the client an empty body — which is what triggered the "Unexpected
+    // end of JSON input" the user hit. Roll the row out of 'generating' so
+    // it does not appear in-flight forever, and return a real JSON error.
+    const msg = err instanceof Error ? err.message : 'Could not enqueue the generation task'
+    await supabase.from('articles').update({
+      status: 'draft',
+      trigger_job_id: null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', articleId).eq('user_id', user.id)
+    return NextResponse.json(
+      {
+        error: `Could not start generation: ${msg}. Check that Trigger.dev is deployed (npm run trigger:deploy) and TRIGGER_SECRET_KEY is set.`,
+      },
+      { status: 502 },
+    )
+  }
 
   // Remember which run wrote the article so a reopen of the row can find
   // the run again (for status polling or realtime resubscription).

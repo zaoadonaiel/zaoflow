@@ -518,8 +518,14 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
           city_focus: city.trim() ? cityFocus : undefined,
         }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Could not start generation')
+      // A silent 500 (function timeout, unhandled crash) hands back an empty
+      // body — parsing that as JSON was the source of the "Unexpected end of
+      // JSON input" error. Read as text first, then try to parse.
+      const raw = await res.text()
+      const data = raw ? (() => { try { return JSON.parse(raw) } catch { return { error: raw } } })() : {}
+      if (!res.ok) {
+        throw new Error(data.error || `Server returned ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`)
+      }
 
       // A brand new article now has a server-side row — take over its URL
       // without a navigation so a reload lands on the article being written
