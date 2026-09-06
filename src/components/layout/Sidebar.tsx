@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import ThemeToggle from '@/components/ui/ThemeToggle'
+import OpenRouterCredits from '@/components/layout/OpenRouterCredits'
 import toast from 'react-hot-toast'
 
 const NAV_ITEMS = [
@@ -80,6 +81,10 @@ export default function Sidebar({ userEmail, userName }: SidebarProps) {
           <X className="w-5 h-5" />
         </button>
       </div>
+
+      {/* Live OpenRouter balance so a generation that is about to fail for
+          "no credits" is visible before the click, not after. */}
+      <OpenRouterCredits />
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto">
