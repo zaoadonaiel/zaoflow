@@ -59,11 +59,12 @@ export default function ImageGenerator({
   // people and word-art overlays are not what these posts should carry.
   const [allowPeople, setAllowPeople] = useState(false)
   const [allowWords, setAllowWords] = useState(false)
-  // Both on by default: no style constraint, let the model decide. Turning
+  // Realistic on, illustration off by default — the writer publishes photo-led
+  // posts and does not want a stray drawing landing on the article. Turning
   // exactly one off forces the other; both off is treated as "no preference"
   // so a stray double-tap does not produce a contradictory prompt.
   const [allowRealistic, setAllowRealistic] = useState(true)
-  const [allowIllustration, setAllowIllustration] = useState(true)
+  const [allowIllustration, setAllowIllustration] = useState(false)
   const altRef = useRef<HTMLInputElement>(null)
 
   // Restore the last-used model after hydration, not during render
