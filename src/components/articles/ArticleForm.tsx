@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   Sparkles, Save, Send, Calendar, Loader2, Globe, Search, FolderOpen,
   ExternalLink, Check, CheckCircle2, ChevronDown, ChevronUp, AlertCircle, Plus, ImageUp, Zap,
+  ClipboardList, BookMarked,
 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import ConfirmSiteModal from '@/components/ui/ConfirmSiteModal'
@@ -42,6 +43,37 @@ const PICKER_BUTTON =
 const PICKER_ROW =
   'w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm text-left ' +
   'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors'
+
+// Consistent outlined pill shape shared by every metadata and action button in
+// the sticky header. Sized so a completed-step chip and a Save button read as
+// the same visual weight — the three sections are told apart by colour, not by
+// size.
+const PILL_BASE =
+  'inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full border text-xs font-medium ' +
+  'transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed'
+const PILL_NEUTRAL =
+  'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+const PILL_GREEN =
+  'border-green-200 dark:border-green-900/50 bg-green-50/60 dark:bg-green-900/15 ' +
+  'text-green-700 dark:text-green-400'
+const PILL_PURPLE =
+  'border-brand-200 dark:border-brand-900/50 bg-brand-50/60 dark:bg-brand-900/15 ' +
+  'text-brand-700 dark:text-brand-400 hover:border-brand-400 dark:hover:border-brand-600'
+const PILL_AMBER =
+  'border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/15 ' +
+  'text-amber-700 dark:text-amber-400'
+const PILL_ACTION =
+  'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 ' +
+  'hover:bg-gray-50 dark:hover:bg-gray-700'
+const PILL_ACTION_ACTIVE =
+  'border-brand-500 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300'
+const PILL_PRIMARY =
+  'border-brand-600 bg-brand-600 text-white hover:bg-brand-700 hover:border-brand-700'
+const ICON_BUTTON =
+  'relative flex items-center justify-center w-11 h-11 shrink-0 rounded-full border ' +
+  'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 ' +
+  'hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-brand-600 dark:hover:text-brand-400 ' +
+  'transition-colors'
 
 interface Props {
   /** Present when editing an existing article; absent when composing a new one. */
@@ -116,6 +148,8 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   // Cost rows for every generation on this article, claimed when it saves.
   const [usageIds, setUsageIds] = useState<string[]>([])
   const [receipt, setReceipt] = useState<UsageRecord[]>([])
+  const [showInstructions, setShowInstructions] = useState(false)
+  const [showKnowledgeBase, setShowKnowledgeBase] = useState(false)
   // Set once the article has actually been written, so leaving afterwards is
   // silent rather than nagging.
   const [savedOnce, setSavedOnce] = useState(false)
@@ -810,165 +844,20 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
           pickers + save/schedule/publish + status) can wrap to 4-5 rows —
           sticking that at top-14 covers most of the phone viewport and hides
           the first form field behind it. Let it scroll away with the page. */}
-      <div className="md:sticky md:top-0 z-20 -mx-4 md:-mx-8 -mt-6 md:-mt-8 px-4 md:px-8 pt-2.5 pb-2 mb-3 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur border-b border-gray-200 dark:border-gray-800">
-        {/* Mobile — chips as thirds on row 1, primary actions as thirds on
-            row 2, secondary controls flow underneath. Kept separate from the
-            desktop layout below rather than juggled with responsive utilities:
-            the desktop row's autosave/scheduled/status ordering is dense
-            enough that mobile is cleaner as its own tree. */}
-        <div className="md:hidden space-y-2">
-          <div className="grid grid-cols-3 gap-1.5">
-            {steps.map((step) => (
-              <div
-                key={step.key}
-                title={step.done ? `${step.label} done` : `${step.label} not done yet`}
-                className={
-                  'flex items-center justify-center gap-1.5 px-2 py-1 rounded-full border text-xs font-medium ' +
-                  (step.done
-                    ? 'border-green-200 dark:border-green-900/50 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
-                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-400 dark:text-gray-500')
-                }
-              >
-                <CheckCircle2
-                  className={
-                    'w-3.5 h-3.5 ' +
-                    (step.done ? 'text-green-600 dark:text-green-500' : 'text-gray-300 dark:text-gray-600')
-                  }
-                />
-                {step.label}
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => setShowSitePicker(true)}
-              className="flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 hover:border-brand-300 dark:hover:border-brand-700 transition-colors min-w-0"
-            >
-              <Globe className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-              <span className="truncate">
-                {selectedSite?.name || (sites.length === 0 ? 'No site' : 'Site')}
-              </span>
-              <ChevronDown className="w-3 h-3 text-gray-300 dark:text-gray-600 shrink-0" />
-            </button>
-            <button
-              onClick={() => { setPublishMode('draft'); handleSave('draft') }}
-              disabled={saving}
-              className="flex items-center justify-center gap-1.5 px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-            >
-              <Save className="w-3.5 h-3.5" />
-              {saved?.status === 'published' ? 'Save' : 'Draft'}
-            </button>
-            <button
-              onClick={() => { setPublishMode('now'); handleSave('now') }}
-              disabled={saving}
-              className="flex items-center justify-center gap-1.5 px-2 py-2 bg-brand-600 text-white rounded-xl text-xs font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
-            >
-              <Send className="w-3.5 h-3.5" />
-              {saved?.status === 'published' ? 'Republish' : 'Publish'}
-            </button>
-          </div>
-
-          {(!isNodeSite || (saved && (saved.node_post_url || saved.wp_post_url))) && (
-            <div className="grid grid-cols-2 gap-2">
-              {!isNodeSite && (
-                <button
-                  type="button"
-                  onClick={() => setShowScheduler(true)}
-                  className={`flex items-center justify-center gap-1.5 px-2 py-2 border rounded-xl text-xs font-medium transition-colors ${
-                    publishMode === 'scheduled'
-                      ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300'
-                      : 'border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800'
-                  }`}
-                >
-                  <Calendar className="w-3.5 h-3.5" />
-                  Schedule
-                </button>
-              )}
-              {!isNodeSite && (
-                <button
-                  type="button"
-                  onClick={() => setShowCategoryPicker(true)}
-                  disabled={!siteId || loadingCats}
-                  className="flex items-center justify-center gap-1.5 px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 disabled:opacity-60 min-w-0"
-                >
-                  <FolderOpen className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                  <span className="truncate">
-                    {!siteId ? 'Pick site' : loadingCats ? 'Loading…' : selectedCategory?.name || 'Uncategorized'}
-                  </span>
-                </button>
-              )}
-            </div>
-          )}
-
-          {publishMode === 'scheduled' && scheduledAt && (
-            <div className="flex items-center justify-between gap-2 text-xs">
-              <span
-                className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border ${
-                  slotCommitted
-                    ? 'bg-green-50 dark:bg-green-900/15 border-green-200 dark:border-green-900/40 text-green-700 dark:text-green-400'
-                    : 'bg-amber-50 dark:bg-amber-900/15 border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-400'
-                }`}
-              >
-                {slotCommitted ? <Check className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-                <span className="truncate">{formatInZone(scheduledAt, scheduledTz)}</span>
-              </span>
-              <button
-                type="button"
-                onClick={handleClearSchedule}
-                disabled={saving}
-                className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-50 shrink-0"
-              >
-                {slotCommitted ? 'Unschedule' : 'Clear'}
-              </button>
-            </div>
-          )}
-
-          {(autosaveError || autosaving || hasUnsavedWork || autosavedAt) && (
-            <div className="text-[11px] text-center">
-              {autosaveError ? (
-                <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-400">
-                  <AlertCircle className="w-3 h-3" />
-                  <span className="truncate max-w-[80vw]" title={autosaveError}>Not saved — {autosaveError}</span>
-                </span>
-              ) : autosaving ? (
-                <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500">
-                  <Loader2 className="w-3 h-3 animate-spin" />Saving…
-                </span>
-              ) : hasUnsavedWork ? (
-                <span className="text-gray-400 dark:text-gray-500">Unsaved changes</span>
-              ) : autosavedAt ? (
-                <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500">
-                  <Check className="w-3 h-3 text-green-600 dark:text-green-500" />
-                  Saved {autosavedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                </span>
-              ) : null}
-            </div>
-          )}
-        </div>
-
-        {/* Desktop — the original flex-wrap row. Hidden on mobile so the two
-            layouts don't fight over the same DOM. */}
-        <div className="hidden md:flex flex-wrap items-center gap-x-2 gap-y-1.5">
+      <div className="md:sticky md:top-0 z-20 -mx-4 md:-mx-8 -mt-6 md:-mt-8 px-4 md:px-8 pt-3 pb-2.5 mb-3 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur border-b border-gray-200 dark:border-gray-800">
+        {/* Three sections in one wrapping flex row: metadata pills (left/
+            centre), publish actions (centre/right), utility icons (far right).
+            One responsive layout instead of a mobile/desktop bifurcation —
+            everything wraps to additional rows when the width runs out. */}
+        <div className="flex flex-wrap items-center gap-2">
           {steps.map((step) => (
             <div
               key={step.key}
               title={step.done ? `${step.label} done` : `${step.label} not done yet`}
-              className={
-                'flex items-center gap-1.5 px-2 py-1 rounded-full border text-xs font-medium ' +
-                (step.done
-                  ? 'border-green-200 dark:border-green-900/50 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
-                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-400 dark:text-gray-500')
-              }
+              className={`${PILL_BASE} ${step.done ? PILL_GREEN : PILL_NEUTRAL}`}
             >
               <CheckCircle2
-                className={
-                  'w-3.5 h-3.5 ' +
-                  (step.done
-                    ? 'text-green-600 dark:text-green-500'
-                    : 'text-gray-300 dark:text-gray-600')
-                }
+                className={`w-3.5 h-3.5 ${step.done ? 'text-green-600 dark:text-green-500' : 'text-gray-300 dark:text-gray-600'}`}
               />
               {step.label}
             </div>
@@ -977,18 +866,11 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
           <button
             type="button"
             onClick={() => setShowSitePicker(true)}
-            className={PICKER_BUTTON}
+            className={`${PILL_BASE} ${PILL_PURPLE}`}
           >
-            <Globe className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-            <span className="min-w-0">
-              <span className="block text-[10px] font-medium uppercase tracking-wide leading-tight text-gray-400 dark:text-gray-500">
-                Site
-              </span>
-              <span className="block text-sm font-medium leading-tight text-gray-900 dark:text-white truncate">
-                {selectedSite?.name || (sites.length === 0 ? 'No sites connected' : 'Choose a site')}
-              </span>
-            </span>
-            <ChevronDown className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 shrink-0" />
+            <Globe className="w-3.5 h-3.5" />
+            Site: {selectedSite?.name || (sites.length === 0 ? 'None' : 'Choose')}
+            <ChevronDown className="w-3 h-3 opacity-60" />
           </button>
 
           {!isNodeSite && (
@@ -996,163 +878,141 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
               type="button"
               onClick={() => setShowCategoryPicker(true)}
               disabled={!siteId || loadingCats}
-              className={PICKER_BUTTON}
+              className={`${PILL_BASE} ${PILL_PURPLE}`}
             >
-              <FolderOpen className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-              <span className="min-w-0">
-                <span className="block text-[10px] font-medium uppercase tracking-wide leading-tight text-gray-400 dark:text-gray-500">
-                  Category
-                </span>
-                <span className="block text-sm font-medium leading-tight text-gray-900 dark:text-white truncate">
-                  {!siteId
-                    ? 'Pick a site first'
-                    : loadingCats
-                      ? 'Loading…'
-                      : selectedCategory?.name || 'Uncategorized'}
-                </span>
-              </span>
+              <FolderOpen className="w-3.5 h-3.5" />
+              Cat: {!siteId ? 'Pick site' : loadingCats ? 'Loading…' : selectedCategory?.name || 'Uncategorized'}
               {loadingCats
-                ? <Loader2 className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 shrink-0 animate-spin" />
-                : <ChevronDown className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 shrink-0" />}
+                ? <Loader2 className="w-3 h-3 animate-spin opacity-60" />
+                : <ChevronDown className="w-3 h-3 opacity-60" />}
             </button>
           )}
 
-          {/* Where this article stands — status, word count and the live post —
-              none of which the form itself edits. */}
-          {saved && (
-            <>
-              <Badge variant={statusToBadgeVariant(saved.status)}>{saved.status}</Badge>
-              {saved.word_count ? (
-                <span className="text-xs text-gray-400 dark:text-gray-500">
-                  {saved.word_count.toLocaleString()} words
-                </span>
-              ) : null}
-              {(saved.node_post_url || saved.wp_post_url) && (
-                <a
-                  href={saved.node_post_url || saved.wp_post_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-brand-600 hover:underline flex items-center gap-1"
-                >
-                  {saved.node_post_url ? 'View live' : 'View on WordPress'} <ExternalLink className="w-3 h-3" />
-                </a>
-              )}
-            </>
-          )}
-
-          <div className="w-full sm:w-auto sm:ml-auto flex flex-col sm:items-end gap-1">
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {/* Whether the work is actually on disk. Worth saying plainly:
-                every generation on this page cost OpenRouter credits, and
-                "did that save?" is not a question to have to guess at. */}
-            <span className="text-xs mr-1 min-w-0">
-              {autosaveError ? (
-                <span className="flex items-center gap-1.5 text-red-600 dark:text-red-400">
-                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="truncate max-w-[16rem]" title={autosaveError}>
-                    Not saved — {autosaveError}
-                  </span>
-                </span>
-              ) : autosaving ? (
-                <span className="flex items-center gap-1.5 text-gray-400 dark:text-gray-500">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Saving…
-                </span>
-              ) : hasUnsavedWork ? (
-                <span className="text-gray-400 dark:text-gray-500">Unsaved changes</span>
-              ) : autosavedAt ? (
-                <span className="flex items-center gap-1.5 text-gray-400 dark:text-gray-500">
-                  <Check className="w-3.5 h-3.5 text-green-600 dark:text-green-500" />
-                  Saved{' '}
-                  {autosavedAt.toLocaleTimeString('en-US', {
-                    hour: 'numeric', minute: '2-digit',
-                  })}
-                </span>
-              ) : null}
-            </span>
-            <button
-              onClick={() => { setPublishMode('draft'); handleSave('draft') }}
-              disabled={saving}
-              className="flex items-center gap-2 px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              {saved?.status === 'published' ? 'Save changes' : 'Save draft'}
-            </button>
-            {/* Scheduling gets the full picker rather than a mode toggle: a
-                plain datetime-local carries no timezone, so the same wall-clock
-                time meant something different here than on the Schedules page.
-                Node.js sites have no native future-post mechanism, so they
-                only ever publish immediately. */}
-            {!isNodeSite && (
-              <button
-                type="button"
-                onClick={() => setShowScheduler(true)}
-                className={`flex items-center gap-2 px-3 py-2 border rounded-xl text-sm font-medium transition-colors ${
-                  publishMode === 'scheduled'
-                    ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300'
-                    : 'border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700'
-                }`}
-              >
-                <Calendar className="w-4 h-4" />
-                Schedule for later
-              </button>
-            )}
-            <button
-              onClick={() => { setPublishMode('now'); handleSave('now') }}
-              disabled={saving}
-              className="flex items-center gap-2 px-3 py-2 bg-brand-600 text-white rounded-xl text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
-            >
-              <Send className="w-4 h-4" />
-              {saved?.status === 'published' ? 'Republish' : 'Publish now'}
-            </button>
-            {/* Finished one article, want the next: opens a blank editor in its
-                own tab so this one is left exactly as it is. */}
-            <a
-              href="/articles/new"
-              target="_blank"
-              rel="noopener noreferrer"
-              title="New article (opens in a new tab)"
-              aria-label="New article (opens in a new tab)"
-              className="flex items-center justify-center w-9 h-9 shrink-0 rounded-full bg-brand-600 text-white hover:bg-brand-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-            </a>
-          </div>
-
-          {/* When this article is due, and how to take it off the calendar —
-              under the buttons rather than beside them, so a scheduled article
-              does not push the row around. */}
           {publishMode === 'scheduled' && scheduledAt && (
-            <div className="flex items-center gap-2">
-              <span
-                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs ${
-                  slotCommitted
-                    ? 'bg-green-50 dark:bg-green-900/15 border-green-200 dark:border-green-900/40 text-green-700 dark:text-green-400'
-                    : 'bg-amber-50 dark:bg-amber-900/15 border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-400'
-                }`}
-                title={
-                  slotCommitted
-                    ? 'Saved and queued on WordPress.'
-                    : 'Not saved yet — pick the time again to commit it.'
-                }
+            <button
+              type="button"
+              onClick={() => setShowScheduler(true)}
+              title={slotCommitted ? 'Saved and queued.' : 'Not saved yet — pick the time again to commit it.'}
+              className={`${PILL_BASE} ${slotCommitted ? PILL_GREEN : PILL_AMBER}`}
+            >
+              {slotCommitted ? <Check className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+              Scheduled: {formatInZone(scheduledAt, scheduledTz)}
+            </button>
+          )}
+
+          {/* Pushes the action + icon groups over so the row reads as three
+              distinct sections when there is room, but collapses back
+              gracefully when the pills already fill the width. */}
+          <div className="grow" />
+
+          <button
+            onClick={() => { setPublishMode('draft'); handleSave('draft') }}
+            disabled={saving}
+            className={`${PILL_BASE} ${PILL_ACTION}`}
+          >
+            <Save className="w-3.5 h-3.5" />
+            {saved?.status === 'published' ? 'Save changes' : 'Save draft'}
+          </button>
+
+          {!isNodeSite && (
+            <button
+              type="button"
+              onClick={() => setShowScheduler(true)}
+              className={`${PILL_BASE} ${publishMode === 'scheduled' ? PILL_ACTION_ACTIVE : PILL_ACTION}`}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              Schedule for later
+            </button>
+          )}
+
+          <button
+            onClick={() => { setPublishMode('now'); handleSave('now') }}
+            disabled={saving}
+            className={`${PILL_BASE} ${PILL_PRIMARY}`}
+          >
+            <Send className="w-3.5 h-3.5" />
+            {saved?.status === 'published' ? 'Republish' : 'Publish now'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowInstructions(true)}
+            aria-label="Instruction sets"
+            title="Instruction sets"
+            className={ICON_BUTTON}
+          >
+            <ClipboardList className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowKnowledgeBase(true)}
+            aria-label="Knowledge base"
+            title={`Knowledge base${selectedSite?.name ? ` — ${selectedSite.name}` : ''}`}
+            className={ICON_BUTTON}
+          >
+            <BookMarked className="w-4 h-4" />
+          </button>
+          <a
+            href="/articles/new"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="New article (opens in a new tab)"
+            aria-label="New article (opens in a new tab)"
+            className="flex items-center justify-center w-11 h-11 shrink-0 rounded-full bg-brand-600 text-white hover:bg-brand-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+          </a>
+        </div>
+
+        {/* Secondary status line — small, unobtrusive. Autosave state, live
+            URL, word count, article-status badge, unschedule. Never in the
+            way of the primary row above. */}
+        {(saved || autosaveError || autosaving || hasUnsavedWork || autosavedAt) && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+            {saved && <Badge variant={statusToBadgeVariant(saved.status)}>{saved.status}</Badge>}
+            {saved?.word_count ? (
+              <span>{saved.word_count.toLocaleString()} words</span>
+            ) : null}
+            {(saved?.node_post_url || saved?.wp_post_url) && (
+              <a
+                href={saved.node_post_url || saved.wp_post_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-brand-600 hover:underline inline-flex items-center gap-1"
               >
-                {slotCommitted
-                  ? <Check className="w-3 h-3 flex-shrink-0" />
-                  : <AlertCircle className="w-3 h-3 flex-shrink-0" />}
-                <span className="truncate">{formatInZone(scheduledAt, scheduledTz)}</span>
+                {saved.node_post_url ? 'View live' : 'View on WordPress'}
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+            {autosaveError ? (
+              <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-400">
+                <AlertCircle className="w-3 h-3" />
+                <span className="truncate max-w-[16rem]" title={autosaveError}>Not saved — {autosaveError}</span>
               </span>
+            ) : autosaving ? (
+              <span className="inline-flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" />Saving…
+              </span>
+            ) : hasUnsavedWork ? (
+              <span>Unsaved changes</span>
+            ) : autosavedAt ? (
+              <span className="inline-flex items-center gap-1">
+                <Check className="w-3 h-3 text-green-600 dark:text-green-500" />
+                Saved {autosavedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+              </span>
+            ) : null}
+            {publishMode === 'scheduled' && scheduledAt && (
               <button
                 type="button"
                 onClick={handleClearSchedule}
                 disabled={saving}
-                className="text-xs text-gray-400 hover:text-red-500 flex-shrink-0 disabled:opacity-50"
+                className="text-gray-400 hover:text-red-500 disabled:opacity-50"
               >
                 {slotCommitted ? 'Unschedule' : 'Clear'}
               </button>
-            </div>
-          )}
+            )}
           </div>
-        </div>
+        )}
       </div>
 
       {isEdit && editId && <CollabPanel articleId={editId} />}
@@ -1349,34 +1209,10 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
           </div>
         </div>
 
-        {/* Sidebar */}
+        {/* Sidebar — Instructions and Knowledge Base moved to header icons;
+            the sidebar now leads with the Featured Image so the page's
+            vertical real estate is spent on the things being edited. */}
         <div className="w-full lg:w-80 lg:shrink-0 space-y-4">
-          {/* Saved instructions — pick a set; there is no free-text box, so what
-              the AI is told is always one of the saved sets */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
-            <InstructionSets
-              selectedId={instructionSetId}
-              onSelect={handleSelectInstructionSet}
-              autoSelectDefault={!isEdit}
-            />
-
-            {/* The site's knowledge base — what the company is and what the AI
-                is writing about. Read on every idea and every article, so it
-                sits right under the instructions that shape them. */}
-            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-              <SiteKnowledgeBase
-                siteId={siteId}
-                siteName={selectedSite?.name || 'this site'}
-                knowledgeBase={selectedSite?.knowledge_base || ''}
-                onSaved={(knowledge_base) =>
-                  setSites((prev) =>
-                    prev.map((s) => (s.id === siteId ? { ...s, knowledge_base } : s))
-                  )
-                }
-              />
-            </div>
-          </div>
-
           {/* Featured Image */}
           {/* No articleId on purpose: generating writes the image straight to
               the row, and on an existing article that would commit a change
@@ -1418,6 +1254,37 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
       </div>
 
       {scheduler}
+
+      <Modal
+        open={showInstructions}
+        onClose={() => setShowInstructions(false)}
+        title="Instruction sets"
+        maxWidth="max-w-xl"
+      >
+        <InstructionSets
+          selectedId={instructionSetId}
+          onSelect={(set) => { handleSelectInstructionSet(set); setShowInstructions(false) }}
+          autoSelectDefault={!isEdit}
+        />
+      </Modal>
+
+      <Modal
+        open={showKnowledgeBase}
+        onClose={() => setShowKnowledgeBase(false)}
+        title={`Knowledge base${selectedSite?.name ? ` — ${selectedSite.name}` : ''}`}
+        maxWidth="max-w-xl"
+      >
+        <SiteKnowledgeBase
+          siteId={siteId}
+          siteName={selectedSite?.name || 'this site'}
+          knowledgeBase={selectedSite?.knowledge_base || ''}
+          onSaved={(knowledge_base) =>
+            setSites((prev) =>
+              prev.map((s) => (s.id === siteId ? { ...s, knowledge_base } : s))
+            )
+          }
+        />
+      </Modal>
 
       <ConfirmSiteModal
         open={confirmGenerate}
