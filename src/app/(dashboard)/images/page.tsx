@@ -90,7 +90,7 @@ export default function ImagesPage() {
         {/* The same pills as the articles list, so switching site works the
             same way in both places. */}
         <div className="mb-5">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div className="flex-1 min-w-0">
               {/* Pills wrap ungracefully on a phone; the same choices fit as a
                   native select on small screens and stay as pills on desktop. */}
@@ -125,7 +125,7 @@ export default function ImagesPage() {
               label="Upload images"
               siteId={siteId !== ALL_SITES && siteId !== UNASSIGNED ? siteId : null}
               onFinished={() => { void fetchImages() }}
-              className="flex-shrink-0 flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-full border border-gray-300 dark:border-gray-600 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-400 dark:hover:border-gray-500 transition-colors disabled:opacity-50"
+              className="w-full sm:w-auto flex-shrink-0 flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-1.5 rounded-full border border-gray-300 dark:border-gray-600 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-400 dark:hover:border-gray-500 transition-colors disabled:opacity-50"
             />
           </div>
           {!loading && !loadError && (
