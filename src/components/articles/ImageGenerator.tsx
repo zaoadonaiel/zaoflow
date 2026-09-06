@@ -246,8 +246,9 @@ export default function ImageGenerator({
 
         {/* Model + size inline so the initial generation does not require
             opening the modal — matches how the text article picker sits in
-            the main editor. */}
-        <div className="grid grid-cols-2 gap-2">
+            the main editor. Stacked on mobile so the model name + price get
+            the full row instead of being crushed into a half-width column. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div>
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Model</label>
             <ImageModelSelect value={model} onChange={handleModelChange} />
