@@ -101,14 +101,14 @@ export default function MonthGrid({
           : 'mb-1'}
       >
         {stickyHeader}
-        <div className="grid grid-cols-7 gap-1">
+        <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
           {WEEKDAYS.map((d, i) => (
-            <div key={i} className="text-[11px] font-medium text-gray-400 text-center py-1">{d}</div>
+            <div key={i} className="text-[10px] sm:text-[11px] font-medium text-gray-400 text-center py-1">{d}</div>
           ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
         {Array.from({ length: lead }).map((_, i) => <div key={`lead-${i}`} />)}
         {Array.from({ length: total }).map((_, i) => {
           const day = i + 1
@@ -146,7 +146,7 @@ export default function MonthGrid({
               }}
               onDragLeave={() => setOverKey((k) => (k === cellKey ? null : k))}
               onDrop={(e) => handleDrop(e, cellKey)}
-              className={`relative flex flex-col items-stretch text-left min-h-[7rem] p-2 rounded-lg text-sm transition-colors ${
+              className={`relative flex flex-col items-stretch text-left min-h-[4.5rem] sm:min-h-[7rem] p-1 sm:p-2 rounded-md sm:rounded-lg text-sm transition-colors ${
                 isSel
                   ? 'bg-brand-600 text-white font-semibold'
                   : isToday
@@ -189,13 +189,13 @@ export default function MonthGrid({
                     day that published one article and has another queued is
                     still two facts and not one. */}
                 <span
-                  className={`inline-flex items-center justify-center w-6 h-6 rounded-full tabular-nums ${
+                  className={`inline-flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full tabular-nums text-xs sm:text-sm ${
                     ringMark ? (isSel ? 'ring-2 ring-white' : RING_CLASS[ringMark]) : ''
                   }`}
                 >
                   {day}
                 </span>
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-0.5 sm:gap-1">
                   {restMarks.map((m) => (
                     <span
                       key={m}
@@ -255,11 +255,37 @@ export default function MonthGrid({
                 </span>
               </span>
 
+              {/* Mobile only: a row of coloured dots stands in for the
+                  titles. A phone cell is too narrow to read a headline out
+                  of, but the shape of the day — how many, and what state —
+                  is still worth showing. */}
+              {posts.length > 0 && (
+                <span className="relative mt-1 flex sm:hidden items-center gap-0.5 flex-wrap pointer-events-none">
+                  {posts.slice(0, 3).map((p) => (
+                    <span
+                      key={p.id}
+                      className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                        isSel ? 'bg-white' : DOT_CLASS_SM[markOf(p)]
+                      }`}
+                    />
+                  ))}
+                  {posts.length > 3 && (
+                    <span
+                      className={`text-[9px] leading-none font-medium ${
+                        isSel ? 'text-white/75' : 'text-gray-400 dark:text-gray-500'
+                      }`}
+                    >
+                      +{posts.length - 3}
+                    </span>
+                  )}
+                </span>
+              )}
+
               {/* What is on the day, not just that something is. Each line
                   carries its own dot, because a day can hold one article
                   already published and another still queued. */}
               {shownPosts.length > 0 && (
-                <span className="relative mt-1 flex flex-col gap-0.5 min-w-0">
+                <span className="relative mt-1 hidden sm:flex flex-col gap-0.5 min-w-0">
                   {shownPosts.map((p) => {
                     const movable = isMovable(p)
                     return (

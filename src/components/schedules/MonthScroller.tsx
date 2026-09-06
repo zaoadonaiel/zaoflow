@@ -107,7 +107,7 @@ export default function MonthScroller({
       ref={scroller}
       onScroll={onScroll}
       // relative so each month's offsetTop is measured against this box.
-      className="relative h-[58vh] overflow-y-auto pr-1"
+      className="relative h-[55vh] sm:h-[58vh] overflow-y-auto pr-0 sm:pr-1"
     >
       {months.map((i) => {
         const view = dateOf(i)

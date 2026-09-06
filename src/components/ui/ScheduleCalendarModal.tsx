@@ -193,9 +193,9 @@ export default function ScheduleCalendarModal({
             onClick={() => setShowClock(true)}
             title="Set the time"
             aria-label={`Set the time — currently ${clockLabel}`}
-            className="flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-200 hover:border-brand-400 hover:text-brand-600 transition-colors"
+            className="flex-shrink-0 inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 h-7 sm:h-8 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 hover:border-brand-400 hover:text-brand-600 transition-colors"
           >
-            <Clock className="w-4 h-4" />
+            <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             {clockLabel}
           </button>
 
@@ -224,23 +224,24 @@ export default function ScheduleCalendarModal({
             type="button"
             onClick={() => setMode((m) => (m === 'rearrange' ? 'calendar' : 'rearrange'))}
             aria-pressed={mode === 'rearrange'}
+            aria-label={mode === 'rearrange' ? 'Back to the calendar' : 'Rearrange the queue'}
             title={mode === 'rearrange'
               ? 'Back to the calendar'
               : 'Drag the queue into the order it publishes in'}
-            className={`h-10 px-4 rounded-xl border text-sm font-medium inline-flex items-center gap-1.5 transition-colors ${
+            className={`h-9 sm:h-10 px-2.5 sm:px-4 rounded-xl border text-sm font-medium inline-flex items-center gap-1.5 transition-colors ${
               mode === 'rearrange'
                 ? 'border-brand-500 bg-brand-600/10 text-brand-600 dark:text-brand-400'
                 : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-brand-400 hover:text-brand-600'
             }`}
           >
             {mode === 'rearrange'
-              ? <><CalendarDays className="w-4 h-4" /> Calendar</>
-              : <><GripVertical className="w-4 h-4" /> Rearrange</>}
+              ? <><CalendarDays className="w-4 h-4" /> <span className="hidden sm:inline">Calendar</span></>
+              : <><GripVertical className="w-4 h-4" /> <span className="hidden sm:inline">Rearrange</span></>}
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="h-10 px-5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700"
+            className="h-9 sm:h-10 px-3 sm:px-5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700"
           >
             Cancel
           </button>
@@ -248,7 +249,7 @@ export default function ScheduleCalendarModal({
             type="button"
             disabled={isPast || saving}
             onClick={() => onSave(resultIso, tzId)}
-            className="h-10 px-6 rounded-xl bg-[#39ff14] text-gray-900 text-sm font-bold hover:bg-[#2ee600] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="h-9 sm:h-10 px-4 sm:px-6 rounded-xl bg-[#39ff14] text-gray-900 text-sm font-bold hover:bg-[#2ee600] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             {saveLabel}
