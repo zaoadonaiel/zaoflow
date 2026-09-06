@@ -298,14 +298,14 @@ export default function SchedulesPage() {
           : upcoming.filter((a) => a.site_id === upcomingFilterSiteId)
         return (
         <section className="mb-8">
-          <div className="flex items-baseline justify-between mb-3">
+          <div className="flex flex-col gap-3 mb-3 sm:flex-row sm:items-baseline sm:justify-between">
             <div>
               <h2 className="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wide">Upcoming articles</h2>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                 {visibleUpcoming.length} scheduled to publish{activeSite ? ` · ${activeSite.name}` : ''}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
                 onClick={() => setUpcomingFilterOpen(true)}
@@ -328,7 +328,7 @@ export default function SchedulesPage() {
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
-              <Link href="/articles?status=scheduled" className="text-xs font-medium text-brand-600 hover:text-brand-700 ml-1">
+              <Link href="/articles?status=scheduled" className="text-xs font-medium text-brand-600 hover:text-brand-700 ml-auto sm:ml-1">
                 View all →
               </Link>
             </div>
@@ -353,11 +353,11 @@ export default function SchedulesPage() {
             {visibleUpcoming.map((article, i) => (
               <div
                 key={article.id}
-                className={`px-5 py-3.5 flex items-center gap-4 hover:bg-gray-50/60 dark:hover:bg-gray-700/30 transition-colors ${
+                className={`px-4 sm:px-5 py-3.5 flex items-start sm:items-center gap-3 sm:gap-4 hover:bg-gray-50/60 dark:hover:bg-gray-700/30 transition-colors ${
                   i > 0 ? 'border-t border-gray-50 dark:border-gray-700' : ''
                 }`}
               >
-                <div className="flex-shrink-0 w-14 text-center">
+                <div className="flex-shrink-0 w-12 sm:w-14 text-center">
                   {article.scheduled_at ? (
                     <>
                       <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
@@ -375,14 +375,28 @@ export default function SchedulesPage() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <Link
-                    href={`/articles/${article.id}`}
-                    className="block font-medium text-sm text-gray-900 dark:text-gray-100 hover:text-brand-600 dark:hover:text-brand-400 transition-colors line-clamp-1"
-                  >
-                    {article.title}
-                  </Link>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 dark:text-gray-500">
-                    <span className="flex items-center gap-1 truncate">
+                  <div className="flex items-start gap-2">
+                    <Link
+                      href={`/articles/${article.id}`}
+                      className="block font-medium text-sm text-gray-900 dark:text-gray-100 hover:text-brand-600 dark:hover:text-brand-400 transition-colors line-clamp-2 flex-1 min-w-0"
+                    >
+                      {article.title}
+                    </Link>
+                    {/* Status pill lives next to the title on mobile so the row
+                        does not stack an unrelated pill under the meta line. */}
+                    <div className="sm:hidden flex-shrink-0">
+                      {article.is_paused ? (
+                        <Badge variant="warning">
+                          <PauseCircle className="w-3 h-3 mr-1" />
+                          Paused
+                        </Badge>
+                      ) : (
+                        <Badge variant="info">Scheduled</Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-x-3 gap-y-1 flex-wrap mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    <span className="flex items-center gap-1 truncate min-w-0 max-w-full">
                       <Globe className="w-3 h-3 flex-shrink-0" />
                       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                       <span className="truncate">{(article as any).sites?.name || 'Unknown site'}</span>
@@ -397,7 +411,7 @@ export default function SchedulesPage() {
                     )}
                   </div>
                 </div>
-                <div className="flex-shrink-0 flex items-center gap-2">
+                <div className="hidden sm:flex flex-shrink-0 items-center gap-2">
                   {article.is_paused ? (
                     <Badge variant="warning">
                       <PauseCircle className="w-3 h-3 mr-1" />
@@ -414,6 +428,13 @@ export default function SchedulesPage() {
                     <Pencil className="w-3.5 h-3.5" />
                   </Link>
                 </div>
+                <Link
+                  href={`/articles/${article.id}`}
+                  className="sm:hidden flex-shrink-0 p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  title="Edit article"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </Link>
               </div>
             ))}
           </div>
@@ -453,101 +474,106 @@ export default function SchedulesPage() {
         <div className="space-y-3">
           {schedules.map((schedule) => (
             <div key={schedule.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600 transition-colors overflow-hidden">
-              <div className="p-5">
-                <div className="flex items-start justify-between gap-4">
-                  {/* Left: info */}
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-gray-900 dark:text-white truncate mb-2">{schedule.name}</h3>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-gray-500 dark:text-gray-400 mb-2">
-                      <span className="flex items-center gap-1.5">
-                        <Globe className="w-3.5 h-3.5 text-gray-400" />
-                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                        {(schedule as any).sites?.name || 'Unknown site'}
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                        {FREQUENCY_OPTIONS.find((f) => f.value === schedule.frequency)?.label}
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-gray-400" />
-                        {(schedule.times_of_day?.length ? schedule.times_of_day : [schedule.time_of_day]).join(' · ')} · {schedule.timezone}
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-gray-400" />
-                        {AVAILABLE_MODELS.find((m) => m.id === schedule.ai_model)?.name || schedule.ai_model}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 line-clamp-1 mb-3">{schedule.topic_prompt}</p>
-                    <div className="flex items-center gap-3 text-xs">
-                      <span className="font-semibold text-gray-700 dark:text-gray-300">{schedule.articles_generated} articles published</span>
-                      {schedule.last_run && (
-                        <span className="text-gray-400 dark:text-gray-500">Last: {formatDistanceToNow(new Date(schedule.last_run), { addSuffix: true })}</span>
-                      )}
-                      {schedule.next_run && (
-                        <span className="text-gray-400 dark:text-gray-500">Next: {format(new Date(schedule.next_run), 'MMM d, h:mm a')}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Right: toggle + actions */}
-                  <div className="flex flex-col items-end gap-3 flex-shrink-0">
-                    <div className="flex items-center gap-2.5">
-                      <span className={`text-xs font-medium ${schedule.is_active ? 'text-green-600' : 'text-gray-400'}`}>
-                        {schedule.is_active ? 'Active' : 'Paused'}
-                      </span>
-                      <button
-                        onClick={() => toggleSchedule(schedule.id, schedule.is_active)}
-                        className={`relative inline-flex h-7 w-[52px] items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                          schedule.is_active ? 'bg-green-500 focus:ring-green-500' : 'bg-gray-200 focus:ring-gray-300'
-                        }`}
-                      >
-                        <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-200 ${
-                          schedule.is_active ? 'translate-x-[28px]' : 'translate-x-1'
-                        }`} />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => runNow(schedule)}
-                        disabled={runningId === schedule.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 hover:bg-brand-50 rounded-lg transition-colors disabled:opacity-50"
-                        title="Generate and publish one article now"
-                      >
-                        {runningId === schedule.id
-                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          : <Play className="w-3.5 h-3.5" />}
-                        {runningId === schedule.id ? 'Running…' : 'Run now'}
-                      </button>
-                      <button
-                        onClick={() => openEdit(schedule)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => deleteSchedule(schedule.id, schedule.name)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+              <div className="p-4 sm:p-5">
+                {/* Header row: name + Active toggle. Toggle sits inline with
+                    the name on every width so it stays a one-tap control
+                    instead of hiding under a stack of action buttons. */}
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <h3 className="font-semibold text-gray-900 dark:text-white truncate flex-1 min-w-0">{schedule.name}</h3>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className={`text-xs font-medium ${schedule.is_active ? 'text-green-600' : 'text-gray-400'}`}>
+                      {schedule.is_active ? 'Active' : 'Paused'}
+                    </span>
+                    <button
+                      onClick={() => toggleSchedule(schedule.id, schedule.is_active)}
+                      className={`relative inline-flex h-7 w-[52px] items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                        schedule.is_active ? 'bg-green-500 focus:ring-green-500' : 'bg-gray-200 focus:ring-gray-300'
+                      }`}
+                    >
+                      <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-200 ${
+                        schedule.is_active ? 'translate-x-[28px]' : 'translate-x-1'
+                      }`} />
+                    </button>
                   </div>
                 </div>
 
-                {/* History toggle */}
-                <button
-                  onClick={() => toggleHistory(schedule.id)}
-                  className="mt-3 flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  {expandedId === schedule.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                  {expandedId === schedule.id ? 'Hide history' : 'View publish history'}
-                </button>
+                {/* Meta chips — wrap freely on mobile so long times/model
+                    names do not push the row out of the viewport. */}
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-gray-500 dark:text-gray-400 mb-2">
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    <Globe className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                    <span className="truncate">{(schedule as any).sites?.name || 'Unknown site'}</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                    {FREQUENCY_OPTIONS.find((f) => f.value === schedule.frequency)?.label}
+                  </span>
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    <Clock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                    <span className="truncate">
+                      {(schedule.times_of_day?.length ? schedule.times_of_day : [schedule.time_of_day]).join(' · ')} · {schedule.timezone}
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    <Sparkles className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                    <span className="truncate">{AVAILABLE_MODELS.find((m) => m.id === schedule.ai_model)?.name || schedule.ai_model}</span>
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400 dark:text-gray-500 line-clamp-2 mb-3">{schedule.topic_prompt}</p>
+
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs mb-3">
+                  <span className="font-semibold text-gray-700 dark:text-gray-300">{schedule.articles_generated} published</span>
+                  {schedule.last_run && (
+                    <span className="text-gray-400 dark:text-gray-500">Last: {formatDistanceToNow(new Date(schedule.last_run), { addSuffix: true })}</span>
+                  )}
+                  {schedule.next_run && (
+                    <span className="text-gray-400 dark:text-gray-500">Next: {format(new Date(schedule.next_run), 'MMM d, h:mm a')}</span>
+                  )}
+                </div>
+
+                {/* Action row on its own line so the three buttons keep their
+                    labels on a phone instead of collapsing into stacked icons
+                    next to the toggle. */}
+                <div className="flex items-center gap-1 flex-wrap border-t border-gray-100 dark:border-gray-700 pt-3 -mx-1">
+                  <button
+                    onClick={() => runNow(schedule)}
+                    disabled={runningId === schedule.id}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 hover:bg-brand-50 rounded-lg transition-colors disabled:opacity-50"
+                    title="Generate and publish one article now"
+                  >
+                    {runningId === schedule.id
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <Play className="w-3.5 h-3.5" />}
+                    {runningId === schedule.id ? 'Running…' : 'Run now'}
+                  </button>
+                  <button
+                    onClick={() => openEdit(schedule)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => toggleHistory(schedule.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    {expandedId === schedule.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    {expandedId === schedule.id ? 'Hide history' : 'History'}
+                  </button>
+                  <button
+                    onClick={() => deleteSchedule(schedule.id, schedule.name)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-auto"
+                    title="Delete schedule"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
               {/* History panel */}
               {expandedId === schedule.id && (
-                <div className="border-t border-gray-100 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/40 px-5 py-4">
+                <div className="border-t border-gray-100 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/40 px-4 sm:px-5 py-4">
                   {!historyMap[schedule.id] ? (
                     <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />Loading history…
@@ -555,21 +581,27 @@ export default function SchedulesPage() {
                   ) : historyMap[schedule.id].length === 0 ? (
                     <p className="text-xs text-gray-400 dark:text-gray-500 py-2">No articles published yet — click <strong>Run now</strong> to publish the first one.</p>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {historyMap[schedule.id].map((a) => (
-                        <div key={a.id} className="flex items-center gap-3 text-xs">
+                        <div key={a.id} className="flex items-start gap-2 text-xs">
                           {a.status === 'published'
-                            ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-                            : <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />}
-                          <span className="flex-1 text-gray-700 dark:text-gray-300 font-medium truncate">{a.title}</span>
-                          <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">{a.word_count?.toLocaleString()} words</span>
-                          <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">{formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}</span>
-                          {a.wp_post_url && (
-                            <a href={a.wp_post_url} target="_blank" rel="noopener noreferrer"
-                              className="text-brand-600 hover:text-brand-700 flex-shrink-0">
-                              <ExternalLink className="w-3.5 h-3.5" />
-                            </a>
-                          )}
+                            ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0 mt-0.5" />
+                            : <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start gap-2">
+                              <span className="flex-1 text-gray-700 dark:text-gray-300 font-medium line-clamp-2 min-w-0">{a.title}</span>
+                              {a.wp_post_url && (
+                                <a href={a.wp_post_url} target="_blank" rel="noopener noreferrer"
+                                  className="text-brand-600 hover:text-brand-700 flex-shrink-0 mt-0.5">
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-gray-400 dark:text-gray-500 mt-0.5">
+                              {a.word_count ? <span>{a.word_count.toLocaleString()} words</span> : null}
+                              <span>{formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}</span>
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>
