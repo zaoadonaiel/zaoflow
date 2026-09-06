@@ -55,13 +55,30 @@ export default function AnalyticsDashboard({ sites, googleConnected, googleEmail
 
   useEffect(() => {
     const googleError = searchParams.get('google_error')
+    const googleErrorDetail = searchParams.get('google_error_detail')
     const googleConnectedParam = searchParams.get('google_connected')
 
-    if (googleError === 'rejected') toast.error('Google authorization was cancelled')
-    else if (googleError === 'no_refresh_token')
-      toast.error('Google did not grant offline access — try reconnecting')
-    else if (googleError) toast.error('Failed to connect Google account')
-    else if (googleConnectedParam) toast.success('Google account connected')
+    // Each code maps to a message the user can act on. The detail from Google
+    // (or from our token exchange) is appended when we have one, so a bad
+    // client secret, revoked scope, or expired code is no longer collapsed
+    // into a single opaque "failed to connect" toast.
+    const messages: Record<string, string> = {
+      rejected: 'Google authorization was cancelled',
+      invalid: 'Google did not return an authorization code',
+      state_mismatch: 'This connection attempt could not be verified — please start over from Analytics',
+      not_logged_in: 'Your session ended during the Google prompt — please log in and try again',
+      no_refresh_token: 'Google did not grant offline access — try reconnecting',
+      exchange_failed: 'Google refused the authorization code',
+      save_failed: 'Could not save the Google connection',
+    }
+
+    if (googleError) {
+      const base = messages[googleError] || 'Failed to connect Google account'
+      const full = googleErrorDetail ? `${base}: ${googleErrorDetail}` : base
+      toast.error(full, { duration: 8000 })
+    } else if (googleConnectedParam) {
+      toast.success('Google account connected')
+    }
 
     if (googleError || googleConnectedParam) {
       router.replace('/analytics')

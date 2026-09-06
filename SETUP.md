@@ -43,7 +43,29 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 TRIGGER_API_KEY=tr_dev_...
 TRIGGER_PROJECT_ID=proj_...
 NEXT_PUBLIC_TRIGGER_PUBLIC_API_KEY=pk_dev_...
+
+# Google (Analytics + Search Console) — required for the /analytics page.
+# Without these, the "Connect Google" button will error at the redirect step.
+GOOGLE_CLIENT_ID=...apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-...
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:3000/api/google/callback
 ```
+
+**Google Cloud Console setup:**
+1. Go to [console.cloud.google.com](https://console.cloud.google.com) → create/select a project.
+2. **APIs & Services → Library** — enable:
+   - Google Analytics Admin API
+   - Google Analytics Data API
+   - Search Console API
+3. **APIs & Services → OAuth consent screen** — configure (External is fine for testing); add your Google account as a Test user while the app is in "Testing" status.
+4. **APIs & Services → Credentials → Create Credentials → OAuth client ID** — Application type: Web application.
+5. Add every environment's callback URL to **Authorized redirect URIs**:
+   - `http://localhost:3000/api/google/callback` (local dev)
+   - `https://<your-domain>/api/google/callback` (production)
+   - Any Vercel preview URL you want the connect button to work on
+6. Copy the client ID and secret into the three env vars above. `GOOGLE_OAUTH_REDIRECT_URI` must exactly match one of the Authorized redirect URIs you registered — trailing slashes, `http` vs `https`, and port all matter.
+
+**On Vercel:** set the same three vars in **Project → Settings → Environment Variables** for each environment you plan to use (Production / Preview / Development). Redeploy after adding them — Next.js reads env at build time for server routes.
 
 ---
 
