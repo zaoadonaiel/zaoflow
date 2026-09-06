@@ -244,6 +244,28 @@ export default function ImageGenerator({
           </>
         )}
 
+        {/* Model + size inline so the initial generation does not require
+            opening the modal — matches how the text article picker sits in
+            the main editor. */}
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Model</label>
+            <ImageModelSelect value={model} onChange={handleModelChange} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Size</label>
+            <select
+              value={size}
+              onChange={(e) => setSize(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              {sizes.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div>
           <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
             {imageUrl ? 'New prompt' : 'Prompt'}

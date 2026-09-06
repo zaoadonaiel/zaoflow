@@ -21,7 +21,6 @@ import { formatInZone } from '@/lib/timezone'
 import { useUnsavedWarning } from '@/lib/use-unsaved-warning'
 import InstructionSets from '@/components/articles/InstructionSets'
 import SiteKnowledgeBase from '@/components/articles/SiteKnowledgeBase'
-import { AVAILABLE_MODELS } from '@/lib/openrouter'
 import type { Article, Site, ArticleInstruction } from '@/types'
 import toast from 'react-hot-toast'
 
@@ -77,23 +76,17 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   const [model, setModel] = useState('')
   const [seoModel, setSeoModel] = useState('')
 
-  // Only restore custom (non-preset) models from localStorage — presets always default to custom mode
+  // Restore whichever model was last used — preset or custom. Anything the
+  // picker saved is safe to reload; the previous "custom only" rule silently
+  // reset the choice every reload when a preset was picked.
   useEffect(() => {
     try {
       const saved = localStorage.getItem(LAST_MODEL_KEY)
-      if (saved && !AVAILABLE_MODELS.some((m) => m.id === saved)) {
-        setModel(saved)
-      } else if (saved && AVAILABLE_MODELS.some((m) => m.id === saved)) {
-        localStorage.removeItem(LAST_MODEL_KEY)
-      }
+      if (saved) setModel(saved)
     } catch {}
     try {
       const savedSeo = localStorage.getItem(SEO_LAST_MODEL_KEY)
-      if (savedSeo && !AVAILABLE_MODELS.some((m) => m.id === savedSeo)) {
-        setSeoModel(savedSeo)
-      } else if (savedSeo && AVAILABLE_MODELS.some((m) => m.id === savedSeo)) {
-        localStorage.removeItem(SEO_LAST_MODEL_KEY)
-      }
+      if (savedSeo) setSeoModel(savedSeo)
     } catch {}
   }, [])
   const [instructions, setInstructions] = useState('')

@@ -18,6 +18,7 @@ const OPENROUTER_SEO_MODELS_URL =
 interface ModelPricing {
   inputPerM: number
   outputPerM: number
+  perImage: number | null
   contextLength: number | null
 }
 
@@ -174,11 +175,9 @@ export default function ModelSelect({
 
   function selectModel(id: string) {
     onChange(id)
-    if (!AVAILABLE_MODELS.some((m) => m.id === id)) {
-      try {
-        localStorage.setItem(lastModelKey, id)
-      } catch {}
-    }
+    // Persist every pick, preset or custom, so reopening the article does not
+    // silently reset the model choice to whatever the form defaulted to.
+    try { localStorage.setItem(lastModelKey, id) } catch {}
     setOpen(false)
   }
 

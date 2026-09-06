@@ -13,13 +13,17 @@ const MAX_EXTRA_IDS = 10
 interface OpenRouterModel {
   id: string
   context_length?: number
-  // Dollars per single token, as strings
-  pricing?: { prompt?: string; completion?: string }
+  // Dollars per single token, as strings. `image_output` is dollars per
+  // generated image — image models bill this way even when they also report
+  // token pricing.
+  pricing?: { prompt?: string; completion?: string; image_output?: string }
 }
 
 export interface ModelPricing {
   inputPerM: number
   outputPerM: number
+  /** Null when the model is not priced per generated image. */
+  perImage: number | null
   contextLength: number | null
 }
 
@@ -47,11 +51,18 @@ export async function GET(req: NextRequest) {
 
       const prompt = Number(model.pricing?.prompt)
       const completion = Number(model.pricing?.completion)
-      if (!Number.isFinite(prompt) || !Number.isFinite(completion)) continue
+      const imageOutput = Number(model.pricing?.image_output)
+      // Text models must expose token prices; image models often report 0/0
+      // for tokens and put the real cost in `image_output`, so accept the row
+      // when either side of the pricing is usable.
+      const hasTokenPricing = Number.isFinite(prompt) && Number.isFinite(completion)
+      const hasImagePricing = Number.isFinite(imageOutput) && imageOutput > 0
+      if (!hasTokenPricing && !hasImagePricing) continue
 
       pricing[model.id] = {
-        inputPerM: prompt * 1_000_000,
-        outputPerM: completion * 1_000_000,
+        inputPerM: hasTokenPricing ? prompt * 1_000_000 : 0,
+        outputPerM: hasTokenPricing ? completion * 1_000_000 : 0,
+        perImage: hasImagePricing ? imageOutput : null,
         contextLength: model.context_length ?? null,
       }
     }

@@ -18,12 +18,75 @@ interface Props {
 
 interface ImgModel { id: string; name: string; badge?: string }
 
+interface ImgPricing {
+  inputPerM: number
+  outputPerM: number
+  perImage: number | null
+  contextLength: number | null
+}
+
+// Shared across every ImageModelSelect on the page so one request feeds them
+// all and reopening the picker is instant.
+let pricingCache: Record<string, ImgPricing> = {}
+const inFlight = new Map<string, Promise<Record<string, ImgPricing>>>()
+
+function loadPricing(customId?: string): Promise<Record<string, ImgPricing>> {
+  const needsCustom = Boolean(customId) && !(customId! in pricingCache)
+  const key = needsCustom ? customId! : '__catalogue__'
+
+  if (!needsCustom && Object.keys(pricingCache).length > 0) {
+    return Promise.resolve(pricingCache)
+  }
+  const existing = inFlight.get(key)
+  if (existing) return existing
+
+  const qs = needsCustom
+    ? `?ids=${encodeURIComponent([customId!, ...IMAGE_GEN_MODELS.map((m) => m.id)].join(','))}`
+    : `?ids=${encodeURIComponent(IMAGE_GEN_MODELS.map((m) => m.id).join(','))}`
+
+  const request = fetch(`/api/models${qs}`)
+    .then((r) => r.json())
+    .then((d) => {
+      pricingCache = { ...pricingCache, ...(d.pricing || {}) }
+      return pricingCache
+    })
+    .catch(() => pricingCache)
+    .finally(() => { inFlight.delete(key) })
+
+  inFlight.set(key, request)
+  return request
+}
+
+function formatPerM(value: number): string {
+  if (value === 0) return 'Free'
+  if (value < 0.01) return '<$0.01'
+  return `$${value.toFixed(2)}`
+}
+
+function formatPerImage(value: number): string {
+  if (value === 0) return 'Free'
+  if (value < 0.001) return '<$0.001'
+  if (value < 0.01) return `$${value.toFixed(3)}`
+  return `$${value.toFixed(2)}`
+}
+
+function priceSummary(p?: ImgPricing): string | null {
+  if (!p) return null
+  if (p.perImage !== null) return `${formatPerImage(p.perImage)} / image`
+  if (p.inputPerM > 0 || p.outputPerM > 0) {
+    return `${formatPerM(p.inputPerM)} in / ${formatPerM(p.outputPerM)} out /M`
+  }
+  return null
+}
+
 export default function ImageModelSelect({ value, onChange, className }: Props) {
   const [open, setOpen] = useState(false)
   const [favorites, setFavorites] = useState<string[]>([])
   const [hidden, setHidden] = useState<string[]>([])
   const [customHistory, setCustomHistory] = useState<ImgModel[]>([])
   const [customDraft, setCustomDraft] = useState('')
+  const [pricing, setPricing] = useState<Record<string, ImgPricing>>(pricingCache)
+  const [pricingLoading, setPricingLoading] = useState(Object.keys(pricingCache).length === 0)
 
   useEffect(() => {
     try {
@@ -35,6 +98,20 @@ export default function ImageModelSelect({ value, onChange, className }: Props) 
       if (c) setCustomHistory(JSON.parse(c))
     } catch {}
   }, [])
+
+  // The trigger shows a price now, so pricing has to load before the modal is
+  // opened. Re-runs when a custom id becomes the value so its price is fetched
+  // alongside the catalogue.
+  useEffect(() => {
+    let active = true
+    const isCustom = Boolean(value) && !IMAGE_GEN_MODELS.some((m) => m.id === value)
+    loadPricing(isCustom ? value : undefined).then((p) => {
+      if (!active) return
+      setPricing({ ...p })
+      setPricingLoading(false)
+    })
+    return () => { active = false }
+  }, [value])
 
   // Any custom id that reaches the picker as `value` gets pinned so it lives
   // on next time the modal opens — a model used once should be a click away
@@ -119,6 +196,8 @@ export default function ImageModelSelect({ value, onChange, className }: Props) 
   const favoriteModels = visible.filter((m) => favorites.includes(m.id))
   const otherModels = visible.filter((m) => !favorites.includes(m.id))
 
+  const currentSummary = priceSummary(pricing[value])
+
   return (
     <div className={className}>
       <button
@@ -128,6 +207,11 @@ export default function ImageModelSelect({ value, onChange, className }: Props) 
       >
         {isFavourite && <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 shrink-0" />}
         <span className="flex-1 truncate">{currentName}</span>
+        {currentSummary && (
+          <span className="shrink-0 text-xs font-mono text-gray-400 dark:text-gray-500">
+            {currentSummary}
+          </span>
+        )}
         <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
       </button>
 
@@ -147,6 +231,8 @@ export default function ImageModelSelect({ value, onChange, className }: Props) 
                 models={favoriteModels}
                 value={value}
                 favorites={favorites}
+                pricing={pricing}
+                pricingLoading={pricingLoading}
                 onSelect={selectModel}
                 onToggleFav={toggleFav}
                 onHide={hideModel}
@@ -163,6 +249,8 @@ export default function ImageModelSelect({ value, onChange, className }: Props) 
                 models={otherModels}
                 value={value}
                 favorites={favorites}
+                pricing={pricing}
+                pricingLoading={pricingLoading}
                 onSelect={selectModel}
                 onToggleFav={toggleFav}
                 onHide={hideModel}
@@ -222,11 +310,13 @@ export default function ImageModelSelect({ value, onChange, className }: Props) 
 }
 
 function ImgModelGrid({
-  models, value, favorites, onSelect, onToggleFav, onHide,
+  models, value, favorites, pricing, pricingLoading, onSelect, onToggleFav, onHide,
 }: {
   models: ImgModel[]
   value: string
   favorites: string[]
+  pricing: Record<string, ImgPricing>
+  pricingLoading: boolean
   onSelect: (id: string) => void
   onToggleFav: (id: string, e: React.MouseEvent) => void
   onHide: (id: string, e: React.MouseEvent) => void
@@ -237,6 +327,8 @@ function ImgModelGrid({
         <ImgModelCard
           key={m.id}
           model={m}
+          price={pricing[m.id]}
+          priceLoading={pricingLoading}
           selected={value === m.id}
           isFav={favorites.includes(m.id)}
           onSelect={() => onSelect(m.id)}
@@ -249,15 +341,20 @@ function ImgModelGrid({
 }
 
 function ImgModelCard({
-  model, isFav, selected, onSelect, onToggleFav, onHide,
+  model, price, priceLoading, isFav, selected, onSelect, onToggleFav, onHide,
 }: {
   model: ImgModel
+  price?: ImgPricing
+  priceLoading: boolean
   isFav: boolean
   selected: boolean
   onSelect: () => void
   onToggleFav: (e: React.MouseEvent) => void
   onHide: (e: React.MouseEvent) => void
 }) {
+  // Per-image models get a single wide cell; token-priced models get input +
+  // output side by side so the two prices can be compared at a glance.
+  const showPerImage = price?.perImage !== null && price?.perImage !== undefined
   return (
     <div className="relative">
       <button
@@ -286,6 +383,16 @@ function ImgModelCard({
         <div className="text-[10px] text-gray-400 dark:text-gray-500 font-mono mt-2 truncate pr-14">
           {model.id}
         </div>
+        {showPerImage ? (
+          <div className="mt-2">
+            <ImgPriceCell label="Per image" value={price!.perImage!} loading={priceLoading} kind="image" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            <ImgPriceCell label="Input" value={price?.inputPerM} loading={priceLoading} kind="token" />
+            <ImgPriceCell label="Output" value={price?.outputPerM} loading={priceLoading} kind="token" />
+          </div>
+        )}
       </button>
 
       <button
@@ -310,6 +417,40 @@ function ImgModelCard({
       >
         <X className="w-4 h-4" />
       </button>
+    </div>
+  )
+}
+
+function ImgPriceCell({
+  label,
+  value,
+  loading,
+  kind,
+}: {
+  label: string
+  value?: number
+  loading: boolean
+  kind: 'token' | 'image'
+}) {
+  const suffix = kind === 'image' ? ' /img' : ' /M'
+  const format = kind === 'image' ? formatPerImage : formatPerM
+  return (
+    <div className="rounded-lg bg-white dark:bg-gray-900/40 border border-gray-100 dark:border-transparent px-2 py-1.5">
+      <div className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">
+        {label}
+      </div>
+      <div className="text-xs font-semibold text-gray-700 dark:text-gray-200 font-mono">
+        {value === undefined ? (
+          <span className="text-gray-300 dark:text-gray-600">{loading ? '···' : '—'}</span>
+        ) : (
+          <>
+            {format(value)}
+            {value > 0 && (
+              <span className="text-gray-400 dark:text-gray-500 font-normal">{suffix}</span>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }
