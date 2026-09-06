@@ -881,7 +881,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
               className={`${PILL_BASE} ${PILL_PURPLE}`}
             >
               <FolderOpen className="w-3.5 h-3.5" />
-              Cat: {!siteId ? 'Pick site' : loadingCats ? 'Loading…' : selectedCategory?.name || 'Uncategorized'}
+              Categories: {!siteId ? 'Pick site' : loadingCats ? 'Loading…' : selectedCategory?.name || 'Uncategorized'}
               {loadingCats
                 ? <Loader2 className="w-3 h-3 animate-spin opacity-60" />
                 : <ChevronDown className="w-3 h-3 opacity-60" />}
