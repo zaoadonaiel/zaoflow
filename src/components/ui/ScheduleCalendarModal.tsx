@@ -8,6 +8,7 @@ import RearrangeQueue from '@/components/schedules/RearrangeQueue'
 import {
   useSiteCalendar, useScheduleActions,
   RING_CLASS, DOT_LABEL, type DayMark,
+  dayKey, partsOfKey,
 } from '@/lib/schedule-calendar'
 import {
   SCHEDULE_ZONES,
@@ -123,6 +124,48 @@ export default function ScheduleCalendarModal({
   // day picks roll a random 7–11 AM PST slot so a rushed "click date, save"
   // does not stack every schedule on the same 9:00 hour.
   const [timeTouched, setTimeTouched] = useState(false)
+  // Same idea for the date: once the user picks a day, the queue-tail default
+  // must not slide out from under them when the calendar reloads.
+  const [dateTouched, setDateTouched] = useState(false)
+
+  // For a brand-new schedule, land on the day *after* the last queued article
+  // so a picker opened at the end of a run drops the new post at the tail
+  // rather than on today (which is usually already taken). Runs once the site's
+  // calendar has loaded, so the seed's today/tomorrow is only what shows during
+  // the fetch.
+  useEffect(() => {
+    if (currentIso || dateTouched || calendarLoading) return
+    if (!articles.length) return
+
+    const scheduledKeys = articles
+      .filter((a) => a.status !== 'published' && !!a.scheduled_at)
+      .map((a) => dayKey(a))
+      .filter((k): k is string => !!k)
+    if (!scheduledKeys.length) return
+
+    scheduledKeys.sort()
+    const lastKey = scheduledKeys[scheduledKeys.length - 1]
+    const { year, month, day } = partsOfKey(lastKey)
+    // UTC arithmetic just to roll over month/year edges — the result is three
+    // numbers, not an instant, so the zone does not enter into it.
+    const d = new Date(Date.UTC(year, month - 1, day + 1))
+    const nextDate: CivilDate = {
+      year: d.getUTCFullYear(),
+      month: d.getUTCMonth() + 1,
+      day: d.getUTCDate(),
+    }
+
+    // If the whole queue is already behind us, keep the seed's today-or-
+    // tomorrow rather than defaulting to a day that would fail the past guard.
+    const today = getZonedParts(new Date(), zoneById(initialTz))
+    const isInPast =
+      nextDate.year < today.year ||
+      (nextDate.year === today.year && nextDate.month < today.month) ||
+      (nextDate.year === today.year && nextDate.month === today.month && nextDate.day < today.day)
+    if (isInPast) return
+
+    setSelected(nextDate)
+  }, [articles, calendarLoading, currentIso, dateTouched, initialTz])
   // The clock is its own modal now: the calendar wants the whole width, and the
   // time is one line you set once, not a wall of buttons beside every month.
   const [showClock, setShowClock] = useState(false)
@@ -309,7 +352,7 @@ export default function ScheduleCalendarModal({
             byDay={byDay}
             today={today}
             selected={selected}
-            onPickDay={setSelected}
+            onPickDay={(d) => { setSelected(d); setDateTouched(true) }}
             onMove={moveArticle}
             onToggleDay={toggleDay}
             movingId={movingId}
