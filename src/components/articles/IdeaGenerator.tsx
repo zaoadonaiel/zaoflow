@@ -159,6 +159,9 @@ export default function IdeaGenerator({ siteId, siteName, onAccept, onChangeSite
           leave it empty and it goes looking for one the site has never
           published, which is what it always did. */}
       <label htmlFor="idea-topic" className="sr-only">What should this article be about?</label>
+      {/* Twice the height on mobile so the placeholder is readable and a full
+          brief fits without scrolling inside a two-row box. `resize-y` lets
+          the corner-grabber drag it taller when a paragraph is being typed. */}
       <textarea
         id="idea-topic"
         value={topic}
@@ -166,7 +169,7 @@ export default function IdeaGenerator({ siteId, siteName, onAccept, onChangeSite
         rows={2}
         maxLength={600}
         placeholder="Optional — tell it what to write about. e.g. why companies are better off with a web designer with a strong portfolio than a local one"
-        className="w-full px-3 py-2 mb-2 rounded-lg border border-amber-200 dark:border-amber-900/40 bg-white dark:bg-gray-800 text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none scroll-mt-20 md:scroll-mt-0"
+        className="w-full px-3 py-2 mb-2 rounded-lg border border-amber-200 dark:border-amber-900/40 bg-white dark:bg-gray-800 text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-y min-h-[6rem] md:min-h-0 scroll-mt-20 md:scroll-mt-0"
       />
       <p className="text-[11px] text-amber-800/70 dark:text-amber-300/60 mb-2.5">
         {topic.trim()
