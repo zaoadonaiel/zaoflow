@@ -787,7 +787,146 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
           sticking that at top-14 covers most of the phone viewport and hides
           the first form field behind it. Let it scroll away with the page. */}
       <div className="md:sticky md:top-0 z-20 -mx-4 md:-mx-8 -mt-6 md:-mt-8 px-4 md:px-8 pt-2.5 pb-2 mb-3 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur border-b border-gray-200 dark:border-gray-800">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        {/* Mobile — chips as thirds on row 1, primary actions as thirds on
+            row 2, secondary controls flow underneath. Kept separate from the
+            desktop layout below rather than juggled with responsive utilities:
+            the desktop row's autosave/scheduled/status ordering is dense
+            enough that mobile is cleaner as its own tree. */}
+        <div className="md:hidden space-y-2">
+          <div className="grid grid-cols-3 gap-1.5">
+            {steps.map((step) => (
+              <div
+                key={step.key}
+                title={step.done ? `${step.label} done` : `${step.label} not done yet`}
+                className={
+                  'flex items-center justify-center gap-1.5 px-2 py-1 rounded-full border text-xs font-medium ' +
+                  (step.done
+                    ? 'border-green-200 dark:border-green-900/50 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
+                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-400 dark:text-gray-500')
+                }
+              >
+                <CheckCircle2
+                  className={
+                    'w-3.5 h-3.5 ' +
+                    (step.done ? 'text-green-600 dark:text-green-500' : 'text-gray-300 dark:text-gray-600')
+                  }
+                />
+                {step.label}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => setShowSitePicker(true)}
+              className="flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 hover:border-brand-300 dark:hover:border-brand-700 transition-colors min-w-0"
+            >
+              <Globe className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+              <span className="truncate">
+                {selectedSite?.name || (sites.length === 0 ? 'No site' : 'Site')}
+              </span>
+              <ChevronDown className="w-3 h-3 text-gray-300 dark:text-gray-600 shrink-0" />
+            </button>
+            <button
+              onClick={() => { setPublishMode('draft'); handleSave('draft') }}
+              disabled={saving}
+              className="flex items-center justify-center gap-1.5 px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {saved?.status === 'published' ? 'Save' : 'Draft'}
+            </button>
+            <button
+              onClick={() => { setPublishMode('now'); handleSave('now') }}
+              disabled={saving}
+              className="flex items-center justify-center gap-1.5 px-2 py-2 bg-brand-600 text-white rounded-xl text-xs font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
+            >
+              <Send className="w-3.5 h-3.5" />
+              {saved?.status === 'published' ? 'Republish' : 'Publish'}
+            </button>
+          </div>
+
+          {(!isNodeSite || (saved && (saved.node_post_url || saved.wp_post_url))) && (
+            <div className="grid grid-cols-2 gap-2">
+              {!isNodeSite && (
+                <button
+                  type="button"
+                  onClick={() => setShowScheduler(true)}
+                  className={`flex items-center justify-center gap-1.5 px-2 py-2 border rounded-xl text-xs font-medium transition-colors ${
+                    publishMode === 'scheduled'
+                      ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300'
+                      : 'border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800'
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  Schedule
+                </button>
+              )}
+              {!isNodeSite && (
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryPicker(true)}
+                  disabled={!siteId || loadingCats}
+                  className="flex items-center justify-center gap-1.5 px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 disabled:opacity-60 min-w-0"
+                >
+                  <FolderOpen className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <span className="truncate">
+                    {!siteId ? 'Pick site' : loadingCats ? 'Loading…' : selectedCategory?.name || 'Uncategorized'}
+                  </span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {publishMode === 'scheduled' && scheduledAt && (
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span
+                className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border ${
+                  slotCommitted
+                    ? 'bg-green-50 dark:bg-green-900/15 border-green-200 dark:border-green-900/40 text-green-700 dark:text-green-400'
+                    : 'bg-amber-50 dark:bg-amber-900/15 border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-400'
+                }`}
+              >
+                {slotCommitted ? <Check className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                <span className="truncate">{formatInZone(scheduledAt, scheduledTz)}</span>
+              </span>
+              <button
+                type="button"
+                onClick={handleClearSchedule}
+                disabled={saving}
+                className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-50 shrink-0"
+              >
+                {slotCommitted ? 'Unschedule' : 'Clear'}
+              </button>
+            </div>
+          )}
+
+          {(autosaveError || autosaving || hasUnsavedWork || autosavedAt) && (
+            <div className="text-[11px] text-center">
+              {autosaveError ? (
+                <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-400">
+                  <AlertCircle className="w-3 h-3" />
+                  <span className="truncate max-w-[80vw]" title={autosaveError}>Not saved — {autosaveError}</span>
+                </span>
+              ) : autosaving ? (
+                <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500">
+                  <Loader2 className="w-3 h-3 animate-spin" />Saving…
+                </span>
+              ) : hasUnsavedWork ? (
+                <span className="text-gray-400 dark:text-gray-500">Unsaved changes</span>
+              ) : autosavedAt ? (
+                <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500">
+                  <Check className="w-3 h-3 text-green-600 dark:text-green-500" />
+                  Saved {autosavedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                </span>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        {/* Desktop — the original flex-wrap row. Hidden on mobile so the two
+            layouts don't fight over the same DOM. */}
+        <div className="hidden md:flex flex-wrap items-center gap-x-2 gap-y-1.5">
           {steps.map((step) => (
             <div
               key={step.key}

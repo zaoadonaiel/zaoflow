@@ -20,6 +20,7 @@ import {
   Users,
   Image as ImageIcon,
   MapPin,
+  Plus,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import ThemeToggle from '@/components/ui/ThemeToggle'
@@ -157,7 +158,19 @@ export default function Sidebar({ userEmail, userName }: SidebarProps) {
           <img src="/logo.png" alt="Zao Flo" className="w-6 h-6" />
           <span className="font-bold text-gray-900 dark:text-white">Zao Flo</span>
         </div>
-        <div className="ml-auto">
+        {/* New-article shortcut sits next to the theme toggle so it is one tap
+            away from anywhere in the app, and does not have to live inside
+            the article form's action row where it crowds the primary buttons
+            on a phone. */}
+        <div className="ml-auto flex items-center gap-1">
+          <Link
+            href="/articles/new"
+            title="New article"
+            aria-label="New article"
+            className="flex items-center justify-center w-9 h-9 rounded-full bg-brand-600 text-white hover:bg-brand-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+          </Link>
           <ThemeToggle />
         </div>
       </div>

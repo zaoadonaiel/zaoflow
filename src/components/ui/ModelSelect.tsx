@@ -258,9 +258,12 @@ export default function ModelSelect({
   return (
     <div className={className}>
       {action ? (
-        <div className="flex items-stretch gap-2">
+        // Mobile: picker on top, action stretched full width underneath. On
+        // sm+ they share a row so the button does not push the picker down
+        // when there is room for both.
+        <div className="flex flex-col sm:flex-row sm:items-stretch gap-2">
           <div className="flex-1 min-w-0">{picker}</div>
-          <div className="shrink-0 flex items-stretch">{action}</div>
+          <div className="shrink-0 flex items-stretch [&>*]:w-full sm:[&>*]:w-auto">{action}</div>
         </div>
       ) : picker}
 
