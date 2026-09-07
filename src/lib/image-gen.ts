@@ -52,6 +52,45 @@ export interface ImageResult {
   usage: UsageInfo
 }
 
+// The default look for every image the app generates. Kept as a single string
+// and applied at the API boundary so future callers get it for free — no need
+// to remember to layer this into their own prompt builder.
+const NATURAL_PHOTO_STYLE =
+  'Style: natural photography — shot on a real camera with a real lens, ' +
+  'natural lighting, realistic skin tones with visible texture and subtle imperfections, ' +
+  'soft and true-to-life colors, subtle color grading, candid documentary feel, ' +
+  'minimal post-processing, authentic and unretouched. ' +
+  'Avoid: oversaturated colors, HDR-style over-processing, plastic or airbrushed skin, ' +
+  'glossy or waxy finish, hyper-stylized rendering, artificial AI-looking aesthetic, ' +
+  'overly sharpened details, neon or crushed contrast.'
+
+// If any of these show up in the prompt the caller has already asked for a
+// non-photographic look — a drawing, cartoon, 3D render, etc. Layering the
+// photo-style guidance on top would fight the user's intent, so opt out.
+const NON_PHOTO_MARKERS = /\b(illustrat(?:ion|ed)|drawing|cartoon|painting|sketch|digital art|render(?:ing|ed)?|3d|cgi|anime|vector|pixel art)\b/i
+
+// A marker unique to our natural-style block, so a prompt that has already been
+// augmented (e.g. the "Edit this image" flow that reuses the previous prompt)
+// does not get the block appended twice.
+const NATURAL_STYLE_MARKER = 'Style: natural photography'
+
+/**
+ * Layer the app's default photography aesthetic onto a raw prompt.
+ *
+ * Idempotent: a second call on the same string is a no-op, so it is safe for
+ * the "Edit this image" flow that re-feeds the previous prompt through the
+ * pipeline. Skips prompts that explicitly ask for a non-photographic look
+ * (illustration, cartoon, 3D render, etc.) so the styling does not contradict
+ * the caller's intent.
+ */
+export function applyNaturalPhotoStyle(prompt: string): string {
+  const trimmed = prompt.trim()
+  if (!trimmed) return trimmed
+  if (trimmed.includes(NATURAL_STYLE_MARKER)) return trimmed
+  if (NON_PHOTO_MARKERS.test(trimmed)) return trimmed
+  return `${trimmed}. ${NATURAL_PHOTO_STYLE}`
+}
+
 export async function generateImage({
   apiKey,
   prompt,
@@ -72,7 +111,10 @@ export async function generateImage({
     },
     body: JSON.stringify({
       model,
-      prompt,
+      // Natural-photo styling is applied here so every code path — article
+      // editor, standalone generator, SEO builder, any future caller — gets
+      // the same realistic look without having to opt in.
+      prompt: applyNaturalPhotoStyle(prompt),
       size,
       n: 1,
       // Don't force response_format — let each model return what it natively supports
