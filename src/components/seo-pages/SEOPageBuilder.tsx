@@ -642,8 +642,8 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
                     <button
                       key={b.value}
                       type="button"
-                      onClick={() => doRewrite(b.value)}
-                      disabled={rewriting || !canRewrite}
+                      onClick={() => setSimilarity(b.value)}
+                      disabled={rewriting}
                       title={b.hint}
                       className={`flex flex-col items-center justify-center gap-1 py-3 rounded-lg border text-xs font-medium transition-colors disabled:opacity-50 ${
                         active
@@ -651,14 +651,22 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
                           : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-brand-300 dark:hover:border-brand-700'
                       }`}
                     >
-                      {rewriting && active
-                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        : <RefreshCw className="w-3.5 h-3.5" />}
+                      <RefreshCw className="w-3.5 h-3.5" />
                       {b.label}
                     </button>
                   )
                 })}
               </div>
+              <button
+                type="button"
+                onClick={() => similarity && doRewrite(similarity)}
+                disabled={rewriting || !canRewrite || similarity === null}
+                className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
+              >
+                {rewriting
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />Rewriting…</>
+                  : <><Wand2 className="w-4 h-4" />Rewrite{similarity ? ` at ${similarity}% similar` : ''}</>}
+              </button>
               <p className="text-[11px] text-gray-400 mt-1.5">
                 10% similar = heavy rewrite (almost all words changed). 90% similar = light freshening.
                 Headings stay word-for-word; word count is preserved within ±10%.
