@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ArrowLeft, Copy, Loader2, MapPin, Plus, Rocket, Save, Sparkles, Star, Wand2, Calendar as CalendarIcon,
+  ArrowLeft, Copy, Loader2, Lock, LockOpen, MapPin, Plus, Rocket, Save, Sparkles, Star, Wand2, Calendar as CalendarIcon,
   ExternalLink, RefreshCw, ChevronDown, ChevronUp, Tag, Receipt,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -48,6 +48,13 @@ function starKeyFor(siteId: string): string {
   return `${STAR_KEY_PREFIX}${siteId}`
 }
 
+/** Per-site source-city lock. When set, the stored city is auto-populated
+ *  into the Source city field on every fresh SEO page for that site. */
+const LOCKED_CITY_KEY_PREFIX = 'zaoflo_seo_locked_source_city_'
+function lockedCityKeyFor(siteId: string): string {
+  return `${LOCKED_CITY_KEY_PREFIX}${siteId}`
+}
+
 const SIMILARITY_BUTTONS: { value: SEOPageSimilarity; label: string; hint: string }[] = [
   { value: 10, label: '10% similar', hint: 'Heavy rewrite — almost all words swapped' },
   { value: 25, label: '25% similar', hint: 'Substantial rewrite' },
@@ -77,7 +84,11 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
   // clicks the star button next to the source-page dropdown.
   const [starredPageId, setStarredPageId] = useState<number | null>(null)
 
-  const [detectingCity, setDetectingCity] = useState(false)
+  // Per-site source-city lock. When on, the current value in the Source
+  // city field is stored under the site's lock key and auto-restored on
+  // every fresh SEO page for that site. Turned off, the persisted value
+  // is cleared. See `LOCKED_CITY_KEY_PREFIX`.
+  const [sourceCityLocked, setSourceCityLocked] = useState(false)
 
   const [wpPages, setWpPages] = useState<WPPageOption[]>([])
   const [wpPagesLoading, setWpPagesLoading] = useState(false)
@@ -206,18 +217,26 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
     setStarredPageId(stored ? Number(stored) : null)
   }, [siteId])
 
-  // Auto-detect the source city whenever the user picks a source page and
-  // the field is still empty. Fills only if empty, so a user who typed a
-  // city up front doesn't get overwritten. On the edit route, `initial`
-  // already carries a saved city — skip the call there entirely.
+  // Restore the locked source city whenever the site changes. Only fills
+  // when the field is empty (a user who typed a fresh city gets to keep
+  // it) and skipped entirely on the edit route where `initial` already
+  // carries whatever the row was saved with.
   useEffect(() => {
-    if (!sourcePageId || initial) return
-    if (sourceCity.trim()) return
-    void detectSourceCity({ autoFill: true })
-    // Intentionally not depending on `sourceCity`/`detectSourceCity` — we
-    // fire once per source-page pick, not on every keystroke in the city input.
+    if (!siteId || typeof window === 'undefined') {
+      setSourceCityLocked(false)
+      return
+    }
+    const stored = window.localStorage.getItem(lockedCityKeyFor(siteId))
+    if (stored) {
+      setSourceCityLocked(true)
+      if (!initial && !sourceCity.trim()) setSourceCity(stored)
+    } else {
+      setSourceCityLocked(false)
+    }
+    // Only refresh the lock indicator on site change — typing in the city
+    // input shouldn't loop us back through here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sourcePageId])
+  }, [siteId])
 
   useEffect(() => {
     if (!siteId) {
@@ -364,56 +383,26 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
     toast.success(`Swapped “${src.display}” → “${tgt.display}” in every field`)
   }
 
-  /** Ask a small model to name the city the picked source page is about.
-   *  Runs on demand from the "Detect" button next to the Source city input,
-   *  and automatically when the user picks a page from the dropdown (if
-   *  Source city is still empty). Overwrites the field on manual runs;
-   *  fills-only-if-empty on the auto run so a user who typed a city first
-   *  doesn't get clobbered by the model's guess. */
-  async function detectSourceCity(opts: { autoFill?: boolean } = {}) {
-    if (!siteId || !sourcePageId) return
-    const page = wpPageLookup.get(sourcePageId)
-    if (!page) return
-    setDetectingCity(true)
-    try {
-      // Fetch the full source so the model has the body's opening sentences
-      // to disambiguate. Cheap — the same endpoint the clone step uses.
-      let content = ''
-      try {
-        const fullRes = await fetch(
-          `/api/seo-pages/wp-pages?site_id=${siteId}&page_id=${sourcePageId}&kind=${sourceKind}`,
-        )
-        const fullData = await fullRes.json()
-        if (fullRes.ok) content = (fullData.page?.content as string) || ''
-      } catch {
-        // Body is a bonus; title + slug are enough for the model.
-      }
-
-      const res = await fetch('/api/seo-pages/detect-city', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: page.title,
-          slug: page.slug,
-          content,
-          seo_page_id: savedId || undefined,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Detection failed')
-      if (data.usage?.cost_usd) setCostTotal((t) => t + Number(data.usage.cost_usd))
-      if (!data.city) {
-        if (!opts.autoFill) toast(`Couldn't confidently name the city on that ${sourceKind}`, { icon: 'ℹ️' })
-        return
-      }
-      if (opts.autoFill && sourceCity.trim()) return
-      setSourceCity(data.city)
-      if (!opts.autoFill) toast.success(`Detected: ${data.city}`)
-    } catch (err) {
-      if (!opts.autoFill) toast.error(err instanceof Error ? err.message : 'Detection failed')
-    } finally {
-      setDetectingCity(false)
+  /** Toggle the source-city lock for the current site. On → persist the
+   *  current input into localStorage so future SEO pages for this site
+   *  auto-fill. Off → remove the persisted value (the field keeps whatever
+   *  the user has typed for this session). */
+  function toggleSourceCityLock() {
+    if (!siteId || typeof window === 'undefined') return
+    const key = lockedCityKeyFor(siteId)
+    if (sourceCityLocked) {
+      window.localStorage.removeItem(key)
+      setSourceCityLocked(false)
+      toast(`Unlocked — source city for this site is no longer remembered`, { icon: '🔓' })
+      return
     }
+    if (!sourceCity.trim()) {
+      toast.error('Type a source city first')
+      return
+    }
+    window.localStorage.setItem(key, sourceCity.trim())
+    setSourceCityLocked(true)
+    toast.success(`Locked — “${sourceCity.trim()}” will pre-fill on new SEO pages for this site`)
   }
 
   /** Ad-hoc find/replace across every field. Case-insensitive. Content is
@@ -840,14 +829,24 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
                   <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Source city</label>
                   <button
                     type="button"
-                    onClick={() => detectSourceCity()}
-                    disabled={!sourcePageId || detectingCity}
-                    title="Ask AI to read the source page and name its city"
-                    className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-600 dark:text-brand-400 hover:underline disabled:text-gray-400 dark:disabled:text-gray-500 disabled:no-underline"
+                    onClick={toggleSourceCityLock}
+                    disabled={!siteId}
+                    title={
+                      !siteId
+                        ? 'Pick a site first'
+                        : sourceCityLocked
+                          ? 'Unlock — stop auto-filling this city for this site'
+                          : 'Lock — remember this city and auto-fill it for this site'
+                    }
+                    className={`inline-flex items-center gap-1 text-[11px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                      sourceCityLocked
+                        ? 'text-brand-600 dark:text-brand-400'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400'
+                    }`}
                   >
-                    {detectingCity
-                      ? <><Loader2 className="w-3 h-3 animate-spin" />Detecting…</>
-                      : <><Sparkles className="w-3 h-3" />Detect</>}
+                    {sourceCityLocked
+                      ? <><Lock className="w-3 h-3" />Locked</>
+                      : <><LockOpen className="w-3 h-3" />Lock</>}
                   </button>
                 </div>
                 <input
@@ -857,7 +856,12 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
                   placeholder="Los Angeles CA"
                   className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
-                <p className="text-[11px] text-gray-400 mt-1">City on the source page — state code optional. Auto-detects when you pick a page; use &ldquo;Detect&rdquo; to re-run.</p>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  City on the source page — state code optional.{' '}
+                  {sourceCityLocked
+                    ? 'Locked for this site: auto-fills on every new SEO page.'
+                    : 'Click the lock to remember this value for future SEO pages.'}
+                </p>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Target city</label>
