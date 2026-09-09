@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ArrowLeft, Copy, Loader2, MapPin, Rocket, Save, Sparkles, Wand2, Calendar as CalendarIcon,
+  ArrowLeft, Copy, Loader2, MapPin, Plus, Rocket, Save, Sparkles, Star, Wand2, Calendar as CalendarIcon,
   ExternalLink, RefreshCw, ChevronDown, ChevronUp, Tag, Receipt,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -36,6 +36,18 @@ interface Props {
  *  republish. Kept out of the DB — this is a per-browser preference. */
 const SKIP_REPUBLISH_CONFIRM_KEY = 'zaoflo_seo_skip_republish_confirm'
 
+/** Last WP site the user picked in the SEO Page builder. Restored on the
+ *  next fresh draft so switching sites once persists across sessions. */
+const LAST_SEO_SITE_KEY = 'zaoflo_seo_last_site_id'
+
+/** Per-site "starred" source page. Star the source you clone from most
+ *  often on a given site and it becomes the default selection on every
+ *  fresh SEO page for that site. Key format: `${prefix}${site_id}`. */
+const STAR_KEY_PREFIX = 'zaoflo_seo_starred_page_'
+function starKeyFor(siteId: string): string {
+  return `${STAR_KEY_PREFIX}${siteId}`
+}
+
 const SIMILARITY_BUTTONS: { value: SEOPageSimilarity; label: string; hint: string }[] = [
   { value: 10, label: '10% similar', hint: 'Heavy rewrite — almost all words swapped' },
   { value: 25, label: '25% similar', hint: 'Substantial rewrite' },
@@ -51,7 +63,19 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
   const [sitesLoading, setSitesLoading] = useState(true)
   const [siteId, setSiteId] = useState<string>(initial?.site_id || '')
 
-  const [sourceKind, setSourceKind] = useState<'post' | 'page'>(initial?.source_kind ?? 'post')
+  // Defaults to 'page' — the SEO Pages tool is more often used against
+  // Fusion-built page templates than blog posts.
+  const [sourceKind, setSourceKind] = useState<'post' | 'page'>(initial?.source_kind ?? 'page')
+
+  // "Only city name" — persistent visual toggle for the swap-only mode.
+  // Defaults on so a fresh draft advertises the safest workflow (no AI cost,
+  // no risk to layout). Clicking runs the swap AND toggles state.
+  const [cityOnlyMode, setCityOnlyMode] = useState(true)
+
+  // The starred source page for the currently-selected site (if any).
+  // Read from localStorage on every site switch, updated when the user
+  // clicks the star button next to the source-page dropdown.
+  const [starredPageId, setStarredPageId] = useState<number | null>(null)
 
   const [wpPages, setWpPages] = useState<WPPageOption[]>([])
   const [wpPagesLoading, setWpPagesLoading] = useState(false)
@@ -145,13 +169,40 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
       .then((d) => {
         const wpSites: Site[] = (d.sites || []).filter((s: Site) => s.site_type === 'wordpress')
         setSites(wpSites)
-        if (!siteId && wpSites.length === 1) setSiteId(wpSites[0].id)
+        // Site pre-selection order: (1) whatever the edit route already
+        // populated `siteId` with, (2) the last site the user picked in
+        // this browser (remembered across sessions), (3) the first WP site
+        // — the /api/sites feed is already sorted most-recent-first. This
+        // saves the site drop-down click on every new SEO page.
+        if (!siteId && wpSites.length > 0) {
+          const remembered = typeof window !== 'undefined'
+            ? window.localStorage.getItem(LAST_SEO_SITE_KEY)
+            : null
+          const target = wpSites.find((s) => s.id === remembered) ?? wpSites[0]
+          setSiteId(target.id)
+        }
       })
       .catch(() => toast.error('Failed to load sites'))
       .finally(() => setSitesLoading(false))
     // Only run on mount — the site picker owns its own state after that.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Persist the site selection so the next fresh SEO page opens on it.
+  useEffect(() => {
+    if (!siteId || typeof window === 'undefined') return
+    window.localStorage.setItem(LAST_SEO_SITE_KEY, siteId)
+  }, [siteId])
+
+  // Refresh the "starred page" indicator whenever the current site changes.
+  useEffect(() => {
+    if (!siteId || typeof window === 'undefined') {
+      setStarredPageId(null)
+      return
+    }
+    const stored = window.localStorage.getItem(starKeyFor(siteId))
+    setStarredPageId(stored ? Number(stored) : null)
+  }, [siteId])
 
   useEffect(() => {
     if (!siteId) {
@@ -170,6 +221,18 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
       .then((pages) => {
         if (cancelled) return
         setWpPages(pages || [])
+        // Auto-pick the starred source for this site. Only kicks in on a
+        // fresh draft (no existing sourcePageId — set on the /[id] route
+        // from the saved value) and only when the starred id is present in
+        // the just-fetched list, so a starred page that was later deleted
+        // fails safe.
+        if (!sourcePageId && !initial && typeof window !== 'undefined') {
+          const starred = window.localStorage.getItem(starKeyFor(siteId))
+          const starredId = starred ? Number(starred) : null
+          if (starredId && (pages || []).some((p) => p.id === starredId)) {
+            setSourcePageId(starredId)
+          }
+        }
       })
       .catch((err) => {
         if (cancelled) return
@@ -473,6 +536,14 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
               <ArrowLeft className="w-4 h-4" />
               Back
             </Link>
+            <Link
+              href="/seo-pages/new"
+              aria-label="New SEO page"
+              title="New SEO page"
+              className="flex items-center justify-center w-9 h-9 rounded-full bg-brand-600 text-white hover:bg-brand-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+            </Link>
             <button
               onClick={() => saveDraft()}
               disabled={saving || publishing}
@@ -602,15 +673,49 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
                 <p className="text-xs text-red-600 dark:text-red-400 mt-1.5">{wpPagesError}</p>
               )}
               {selectedWpPage && (
-                <a
-                  href={selectedWpPage.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:underline mt-1.5"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  View source {sourceKind}
-                </a>
+                <div className="mt-1.5 flex items-center gap-3">
+                  <a
+                    href={selectedWpPage.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:underline"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    View source {sourceKind}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!siteId || !sourcePageId || typeof window === 'undefined') return
+                      const key = starKeyFor(siteId)
+                      const current = window.localStorage.getItem(key)
+                      if (current === String(sourcePageId)) {
+                        window.localStorage.removeItem(key)
+                        setStarredPageId(null)
+                        toast(`Removed default ${sourceKind} for this site`, { icon: '☆' })
+                      } else {
+                        window.localStorage.setItem(key, String(sourcePageId))
+                        setStarredPageId(sourcePageId)
+                        toast.success(`Starred — this ${sourceKind} is now the default for this site`)
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-yellow-500 dark:hover:text-yellow-400 transition-colors"
+                    title={
+                      starredPageId === sourcePageId
+                        ? `Unstar — remove as the default ${sourceKind} for this site`
+                        : `Star as the default ${sourceKind} for this site`
+                    }
+                  >
+                    <Star
+                      className={`w-3.5 h-3.5 ${
+                        starredPageId === sourcePageId
+                          ? 'fill-yellow-400 text-yellow-400'
+                          : ''
+                      }`}
+                    />
+                    {starredPageId === sourcePageId ? 'Starred as default' : 'Star as default'}
+                  </button>
+                </div>
               )}
             </div>
 
@@ -639,16 +744,36 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={swapCityOnly}
-              disabled={!sourceCity.trim() || !targetCity.trim()}
-              title="Just replace the city name across every field. No AI call, no cost."
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-            >
-              <MapPin className="w-4 h-4" />
-              Only city name
-            </button>
+            <div className="flex items-center justify-between rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <MapPin className="w-4 h-4 text-brand-500 flex-shrink-0" />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Only city name</span>
+                <span className="text-[11px] text-gray-400 hidden sm:inline">
+                  · plain find-and-replace, no AI
+                </span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={cityOnlyMode}
+                aria-label="Only city name toggle"
+                disabled={!sourceCity.trim() || !targetCity.trim()}
+                onClick={() => {
+                  const next = !cityOnlyMode
+                  setCityOnlyMode(next)
+                  if (next) swapCityOnly()
+                }}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+                  cityOnlyMode ? 'bg-brand-600' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transform transition-transform ${
+                    cityOnlyMode ? 'translate-x-[22px]' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
 
             <button
               onClick={doClone}
