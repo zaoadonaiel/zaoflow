@@ -10,6 +10,7 @@ import {
 import toast from 'react-hot-toast'
 
 import Header from '@/components/layout/Header'
+import Modal from '@/components/ui/Modal'
 import ArticleEditor from '@/components/articles/ArticleEditor'
 import ImageGenerator from '@/components/articles/ImageGenerator'
 import InstructionSets from '@/components/articles/InstructionSets'
@@ -30,6 +31,10 @@ interface Props {
   /** Sum of ai_usage.cost_usd for this SEO page, fetched by the parent. */
   initialCostTotal?: number
 }
+
+/** localStorage flag that lets the user skip the "are you sure" prompt on
+ *  republish. Kept out of the DB — this is a per-browser preference. */
+const SKIP_REPUBLISH_CONFIRM_KEY = 'zaoflo_seo_skip_republish_confirm'
 
 const SIMILARITY_BUTTONS: { value: SEOPageSimilarity; label: string; hint: string }[] = [
   { value: 10, label: '10% similar', hint: 'Heavy rewrite — almost all words swapped' },
@@ -105,6 +110,10 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
   // without waiting for the /[id] route to re-fetch. Seeded from `initial` so
   // reopening a published page keeps the banner visible.
   const [wpPageUrl, setWpPageUrl] = useState<string | null>(initial?.wp_page_url ?? null)
+
+  // Republish confirmation modal — shown when the page has been published
+  // before (wpPageUrl is set) and the user hasn't chosen to skip the prompt.
+  const [showRepublishConfirm, setShowRepublishConfirm] = useState(false)
 
   // Running total of what AI usage has cost against this page. Seeded from a
   // server aggregate on load (so re-opening a page shows history), then bumped
@@ -363,7 +372,23 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
     }
   }
 
+  /** Entry point for the "Publish now" button. When this page has already
+   *  been published (wpPageUrl is set), pause for a confirmation so a
+   *  re-run doesn't silently overwrite live content — unless the user has
+   *  opted out of the prompt via localStorage. */
   async function publishNow() {
+    const skip = typeof window !== 'undefined'
+      && window.localStorage.getItem(SKIP_REPUBLISH_CONFIRM_KEY) === '1'
+    if (wpPageUrl && !skip) {
+      setShowRepublishConfirm(true)
+      return
+    }
+    await doPublish()
+  }
+
+  /** The real publish call — kept separate so both the direct path and the
+   *  "Yes, override" modal buttons can reuse it. */
+  async function doPublish() {
     const saved = await saveDraft(true)
     if (!saved) return
     setPublishing(true)
@@ -988,6 +1013,60 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
           )}
         </div>
       </div>
+
+      <Modal
+        open={showRepublishConfirm}
+        onClose={() => setShowRepublishConfirm(false)}
+        title="Override the existing page?"
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            This SEO page has already been published. Continuing will overwrite
+            the live content at:
+          </p>
+          {wpPageUrl && (
+            <a
+              href={wpPageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm text-brand-600 dark:text-brand-400 hover:underline break-all"
+            >
+              <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
+              {wpPageUrl}
+            </a>
+          )}
+          <div className="flex flex-col sm:flex-row gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowRepublishConfirm(false)}
+              className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              No, cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowRepublishConfirm(false); void doPublish() }}
+              className="flex-1 px-4 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors"
+            >
+              Yes, this time
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.localStorage.setItem(SKIP_REPUBLISH_CONFIRM_KEY, '1')
+                }
+                setShowRepublishConfirm(false)
+                void doPublish()
+              }}
+              className="flex-1 px-4 py-2.5 rounded-lg border border-brand-300 dark:border-brand-700 bg-brand-50 dark:bg-brand-900/20 text-sm font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/30 transition-colors"
+            >
+              Yes, don&apos;t ask again
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
