@@ -9,6 +9,7 @@ import type { SEOPage } from '@/types'
 export default function EditSEOPagePage() {
   const params = useParams<{ id: string }>()
   const [seoPage, setSeoPage] = useState<SEOPage | null>(null)
+  const [initialCostTotal, setInitialCostTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -19,9 +20,12 @@ export default function EditSEOPagePage() {
       .then(async (r) => {
         const data = await r.json()
         if (!r.ok) throw new Error(data.error || 'Not found')
-        return data.seoPage as SEOPage
+        return data as { seoPage: SEOPage; costTotal?: number }
       })
-      .then((p) => setSeoPage(p))
+      .then((d) => {
+        setSeoPage(d.seoPage)
+        setInitialCostTotal(d.costTotal ?? 0)
+      })
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load'))
       .finally(() => setLoading(false))
   }, [params?.id])
@@ -42,5 +46,5 @@ export default function EditSEOPagePage() {
     )
   }
 
-  return <SEOPageBuilder initial={seoPage} />
+  return <SEOPageBuilder initial={seoPage} initialCostTotal={initialCostTotal} />
 }

@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { prompt, model = 'openai/gpt-image-1', articleId, siteId } = body
+  const { prompt, model = 'openai/gpt-image-1', articleId, seoPageId, siteId } = body
   const size = body.size || getDefaultSize(model)
 
   if (!prompt?.trim()) {
@@ -103,7 +103,9 @@ export async function POST(req: NextRequest) {
     const receipt: UsageRecord[] = []
     const rec = await recordUsage({
       supabase, userId: user.id, step: 'image',
-      usage, articleId: articleId || null,
+      usage,
+      articleId: articleId || null,
+      seoPageId: seoPageId || null,
     })
     if (rec) receipt.push(rec)
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { recordUsage, readUsage } from '@/lib/ai-cost'
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const VALID_SIMILARITIES = [10, 25, 50, 90] as const
@@ -36,12 +37,14 @@ export async function POST(req: NextRequest) {
     similarity,
     instructions,
     target_city,
+    seo_page_id,
   } = body as {
     content?: string
     model?: string
     similarity?: number
     instructions?: string
     target_city?: string
+    seo_page_id?: string
   }
 
   if (!content || !model || similarity === undefined) {
@@ -137,11 +140,24 @@ ${content}`
 
   const newWordCount = htmlToText(cleaned).split(/\s+/).filter(Boolean).length
 
+  // Cost tracking — best-effort. A missing seo_page_id (first rewrite before
+  // saving) still records the row against the user, so the total lights up as
+  // soon as the page saves and the builder re-fetches.
+  const usage = readUsage(data, model || 'unknown')
+  const rec = await recordUsage({
+    supabase,
+    userId: user.id,
+    step: 'rewrite',
+    usage,
+    seoPageId: seo_page_id || null,
+  })
+
   return NextResponse.json({
     content: cleaned,
     originalWordCount,
     newWordCount,
     model,
     similarity,
+    usage: rec,
   })
 }

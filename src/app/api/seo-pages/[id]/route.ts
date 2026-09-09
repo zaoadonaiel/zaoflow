@@ -29,7 +29,27 @@ export async function GET(
     .single()
 
   if (error || !seoPage) return NextResponse.json({ error: 'SEO page not found' }, { status: 404 })
-  return NextResponse.json({ seoPage })
+
+  // Aggregate every AI usage row linked to this SEO page so the builder can
+  // show what the clone cost. A `null` cost_usd (image models we can't price)
+  // is treated as 0 for the sum but reported separately so the UI can hint
+  // that the true figure may be higher.
+  const { data: usageRows } = await supabase
+    .from('ai_usage')
+    .select('cost_usd')
+    .eq('user_id', user.id)
+    .eq('seo_page_id', params.id)
+
+  const rows = (usageRows as Array<{ cost_usd: number | null }> | null) ?? []
+  const costTotal = rows.reduce((n, r) => n + (r.cost_usd ?? 0), 0)
+  const costUnpriced = rows.filter((r) => r.cost_usd === null).length
+
+  return NextResponse.json({
+    seoPage,
+    costTotal,
+    costUnpriced,
+    costCount: rows.length,
+  })
 }
 
 export async function PATCH(

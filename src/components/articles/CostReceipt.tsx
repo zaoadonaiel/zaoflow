@@ -9,6 +9,7 @@ const STEP_LABEL: Record<UsageRecord['step'], string> = {
   article: 'Article body',
   seo: 'SEO / Yoast',
   image: 'Image',
+  rewrite: 'SEO Page rewrite',
   web_search: 'Live web search',
 }
 

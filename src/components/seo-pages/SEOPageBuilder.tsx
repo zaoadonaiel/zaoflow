@@ -19,6 +19,8 @@ import type { ArticleInstruction, SEOPage, Site, SEOPageSimilarity, WPPageOption
 interface Props {
   /** Existing SEO page (edit mode) or null (new mode). */
   initial: SEOPage | null
+  /** Sum of ai_usage.cost_usd for this SEO page, fetched by the parent. */
+  initialCostTotal?: number
 }
 
 const SIMILARITY_BUTTONS: { value: SEOPageSimilarity; label: string; hint: string }[] = [
@@ -28,7 +30,7 @@ const SIMILARITY_BUTTONS: { value: SEOPageSimilarity; label: string; hint: strin
   { value: 90, label: '90% similar', hint: 'Light freshening — small tweaks only' },
 ]
 
-export default function SEOPageBuilder({ initial }: Props) {
+export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props) {
   const router = useRouter()
 
   const [savedId, setSavedId] = useState<string | null>(initial?.id ?? null)
@@ -84,6 +86,11 @@ export default function SEOPageBuilder({ initial }: Props) {
   // without waiting for the /[id] route to re-fetch. Seeded from `initial` so
   // reopening a published page keeps the banner visible.
   const [wpPageUrl, setWpPageUrl] = useState<string | null>(initial?.wp_page_url ?? null)
+
+  // Running total of what AI usage has cost against this page. Seeded from a
+  // server aggregate on load (so re-opening a page shows history), then bumped
+  // locally as each rewrite / image generation returns its cost.
+  const [costTotal, setCostTotal] = useState<number>(initialCostTotal)
 
   // Defaults to true — the common case is to write `_location = 1`.
   const [setLocationMeta, setSetLocationMeta] = useState<boolean>(
@@ -205,11 +212,15 @@ export default function SEOPageBuilder({ initial }: Props) {
           similarity: pct,
           instructions: instructionSet?.instructions || '',
           target_city: targetCity,
+          seo_page_id: savedId || undefined,
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Rewrite failed')
       setContent(data.content)
+      if (data.usage?.cost_usd) {
+        setCostTotal((t) => t + Number(data.usage.cost_usd))
+      }
       const drift = Math.abs(data.newWordCount - data.originalWordCount)
       const tolerated = Math.max(30, Math.round(data.originalWordCount * 0.1))
       if (drift > tolerated) {
@@ -347,6 +358,15 @@ export default function SEOPageBuilder({ initial }: Props) {
         subtitle={savedId ? 'Update, rewrite, or republish the draft' : 'Clone a WordPress post or page for another city'}
         actions={
           <div className="flex items-center gap-2">
+            <div
+              className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300"
+              title="Sum of every AI usage row (rewrite + image generation) tied to this SEO page"
+            >
+              <span className="text-gray-400">Total cost</span>
+              <span className="text-gray-900 dark:text-white font-mono">
+                {costTotal > 0 ? `$${costTotal.toFixed(4)}` : '$0.0000'}
+              </span>
+            </div>
             <Link
               href="/seo-pages"
               className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
@@ -724,19 +744,34 @@ export default function SEOPageBuilder({ initial }: Props) {
         </div>
 
         <div className="space-y-6">
-          <ImageGenerator
-            articleId={savedId || undefined}
-            articleTitle={title}
-            siteId={siteId || undefined}
-            initialImageUrl={featuredImageUrl}
-            initialPrompt={featuredImagePrompt}
-            initialAlt={featuredImageAlt}
-            onImageGenerated={(url, prompt, alt) => {
-              setFeaturedImageUrl(url)
-              setFeaturedImagePrompt(prompt)
-              setFeaturedImageAlt(alt)
-            }}
-          />
+          {/* Featured image is optional on SEO pages — muted until touched so
+              the card doesn't read as a required step. Focus/hover restores
+              full opacity, and any generated image obviously restores it. */}
+          <div
+            className={`transition-opacity ${
+              featuredImageUrl
+                ? ''
+                : 'opacity-60 hover:opacity-100 focus-within:opacity-100'
+            }`}
+          >
+            <ImageGenerator
+              heading="Featured image (optional)"
+              seoPageId={savedId || undefined}
+              articleTitle={title}
+              siteId={siteId || undefined}
+              initialImageUrl={featuredImageUrl}
+              initialPrompt={featuredImagePrompt}
+              initialAlt={featuredImageAlt}
+              onImageGenerated={(url, prompt, alt, _ids, records) => {
+                setFeaturedImageUrl(url)
+                setFeaturedImagePrompt(prompt)
+                setFeaturedImageAlt(alt)
+                const delta = (records || [])
+                  .reduce((n, r) => n + Number(r.cost_usd ?? 0), 0)
+                if (delta > 0) setCostTotal((t) => t + delta)
+              }}
+            />
+          </div>
 
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 space-y-3">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">

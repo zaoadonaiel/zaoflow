@@ -8,7 +8,7 @@
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models'
 
 /** Persistable steps — the DB check constraint on ai_usage.step accepts these. */
-export type PersistedStep = 'idea' | 'article' | 'seo' | 'image'
+export type PersistedStep = 'idea' | 'article' | 'seo' | 'image' | 'rewrite'
 /** Everything a receipt row can carry, including the client-only web search line. */
 export type AiStep = PersistedStep | 'web_search'
 
@@ -176,6 +176,7 @@ export async function recordUsage({
   step,
   usage,
   articleId,
+  seoPageId,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any
@@ -183,6 +184,10 @@ export async function recordUsage({
   step: PersistedStep
   usage: UsageInfo
   articleId?: string | null
+  /** SEO Pages don't live in `articles`, so they use their own attachment
+   *  column. Mutually exclusive with `articleId` — the FK on the unused side
+   *  stays null. */
+  seoPageId?: string | null
 }): Promise<UsageRecord | null> {
   try {
     const rates = await fetchRates()
@@ -193,6 +198,7 @@ export async function recordUsage({
       .insert({
         user_id: userId,
         article_id: articleId || null,
+        seo_page_id: seoPageId || null,
         step,
         model: usage.model,
         prompt_tokens: usage.promptTokens,

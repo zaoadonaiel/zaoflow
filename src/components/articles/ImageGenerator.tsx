@@ -64,6 +64,9 @@ function nationalityPhrase(value: string): string {
 
 interface Props {
   articleId?: string
+  /** SEO page this image belongs to. Mutually exclusive with `articleId` — the
+   *  server records the cost against whichever the caller passes. */
+  seoPageId?: string
   articleTitle?: string
   /** Site the article belongs to. Reserved for future per-site image settings. */
   siteId?: string
@@ -112,6 +115,7 @@ interface Props {
 
 export default function ImageGenerator({
   articleId,
+  seoPageId,
   articleTitle = '',
   siteId,
   defaultPrompt = '',
@@ -254,7 +258,7 @@ export default function ImageGenerator({
       const res = await fetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: finalPrompt, size, model, articleId, siteId }),
+        body: JSON.stringify({ prompt: finalPrompt, size, model, articleId, seoPageId, siteId }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
