@@ -47,6 +47,10 @@ export interface WPPostResult {
    *  `show_in_rest` for that post type, or that the connected user lacks
    *  permission to write). The post is live either way. */
   yoastWarning?: string
+  /** Same idea as `yoastWarning`, but for non-Yoast custom meta (`_location`,
+   *  ACF fields, theme-defined keys). Separated so a message about a theme
+   *  custom field doesn't misread as "Yoast is broken". */
+  metaWarning?: string
 }
 
 /** WordPress wants a naive ISO string for date_gmt — no trailing Z, no offset. */
@@ -491,11 +495,22 @@ export async function publishPost({
           const got = gotMeta[key]
           if (String(got ?? '') !== String(wanted ?? '')) missed.push(key)
         }
-        if (missed.length) {
+        const yoastMissed = missed.filter((k) => k.startsWith('_yoast_wpseo_'))
+        const otherMissed = missed.filter((k) => !k.startsWith('_yoast_wpseo_'))
+        const label = resource === 'pages' ? 'page' : 'post'
+        if (yoastMissed.length) {
           result.yoastWarning =
-            `WordPress didn't accept these meta keys: ${missed.join(', ')}. ` +
+            `WordPress didn't accept these Yoast meta keys: ${yoastMissed.join(', ')}. ` +
             `Usually the Yoast SEO plugin isn't registering them for this post type, ` +
-            `or the connected user lacks permission to write them. The ${resource === 'pages' ? 'page' : 'post'} is live either way.`
+            `or the connected user lacks permission to write them. The ${label} is live either way.`
+        }
+        if (otherMissed.length) {
+          const readable = otherMissed.join(', ')
+          result.metaWarning =
+            `WordPress didn't accept these custom meta keys: ${readable}. ` +
+            `Underscore-prefixed meta needs to be registered with \`show_in_rest = true\` ` +
+            `(via the theme, or a plugin like Advanced Custom Fields exposing the field over REST) ` +
+            `before this app can set it. The ${label} is live either way — you can also tick the field manually in the WP editor.`
         }
       }
     } catch {
