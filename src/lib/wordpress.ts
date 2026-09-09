@@ -604,64 +604,107 @@ function stripEntities(html: string): string {
     .trim()
 }
 
-export async function listPosts({
-  siteUrl,
-  username,
-  appPassword,
-  perPage = 100,
-  search,
-  resource = 'posts',
-}: {
-  siteUrl: string
-  username: string
-  appPassword: string
-  perPage?: number
-  search?: string
-  resource?: 'posts' | 'pages'
-}): Promise<WPPageSummary[]> {
-  const baseUrl = normalizeUrl(siteUrl)
-  // Include drafts + published so the picker sees everything the user has.
-  // Most recent first — matches WP's own Posts/Pages list ordering. Users
-  // who repeat-clone the same source page can pin it with the star icon in
-  // the builder to skip the dropdown entirely.
-  const params = new URLSearchParams({
-    per_page: String(Math.min(perPage, 100)),
-    status: 'publish,draft,pending,private,future',
-    orderby: 'modified',
-    order: 'desc',
-    context: 'edit',
-    _fields: 'id,slug,title,link,status,modified_gmt',
-  })
-  if (search) params.set('search', search)
+interface WPListItem {
+  id: number
+  slug: string
+  title: { rendered?: string; raw?: string }
+  link: string
+  status: string
+  modified_gmt?: string
+}
 
-  const res = await fetch(`${baseUrl}/wp-json/wp/v2/${resource}?${params}`, {
-    headers: { Authorization: getAuthHeader(username, appPassword), 'User-Agent': USER_AGENT },
-    signal: AbortSignal.timeout(30000),
-  })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err?.message || `WordPress list ${resource} failed: ${res.status}`)
-  }
-
-  const data = await res.json()
-  if (!Array.isArray(data)) return []
-
-  return data.map((p: {
-    id: number
-    slug: string
-    title: { rendered?: string; raw?: string }
-    link: string
-    status: string
-    modified_gmt?: string
-  }) => ({
+function mapWpListItem(p: WPListItem): WPPageSummary {
+  return {
     id: p.id,
     slug: p.slug,
     title: stripEntities(p.title?.raw || p.title?.rendered || p.slug),
     link: p.link,
     status: p.status,
     modifiedGmt: p.modified_gmt ? `${p.modified_gmt}Z` : undefined,
-  }))
+  }
+}
+
+/**
+ * List every post/page from a WordPress site — paginates through the REST
+ * collection until exhausted so the caller isn't capped at the WP per-page
+ * limit (100). Returns items ordered by last-modified desc so the freshest
+ * pages float to the top of any picker UI. A search term shortcuts to a
+ * single request since users don't usually need thousands of matches.
+ */
+export async function listPosts({
+  siteUrl,
+  username,
+  appPassword,
+  search,
+  resource = 'posts',
+  maxPages = 50,
+}: {
+  siteUrl: string
+  username: string
+  appPassword: string
+  search?: string
+  resource?: 'posts' | 'pages'
+  /** Safety cap on paginated fetches (100 items per page) — 50 = 5,000 items. */
+  maxPages?: number
+}): Promise<WPPageSummary[]> {
+  const baseUrl = normalizeUrl(siteUrl)
+  const headers = { Authorization: getAuthHeader(username, appPassword), 'User-Agent': USER_AGENT }
+
+  function pageParams(page: number): URLSearchParams {
+    const params = new URLSearchParams({
+      per_page: '100',
+      page: String(page),
+      status: 'publish,draft,pending,private,future',
+      orderby: 'modified',
+      order: 'desc',
+      context: 'edit',
+      _fields: 'id,slug,title,link,status,modified_gmt',
+    })
+    if (search) params.set('search', search)
+    return params
+  }
+
+  async function fetchPage(page: number): Promise<{ items: WPPageSummary[]; totalPages: number }> {
+    const res = await fetch(`${baseUrl}/wp-json/wp/v2/${resource}?${pageParams(page)}`, {
+      headers,
+      signal: AbortSignal.timeout(30000),
+    })
+    if (!res.ok) {
+      // WP returns 400 rest_post_invalid_page_number once you walk past the
+      // last page — treat that as "no more results" instead of throwing.
+      if (res.status === 400) return { items: [], totalPages: page - 1 }
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err?.message || `WordPress list ${resource} failed: ${res.status}`)
+    }
+    const totalPages = Number(res.headers.get('x-wp-totalpages') || '1') || 1
+    const data = await res.json()
+    const items = Array.isArray(data) ? (data as WPListItem[]).map(mapWpListItem) : []
+    return { items, totalPages }
+  }
+
+  const first = await fetchPage(1)
+  const totalPages = Math.min(first.totalPages, maxPages)
+  if (totalPages <= 1) return first.items
+
+  // Fetch remaining pages with a small concurrency cap so we don't slam the
+  // WP host — most shared hosts throttle bursty parallel REST requests.
+  const remaining: number[] = []
+  for (let p = 2; p <= totalPages; p++) remaining.push(p)
+
+  const concurrency = 5
+  const results: WPPageSummary[][] = new Array(remaining.length)
+  let cursor = 0
+  async function worker() {
+    while (true) {
+      const idx = cursor++
+      if (idx >= remaining.length) return
+      const { items } = await fetchPage(remaining[idx])
+      results[idx] = items
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, remaining.length) }, worker))
+
+  return first.items.concat(...results.filter(Boolean))
 }
 
 export async function getPostFull({
