@@ -449,13 +449,19 @@ export async function publishPost({
   // Yoast + `_location` meta persistence.
   //
   // Sending `meta` alongside title/content/etc. in one call works when the
-  // meta keys are registered as `show_in_rest`. But on plenty of WordPress
-  // installs — especially themes where Yoast registered underscore-prefixed
-  // keys only for `post` and not `page`, or app-password users lacking
+  // meta keys are registered as `show_in_rest`. On plenty of installs —
+  // especially themes where Yoast registered underscore-prefixed keys only
+  // for `post` and not `page`, or app-password users lacking
   // `edit_others_pages` — the meta object is silently dropped from a
   // combined request. WP's dedicated meta-update path is more forgiving, so
-  // we retry meta by itself, then read the post back and warn about any key
-  // that still didn't stick.
+  // we retry meta by itself as a follow-up.
+  //
+  // No read-back verification: WordPress only surfaces meta over REST that
+  // it's been told to expose via `show_in_rest`. On sites without that,
+  // "read comes back empty" is not the same as "write didn't land" — the
+  // verify pass produced false-positive warnings on every publish. If your
+  // site needs the writes to work, install the `zaoflo-seo-meta.php`
+  // mu-plugin from `docs/wordpress/` (registers the five keys we set).
   if (Object.keys(meta).length > 0 && data.id) {
     try {
       await fetch(`${baseUrl}/wp-json/wp/v2/${resource}/${data.id}`, {
@@ -469,52 +475,7 @@ export async function publishPost({
         signal: AbortSignal.timeout(20000),
       })
     } catch {
-      // Best-effort — the main publish already succeeded; a follow-up failure
-      // gets caught by the verification pass below.
-    }
-
-    try {
-      const verifyRes = await fetch(
-        `${baseUrl}/wp-json/wp/v2/${resource}/${data.id}?context=edit`,
-        {
-          headers: {
-            Authorization: getAuthHeader(username, appPassword),
-            'User-Agent': USER_AGENT,
-          },
-          signal: AbortSignal.timeout(15000),
-        },
-      )
-      if (verifyRes.ok) {
-        const verifyData = (await verifyRes.json()) as {
-          meta?: Record<string, unknown>
-        }
-        const gotMeta = verifyData.meta ?? {}
-        const missed: string[] = []
-        for (const key of Object.keys(meta)) {
-          const wanted = meta[key]
-          const got = gotMeta[key]
-          if (String(got ?? '') !== String(wanted ?? '')) missed.push(key)
-        }
-        const yoastMissed = missed.filter((k) => k.startsWith('_yoast_wpseo_'))
-        const otherMissed = missed.filter((k) => !k.startsWith('_yoast_wpseo_'))
-        const label = resource === 'pages' ? 'page' : 'post'
-        if (yoastMissed.length) {
-          result.yoastWarning =
-            `WordPress didn't accept these Yoast meta keys: ${yoastMissed.join(', ')}. ` +
-            `Usually the Yoast SEO plugin isn't registering them for this post type, ` +
-            `or the connected user lacks permission to write them. The ${label} is live either way.`
-        }
-        if (otherMissed.length) {
-          const readable = otherMissed.join(', ')
-          result.metaWarning =
-            `WordPress didn't accept these custom meta keys: ${readable}. ` +
-            `Underscore-prefixed meta needs to be registered with \`show_in_rest = true\` ` +
-            `(via the theme, or a plugin like Advanced Custom Fields exposing the field over REST) ` +
-            `before this app can set it. The ${label} is live either way — you can also tick the field manually in the WP editor.`
-        }
-      }
-    } catch {
-      // Verification is diagnostic — don't fail the publish if it can't run.
+      // Best-effort — the main publish already succeeded.
     }
   }
 
