@@ -621,11 +621,14 @@ export async function listPosts({
 }): Promise<WPPageSummary[]> {
   const baseUrl = normalizeUrl(siteUrl)
   // Include drafts + published so the picker sees everything the user has.
+  // Oldest first — SEO Pages users usually clone from long-standing city
+  // pages that sit at the bottom of a recent-first list, and asking them to
+  // scroll past the newest edits every time was friction.
   const params = new URLSearchParams({
     per_page: String(Math.min(perPage, 100)),
     status: 'publish,draft,pending,private,future',
-    orderby: 'modified',
-    order: 'desc',
+    orderby: 'date',
+    order: 'asc',
     context: 'edit',
     _fields: 'id,slug,title,link,status,modified_gmt',
   })
