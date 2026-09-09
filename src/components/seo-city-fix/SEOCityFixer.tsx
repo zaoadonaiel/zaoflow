@@ -246,6 +246,33 @@ export default function SEOCityFixer() {
     [wpPages],
   )
 
+  // Auto-populate the canonical city from the picked page's title so the
+  // Fix button becomes clickable right after picking a page — without
+  // requiring the user to open the dropdown and pick a city manually.
+  // Only fills when the user hasn't typed anything, so their manual input
+  // is never overwritten by a page switch.
+  useEffect(() => {
+    if (!page) return
+    setCity((prev) => {
+      if (prev.trim()) return prev
+      const title = page.title || ''
+      const words = title
+        .trim()
+        .split(/\s+/)
+        .filter((w) => !/^\d+$/.test(w))
+        .map(titleWord)
+      if (words.length === 0) return prev
+      for (let n = Math.min(3, words.length); n >= 1; n--) {
+        const cand = words.slice(0, n).join(' ')
+        const found = cityCandidates.find(
+          (c) => c.display.toLowerCase() === cand.toLowerCase(),
+        )
+        if (found) return found.display
+      }
+      return words.slice(0, Math.min(2, words.length)).join(' ')
+    })
+  }, [page, cityCandidates])
+
   const filteredCandidates = useMemo(() => {
     const q = city.trim().toLowerCase()
     if (!q) return cityCandidates.slice(0, 20)
