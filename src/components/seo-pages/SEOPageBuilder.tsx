@@ -578,6 +578,15 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
   }
 
   const wpPageLookup = useMemo(() => new Map(wpPages.map((p) => [p.id, p])), [wpPages])
+  // Same list, starred page floated to the top. WP's own most-recent-first
+  // sort is preserved for everything else; the star is a soft pin, not a
+  // full re-sort.
+  const sortedWpPages = useMemo(() => {
+    if (!starredPageId) return wpPages
+    const pinned = wpPages.find((p) => p.id === starredPageId)
+    if (!pinned) return wpPages
+    return [pinned, ...wpPages.filter((p) => p.id !== starredPageId)]
+  }, [wpPages, starredPageId])
   const selectedWpPage = sourcePageId ? wpPageLookup.get(sourcePageId) : null
 
   return (
@@ -711,10 +720,51 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                Source {sourceKind}
-                {wpPagesLoading && <Loader2 className="inline-block w-3 h-3 animate-spin ml-2" />}
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">
+                  Source {sourceKind}
+                  {wpPagesLoading && <Loader2 className="inline-block w-3 h-3 animate-spin ml-2" />}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!siteId || !sourcePageId || typeof window === 'undefined') return
+                    const key = starKeyFor(siteId)
+                    const current = window.localStorage.getItem(key)
+                    if (current === String(sourcePageId)) {
+                      window.localStorage.removeItem(key)
+                      setStarredPageId(null)
+                      toast(`Removed default ${sourceKind} for this site`, { icon: '☆' })
+                    } else {
+                      window.localStorage.setItem(key, String(sourcePageId))
+                      setStarredPageId(sourcePageId)
+                      toast.success(`Pinned — this ${sourceKind} is now the default for this site`)
+                    }
+                  }}
+                  disabled={!sourcePageId}
+                  className={`inline-flex items-center gap-1 text-[11px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                    starredPageId && sourcePageId === starredPageId
+                      ? 'text-yellow-500 dark:text-yellow-400'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-yellow-500 dark:hover:text-yellow-400'
+                  }`}
+                  title={
+                    !sourcePageId
+                      ? `Pick a ${sourceKind} to star it`
+                      : starredPageId === sourcePageId
+                        ? `Unstar — remove as the default for this site`
+                        : `Star as the default ${sourceKind} for this site`
+                  }
+                >
+                  <Star
+                    className={`w-3.5 h-3.5 ${
+                      starredPageId === sourcePageId
+                        ? 'fill-yellow-400 text-yellow-400'
+                        : ''
+                    }`}
+                  />
+                  {starredPageId === sourcePageId ? 'Starred' : 'Star this'}
+                </button>
+              </div>
               <select
                 value={sourcePageId ?? ''}
                 onChange={(e) => setSourcePageId(e.target.value ? Number(e.target.value) : null)}
@@ -730,9 +780,9 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
                         ? `No ${sourceKind}s found`
                         : `Pick a ${sourceKind} to clone`}
                 </option>
-                {wpPages.map((p) => (
+                {sortedWpPages.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.title}  ·  /{p.slug}
+                    {p.id === starredPageId ? '⭐ ' : ''}{p.title}  ·  /{p.slug}
                   </option>
                 ))}
               </select>
@@ -740,49 +790,15 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
                 <p className="text-xs text-red-600 dark:text-red-400 mt-1.5">{wpPagesError}</p>
               )}
               {selectedWpPage && (
-                <div className="mt-1.5 flex items-center gap-3">
-                  <a
-                    href={selectedWpPage.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:underline"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    View source {sourceKind}
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!siteId || !sourcePageId || typeof window === 'undefined') return
-                      const key = starKeyFor(siteId)
-                      const current = window.localStorage.getItem(key)
-                      if (current === String(sourcePageId)) {
-                        window.localStorage.removeItem(key)
-                        setStarredPageId(null)
-                        toast(`Removed default ${sourceKind} for this site`, { icon: '☆' })
-                      } else {
-                        window.localStorage.setItem(key, String(sourcePageId))
-                        setStarredPageId(sourcePageId)
-                        toast.success(`Starred — this ${sourceKind} is now the default for this site`)
-                      }
-                    }}
-                    className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-yellow-500 dark:hover:text-yellow-400 transition-colors"
-                    title={
-                      starredPageId === sourcePageId
-                        ? `Unstar — remove as the default ${sourceKind} for this site`
-                        : `Star as the default ${sourceKind} for this site`
-                    }
-                  >
-                    <Star
-                      className={`w-3.5 h-3.5 ${
-                        starredPageId === sourcePageId
-                          ? 'fill-yellow-400 text-yellow-400'
-                          : ''
-                      }`}
-                    />
-                    {starredPageId === sourcePageId ? 'Starred as default' : 'Star as default'}
-                  </button>
-                </div>
+                <a
+                  href={selectedWpPage.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:underline mt-1.5"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  View source {sourceKind}
+                </a>
               )}
             </div>
 
