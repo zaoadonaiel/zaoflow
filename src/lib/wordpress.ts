@@ -733,12 +733,29 @@ export async function getPostFull({
   const excerpt: string = data.excerpt?.raw ?? data.excerpt?.rendered ?? ''
   const title: string = stripEntities(data.title?.raw || data.title?.rendered || data.slug)
 
-  // Yoast fields land in `data.meta` when the site exposes them over REST
-  // (Yoast registers the keys as `show_in_rest`). Sites that don't expose
-  // them read as blank — the caller keeps whatever's already stored.
+  // Yoast fields — two attempts.
+  //
+  // 1) Raw editable values from `data.meta._yoast_wpseo_*`. WordPress only
+  //    includes a meta key here when it's registered with `show_in_rest`;
+  //    Yoast normally registers these keys, but some sites (page post-type
+  //    deregistered, security plugins that strip underscore-prefixed meta)
+  //    return an empty `meta` object.
+  //
+  // 2) When the raw meta isn't available, fall back to `data.yoast_head_json.
+  //    title` and `.description`. Yoast attaches this to every REST response
+  //    without needing meta registration. It's the *rendered* output — any
+  //    template placeholders (`%%sitename%%`, `%%sep%%`) are already
+  //    substituted — which is what the user sees on the source page anyway.
+  //    focusKeyphrase / keyphraseSynonyms don't have this fallback, so those
+  //    only clone when raw meta is exposed.
   const meta = (data as { meta?: Record<string, unknown> }).meta ?? {}
   const readMeta = (key: string): string | undefined => {
     const v = meta[key]
+    return typeof v === 'string' && v.length > 0 ? v : undefined
+  }
+  const head = (data as { yoast_head_json?: Record<string, unknown> }).yoast_head_json ?? {}
+  const readHead = (key: string): string | undefined => {
+    const v = head[key]
     return typeof v === 'string' && v.length > 0 ? v : undefined
   }
 
@@ -752,8 +769,8 @@ export async function getPostFull({
     content,
     excerpt,
     featuredMediaId: typeof data.featured_media === 'number' && data.featured_media > 0 ? data.featured_media : undefined,
-    yoastTitle: readMeta('_yoast_wpseo_title'),
-    yoastMetaDescription: readMeta('_yoast_wpseo_metadesc'),
+    yoastTitle: readMeta('_yoast_wpseo_title') ?? readHead('title'),
+    yoastMetaDescription: readMeta('_yoast_wpseo_metadesc') ?? readHead('description'),
     focusKeyphrase: readMeta('_yoast_wpseo_focuskw'),
     keyphraseSynonyms: readMeta('_yoast_wpseo_keywordsynonyms'),
     template: typeof data.template === 'string' ? data.template : undefined,
