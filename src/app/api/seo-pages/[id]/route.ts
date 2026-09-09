@@ -9,6 +9,7 @@ const EDITABLE_FIELDS = [
   'focus_keyphrase', 'keyphrase_synonyms', 'yoast_title', 'yoast_meta_description',
   'ai_model', 'instruction_id', 'rewrite_similarity',
   'set_location_meta',
+  'source_template',
   'status', 'scheduled_at', 'scheduled_tz',
   'site_id',
 ] as const

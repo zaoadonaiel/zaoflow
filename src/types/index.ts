@@ -130,6 +130,9 @@ export interface SEOPage {
   rewrite_similarity?: SEOPageSimilarity | null
   /** When true, published post gets `_location = 1`; when false, `_location = ''`. */
   set_location_meta?: boolean
+  /** Page template slug captured from the source page — preserved on publish so
+   *  the clone renders in the same visual container (e.g. Avada's 100% Width). */
+  source_template?: string | null
   status: 'draft' | 'scheduled' | 'publishing' | 'published' | 'failed'
   scheduled_at?: string | null
   scheduled_tz?: string | null

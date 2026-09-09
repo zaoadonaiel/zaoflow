@@ -19,6 +19,8 @@ import {
   replaceCityInText,
   replaceCityInHtml,
   replaceCityInSlug,
+  findReplaceInHtml,
+  findReplaceInText,
 } from '@/lib/seo-city-swap'
 import type { ArticleInstruction, SEOPage, Site, SEOPageSimilarity, WPPageOption } from '@/types'
 
@@ -62,6 +64,17 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
   const [featuredImageUrl, setFeaturedImageUrl] = useState(initial?.featured_image_url || '')
   const [featuredImagePrompt, setFeaturedImagePrompt] = useState(initial?.featured_image_prompt || '')
   const [featuredImageAlt, setFeaturedImageAlt] = useState(initial?.featured_image_alt || '')
+
+  // Page Template captured from the source WP page (e.g. Avada's "100% Width"
+  // or theme-specific slugs). Threaded through save + publish so the clone
+  // renders in the same visual container as the source, instead of falling
+  // back to the default template.
+  const [sourceTemplate, setSourceTemplate] = useState<string>(initial?.source_template || '')
+
+  // Ad-hoc find/replace state — for typos the city swap can't catch
+  // (e.g. a source page that says "Los Angles" instead of "Los Angeles").
+  const [findText, setFindText] = useState('')
+  const [replaceText, setReplaceText] = useState('')
 
   // Yoast SEO fields. Populated by the clone step with the source's values,
   // city-swapped. Never touched by the AI rewrite (it only rewrites `content`)
@@ -189,6 +202,7 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
       setYoastMetaDescription(data.clone.yoast_meta_description || '')
       setFocusKeyphrase(data.clone.focus_keyphrase || '')
       setKeyphraseSynonyms(data.clone.keyphrase_synonyms || '')
+      setSourceTemplate(data.source?.template || '')
       setSourceYoast({
         title: data.source?.yoast_title || '',
         metaDescription: data.source?.yoast_meta_description || '',
@@ -263,6 +277,27 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
     toast.success(`Swapped “${src.display}” → “${tgt.display}” in every field`)
   }
 
+  /** Ad-hoc find/replace across every field. Case-insensitive. Content is
+   *  processed with the tag-safe helper so HTML attributes stay intact.
+   *  Meant for cases the city swap can't catch — e.g. a source page with a
+   *  typo ("Los Angles"), or any custom string the user wants to fix. */
+  function findAndReplace() {
+    const from = findText.trim()
+    if (!from) { toast.error('Enter what to find first'); return }
+    let hits = 0
+    const countHits = (before: string, after: string) => { if (before !== after) hits += 1 }
+    setTitle((v) => { const n = findReplaceInText(v, from, replaceText); countHits(v, n); return n })
+    setSlug((v) => { const n = findReplaceInText(v, from, replaceText); countHits(v, n); return n })
+    setContent((v) => { const n = findReplaceInHtml(v, from, replaceText); countHits(v, n); return n })
+    setExcerpt((v) => { const n = findReplaceInText(v, from, replaceText); countHits(v, n); return n })
+    setYoastTitle((v) => { const n = findReplaceInText(v, from, replaceText); countHits(v, n); return n })
+    setYoastMetaDescription((v) => { const n = findReplaceInText(v, from, replaceText); countHits(v, n); return n })
+    setFocusKeyphrase((v) => { const n = findReplaceInText(v, from, replaceText); countHits(v, n); return n })
+    setKeyphraseSynonyms((v) => { const n = findReplaceInText(v, from, replaceText); countHits(v, n); return n })
+    if (hits === 0) toast(`No occurrences of “${from}” found`, { icon: 'ℹ️' })
+    else toast.success(`Replaced “${from}” → “${replaceText}” in ${hits} field${hits === 1 ? '' : 's'}`)
+  }
+
   function buildPayload(status: SEOPage['status'] = 'draft') {
     return {
       site_id: siteId,
@@ -287,6 +322,7 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
       instruction_id: instructionId,
       rewrite_similarity: similarity,
       set_location_meta: setLocationMeta,
+      source_template: sourceTemplate || null,
       status,
       scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,
     }
@@ -788,6 +824,50 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
                 )}
               </div>
             </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
+              <RefreshCw className="w-4 h-4 text-brand-500" />
+              5 · Find and replace
+            </div>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 -mt-1">
+              For anything the city swap missed — typos on the source page
+              (e.g. &ldquo;Los Angles&rdquo;), a stray brand name, or a phrase
+              inside a shortcode. Runs across every field, tag internals stay
+              untouched, case-insensitive.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Find</label>
+                <input
+                  type="text"
+                  value={findText}
+                  onChange={(e) => setFindText(e.target.value)}
+                  placeholder="Los Angles"
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Replace with</label>
+                <input
+                  type="text"
+                  value={replaceText}
+                  onChange={(e) => setReplaceText(e.target.value)}
+                  placeholder="Burbank"
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={findAndReplace}
+              disabled={!findText.trim()}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Replace in all fields
+            </button>
           </div>
         </div>
 

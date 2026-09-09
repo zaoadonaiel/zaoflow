@@ -23,6 +23,10 @@ export interface WPPost {
    *  empty string writes it as an empty value. Consumed by theme/plugin
    *  templates on the WP side. */
   locationMeta?: string
+  /** Page template slug — the value shown under Page Attributes → Template
+   *  in the WP editor. Passed as `template` in the REST payload. Undefined
+   *  leaves whatever the post already had; empty string forces "Default". */
+  template?: string
 }
 
 export interface WPAuthor {
@@ -355,6 +359,7 @@ export async function publishPost({
   if (post.slug) body.slug = post.slug
   if (post.featuredMediaId) body.featured_media = post.featuredMediaId
   if (post.author) body.author = post.author
+  if (post.template !== undefined) body.template = post.template
 
   const meta: Record<string, string> = {}
   if (post.focusKeyphrase) meta['_yoast_wpseo_focuskw'] = post.focusKeyphrase
@@ -536,6 +541,10 @@ export interface WPPageFull extends WPPageSummary {
   yoastMetaDescription?: string
   focusKeyphrase?: string
   keyphraseSynonyms?: string
+  /** Page template file the source uses (e.g. `100-width.php`, `default`,
+   *  or theme-defined slugs like Avada's Fusion templates). Empty string
+   *  means the theme default. */
+  template?: string
 }
 
 /** WP renders titles/excerpts as HTML; the picker wants text. */
@@ -666,6 +675,7 @@ export async function getPostFull({
     yoastMetaDescription: readMeta('_yoast_wpseo_metadesc'),
     focusKeyphrase: readMeta('_yoast_wpseo_focuskw'),
     keyphraseSynonyms: readMeta('_yoast_wpseo_keywordsynonyms'),
+    template: typeof data.template === 'string' ? data.template : undefined,
   }
 }
 

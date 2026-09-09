@@ -89,6 +89,7 @@ export async function POST(req: NextRequest) {
       yoast_meta_description: page.yoastMetaDescription || '',
       focus_keyphrase: page.focusKeyphrase || '',
       keyphrase_synonyms: page.keyphraseSynonyms || '',
+      template: page.template ?? '',
     },
     clone: {
       slug: newSlug,

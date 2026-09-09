@@ -77,6 +77,11 @@ export async function POST(req: NextRequest) {
         // `false` still writes the key (empty string) so downstream templates
         // can rely on it existing.
         locationMeta: seoPage.set_location_meta === false ? '' : '1',
+        // Carry the source page's Page Template across — WordPress themes
+        // (Avada's Fusion, others) put visual container settings like
+        // "100% Width" here, and losing it silently drops the clone into
+        // the theme's default template.
+        template: typeof seoPage.source_template === 'string' ? seoPage.source_template : undefined,
       },
       existingPostId: seoPage.wp_page_id || undefined,
       resource,

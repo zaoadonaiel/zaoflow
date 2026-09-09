@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
     focus_keyphrase, keyphrase_synonyms, yoast_title, yoast_meta_description,
     ai_model, instruction_id, rewrite_similarity,
     set_location_meta,
+    source_template,
     status, scheduled_at, scheduled_tz,
   } = body
 
@@ -87,6 +88,7 @@ export async function POST(req: NextRequest) {
     instruction_id: instruction_id || null,
     rewrite_similarity: rewrite_similarity || null,
     set_location_meta: typeof set_location_meta === 'boolean' ? set_location_meta : true,
+    source_template: source_template ?? null,
     status: status || 'draft',
     scheduled_at: scheduled_at || null,
     scheduled_tz: scheduled_tz || null,

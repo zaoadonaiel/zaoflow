@@ -148,3 +148,22 @@ export function replaceCityInSlug(slug: string, src: City, tgt: City): string {
   }
   return out
 }
+
+/**
+ * Generic tag-safe find/replace for the Find/Replace tool in the SEO Page
+ * Builder. Text inside `<tag …>` attributes is left alone (so classes,
+ * `src` URLs, style attributes survive); everything else (text nodes and
+ * block-comment contents) gets the substitution. Case-insensitive.
+ */
+export function findReplaceInHtml(html: string, from: string, to: string): string {
+  if (!from || !html) return html
+  const re = new RegExp(escapeRegex(from), 'gi')
+  const parts = html.split(/(<[^>]+>)/g)
+  return parts.map((chunk, i) => (i % 2 === 1 ? chunk : chunk.replace(re, to))).join('')
+}
+
+/** Plain-text find/replace. Case-insensitive. Used for slugs, titles, meta. */
+export function findReplaceInText(text: string, from: string, to: string): string {
+  if (!from || !text) return text
+  return text.replace(new RegExp(escapeRegex(from), 'gi'), to)
+}
