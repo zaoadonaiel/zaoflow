@@ -107,6 +107,8 @@ export interface SEOPage {
   id: string
   user_id: string
   site_id: string
+  /** Which WP collection the source came from: `'post'` (default) or `'page'`. */
+  source_kind?: 'post' | 'page'
   source_page_id?: number | null
   source_slug?: string | null
   source_title?: string | null

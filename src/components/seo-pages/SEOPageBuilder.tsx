@@ -36,6 +36,8 @@ export default function SEOPageBuilder({ initial }: Props) {
   const [sitesLoading, setSitesLoading] = useState(true)
   const [siteId, setSiteId] = useState<string>(initial?.site_id || '')
 
+  const [sourceKind, setSourceKind] = useState<'post' | 'page'>(initial?.source_kind ?? 'post')
+
   const [wpPages, setWpPages] = useState<WPPageOption[]>([])
   const [wpPagesLoading, setWpPagesLoading] = useState(false)
   const [wpPagesError, setWpPagesError] = useState<string | null>(null)
@@ -103,10 +105,10 @@ export default function SEOPageBuilder({ initial }: Props) {
     let cancelled = false
     setWpPagesLoading(true)
     setWpPagesError(null)
-    fetch(`/api/seo-pages/wp-pages?site_id=${siteId}`)
+    fetch(`/api/seo-pages/wp-pages?site_id=${siteId}&kind=${sourceKind}`)
       .then(async (r) => {
         const d = await r.json()
-        if (!r.ok) throw new Error(d.error || 'Failed to load WordPress posts')
+        if (!r.ok) throw new Error(d.error || `Failed to load WordPress ${sourceKind}s`)
         return d.pages as WPPageOption[]
       })
       .then((pages) => {
@@ -115,13 +117,13 @@ export default function SEOPageBuilder({ initial }: Props) {
       })
       .catch((err) => {
         if (cancelled) return
-        setWpPagesError(err instanceof Error ? err.message : 'Failed to load WordPress posts')
+        setWpPagesError(err instanceof Error ? err.message : `Failed to load WordPress ${sourceKind}s`)
       })
       .finally(() => {
         if (!cancelled) setWpPagesLoading(false)
       })
     return () => { cancelled = true }
-  }, [siteId])
+  }, [siteId, sourceKind])
 
   const canClone = Boolean(siteId && sourcePageId && sourceCity.trim() && targetCity.trim())
   // A similarity button is what SETS `similarity`, so the guard here is just
@@ -137,6 +139,7 @@ export default function SEOPageBuilder({ initial }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           site_id: siteId,
+          source_kind: sourceKind,
           source_page_id: sourcePageId,
           source_city: sourceCity,
           target_city: targetCity,
@@ -193,6 +196,7 @@ export default function SEOPageBuilder({ initial }: Props) {
   function buildPayload(status: SEOPage['status'] = 'draft') {
     return {
       site_id: siteId,
+      source_kind: sourceKind,
       source_page_id: sourcePageId,
       source_slug: wpPages.find((p) => p.id === sourcePageId)?.slug,
       source_title: wpPages.find((p) => p.id === sourcePageId)?.title,
@@ -300,7 +304,7 @@ export default function SEOPageBuilder({ initial }: Props) {
     <div>
       <Header
         title={savedId ? 'Edit SEO page' : 'New SEO page'}
-        subtitle={savedId ? 'Update, rewrite, or republish the draft' : 'Clone a WordPress post for another city'}
+        subtitle={savedId ? 'Update, rewrite, or republish the draft' : 'Clone a WordPress post or page for another city'}
         actions={
           <div className="flex items-center gap-2">
             <Link
@@ -335,7 +339,38 @@ export default function SEOPageBuilder({ initial }: Props) {
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
               <MapPin className="w-4 h-4 text-brand-500" />
-              1 · Clone a source post
+              1 · Clone a source {sourceKind}
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Source type</label>
+              <div className="inline-flex rounded-lg bg-gray-100 dark:bg-gray-700 p-1">
+                {(['post', 'page'] as const).map((kind) => {
+                  const active = sourceKind === kind
+                  return (
+                    <button
+                      key={kind}
+                      type="button"
+                      onClick={() => {
+                        if (savedId || kind === sourceKind) return
+                        setSourceKind(kind)
+                        setSourcePageId(null)
+                      }}
+                      disabled={Boolean(savedId)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md capitalize transition-colors disabled:opacity-60 ${
+                        active
+                          ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      {kind}s
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Reads from WordPress {sourceKind === 'page' ? '/wp/v2/pages' : '/wp/v2/posts'} and publishes back to the same collection.
+              </p>
             </div>
 
             <div>
@@ -360,7 +395,7 @@ export default function SEOPageBuilder({ initial }: Props) {
 
             <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                Source post
+                Source {sourceKind}
                 {wpPagesLoading && <Loader2 className="inline-block w-3 h-3 animate-spin ml-2" />}
               </label>
               <select
@@ -370,7 +405,13 @@ export default function SEOPageBuilder({ initial }: Props) {
                 className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
               >
                 <option value="">
-                  {!siteId ? 'Pick a site first' : wpPagesLoading ? 'Loading posts…' : wpPages.length === 0 ? 'No posts found' : 'Pick a post to clone'}
+                  {!siteId
+                    ? 'Pick a site first'
+                    : wpPagesLoading
+                      ? `Loading ${sourceKind}s…`
+                      : wpPages.length === 0
+                        ? `No ${sourceKind}s found`
+                        : `Pick a ${sourceKind} to clone`}
                 </option>
                 {wpPages.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -389,7 +430,7 @@ export default function SEOPageBuilder({ initial }: Props) {
                   className="inline-flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:underline mt-1.5"
                 >
                   <ExternalLink className="w-3 h-3" />
-                  View source post
+                  View source {sourceKind}
                 </a>
               )}
             </div>

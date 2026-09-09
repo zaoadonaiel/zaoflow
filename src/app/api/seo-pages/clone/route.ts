@@ -47,11 +47,12 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { site_id, source_page_id, source_city, target_city } = body as {
+  const { site_id, source_page_id, source_city, target_city, source_kind } = body as {
     site_id?: string
     source_page_id?: number
     source_city?: string
     target_city?: string
+    source_kind?: 'post' | 'page'
   }
 
   if (!site_id || !source_page_id || !source_city || !target_city) {
@@ -60,6 +61,8 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
+
+  const resource: 'posts' | 'pages' = source_kind === 'page' ? 'pages' : 'posts'
 
   const { data: site } = await supabase
     .from('sites')
@@ -80,6 +83,7 @@ export async function POST(req: NextRequest) {
       username: site.wp_username,
       appPassword: site.wp_app_password,
       postId: Number(source_page_id),
+      resource,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to load source post'

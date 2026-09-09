@@ -55,6 +55,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const resource: 'posts' | 'pages' = seoPage.source_kind === 'page' ? 'pages' : 'posts'
+
     const wpResult = await publishPost({
       siteUrl: site.url,
       username: site.wp_username,
@@ -77,6 +79,7 @@ export async function POST(req: NextRequest) {
         locationMeta: seoPage.set_location_meta === false ? '' : '1',
       },
       existingPostId: seoPage.wp_page_id || undefined,
+      resource,
     })
 
     await supabase.from('seo_pages').update({

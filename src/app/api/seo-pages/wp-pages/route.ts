@@ -6,6 +6,8 @@ import { listPosts, getPostFull } from '@/lib/wordpress'
  * Two calls in one endpoint:
  *   GET /api/seo-pages/wp-pages?site_id=…                   → list source posts
  *   GET /api/seo-pages/wp-pages?site_id=…&page_id=123       → fetch one post + content
+ *
+ * `kind=post|page` picks the WP REST collection. Defaults to `post`.
  */
 export async function GET(req: NextRequest) {
   const supabase = createClient()
@@ -16,6 +18,8 @@ export async function GET(req: NextRequest) {
   const siteId = searchParams.get('site_id')
   const pageId = searchParams.get('page_id')
   const search = searchParams.get('search') || undefined
+  const kindParam = searchParams.get('kind')
+  const resource: 'posts' | 'pages' = kindParam === 'page' ? 'pages' : 'posts'
   if (!siteId) return NextResponse.json({ error: 'site_id is required' }, { status: 400 })
 
   const { data: site } = await supabase
@@ -40,6 +44,7 @@ export async function GET(req: NextRequest) {
         username: site.wp_username,
         appPassword: site.wp_app_password,
         postId: Number(pageId),
+        resource,
       })
       return NextResponse.json({ page })
     }
@@ -49,6 +54,7 @@ export async function GET(req: NextRequest) {
       username: site.wp_username,
       appPassword: site.wp_app_password,
       search,
+      resource,
     })
     return NextResponse.json({ pages })
   } catch (err) {

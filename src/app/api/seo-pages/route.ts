@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const {
     site_id,
+    source_kind,
     source_page_id, source_slug, source_title,
     source_city, target_city,
     title, slug, content, excerpt,
@@ -65,6 +66,7 @@ export async function POST(req: NextRequest) {
   const { data: seoPage, error } = await supabase.from('seo_pages').insert({
     user_id: user.id,
     site_id,
+    source_kind: source_kind === 'page' ? 'page' : 'post',
     source_page_id: source_page_id || null,
     source_slug: source_slug || null,
     source_title: source_title || null,

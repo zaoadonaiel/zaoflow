@@ -318,6 +318,7 @@ export async function publishPost({
   appPassword,
   post,
   existingPostId,
+  resource = 'posts',
 }: {
   siteUrl: string
   username: string
@@ -329,6 +330,12 @@ export async function publishPost({
    * now orphaned from our row, still publishes on its original date.
    */
   existingPostId?: number
+  /**
+   * Which WP REST collection to write to. Defaults to `posts` for
+   * compatibility with articles; SEO Pages passes `pages` when the source
+   * was a Page rather than a Post.
+   */
+  resource?: 'posts' | 'pages'
 }): Promise<WPPostResult> {
   const baseUrl = normalizeUrl(siteUrl)
 
@@ -359,8 +366,8 @@ export async function publishPost({
 
   const res = await fetch(
     existingPostId
-      ? `${baseUrl}/wp-json/wp/v2/posts/${existingPostId}`
-      : `${baseUrl}/wp-json/wp/v2/posts`,
+      ? `${baseUrl}/wp-json/wp/v2/${resource}/${existingPostId}`
+      : `${baseUrl}/wp-json/wp/v2/${resource}`,
     {
       method: existingPostId ? 'PUT' : 'POST',
       headers: {
@@ -408,6 +415,7 @@ export async function publishPost({
           appPassword,
           postId: data.id,
           post: { categories: requested },
+          resource,
         })
         result.categories = retry.categories
         missing = missingCategories(requested, retry.categories)
@@ -544,12 +552,14 @@ export async function listPosts({
   appPassword,
   perPage = 100,
   search,
+  resource = 'posts',
 }: {
   siteUrl: string
   username: string
   appPassword: string
   perPage?: number
   search?: string
+  resource?: 'posts' | 'pages'
 }): Promise<WPPageSummary[]> {
   const baseUrl = normalizeUrl(siteUrl)
   // Include drafts + published so the picker sees everything the user has.
@@ -563,14 +573,14 @@ export async function listPosts({
   })
   if (search) params.set('search', search)
 
-  const res = await fetch(`${baseUrl}/wp-json/wp/v2/posts?${params}`, {
+  const res = await fetch(`${baseUrl}/wp-json/wp/v2/${resource}?${params}`, {
     headers: { Authorization: getAuthHeader(username, appPassword), 'User-Agent': USER_AGENT },
     signal: AbortSignal.timeout(30000),
   })
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err?.message || `WordPress list posts failed: ${res.status}`)
+    throw new Error(err?.message || `WordPress list ${resource} failed: ${res.status}`)
   }
 
   const data = await res.json()
@@ -598,22 +608,24 @@ export async function getPostFull({
   username,
   appPassword,
   postId,
+  resource = 'posts',
 }: {
   siteUrl: string
   username: string
   appPassword: string
   postId: number
+  resource?: 'posts' | 'pages'
 }): Promise<WPPageFull> {
   const baseUrl = normalizeUrl(siteUrl)
 
-  const res = await fetch(`${baseUrl}/wp-json/wp/v2/posts/${postId}?context=edit`, {
+  const res = await fetch(`${baseUrl}/wp-json/wp/v2/${resource}/${postId}?context=edit`, {
     headers: { Authorization: getAuthHeader(username, appPassword), 'User-Agent': USER_AGENT },
     signal: AbortSignal.timeout(30000),
   })
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err?.message || `WordPress read post failed: ${res.status}`)
+    throw new Error(err?.message || `WordPress read ${resource === 'pages' ? 'page' : 'post'} failed: ${res.status}`)
   }
 
   const data = await res.json()
@@ -643,12 +655,14 @@ export async function updatePost({
   appPassword,
   postId,
   post,
+  resource = 'posts',
 }: {
   siteUrl: string
   username: string
   appPassword: string
   postId: number
   post: Partial<WPPost>
+  resource?: 'posts' | 'pages'
 }): Promise<WPPostResult> {
   const baseUrl = normalizeUrl(siteUrl)
 
@@ -662,7 +676,7 @@ export async function updatePost({
   }
   if (featuredMediaId) body.featured_media = featuredMediaId
 
-  const res = await fetch(`${baseUrl}/wp-json/wp/v2/posts/${postId}`, {
+  const res = await fetch(`${baseUrl}/wp-json/wp/v2/${resource}/${postId}`, {
     method: 'PUT',
     headers: {
       Authorization: getAuthHeader(username, appPassword),

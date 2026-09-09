@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 
 const EDITABLE_FIELDS = [
   'title', 'slug', 'content', 'excerpt',
+  'source_kind',
   'source_page_id', 'source_slug', 'source_title', 'source_city', 'target_city',
   'featured_image_url', 'featured_image_prompt', 'featured_image_alt',
   'focus_keyphrase', 'keyphrase_synonyms', 'yoast_title', 'yoast_meta_description',
