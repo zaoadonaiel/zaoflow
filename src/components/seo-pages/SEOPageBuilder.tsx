@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Copy, Loader2, MapPin, Rocket, Save, Sparkles, Wand2, Calendar as CalendarIcon,
-  ExternalLink, RefreshCw, ChevronDown, ChevronUp,
+  ExternalLink, RefreshCw, ChevronDown, ChevronUp, Tag,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -54,6 +54,22 @@ export default function SEOPageBuilder({ initial }: Props) {
   const [featuredImageUrl, setFeaturedImageUrl] = useState(initial?.featured_image_url || '')
   const [featuredImagePrompt, setFeaturedImagePrompt] = useState(initial?.featured_image_prompt || '')
   const [featuredImageAlt, setFeaturedImageAlt] = useState(initial?.featured_image_alt || '')
+
+  // Yoast SEO fields. Populated by the clone step with the source's values,
+  // city-swapped. Never touched by the AI rewrite (it only rewrites `content`)
+  // so what you see here is what publishes to WordPress.
+  const [yoastTitle, setYoastTitle] = useState(initial?.yoast_title || '')
+  const [yoastMetaDescription, setYoastMetaDescription] = useState(initial?.yoast_meta_description || '')
+  const [focusKeyphrase, setFocusKeyphrase] = useState(initial?.focus_keyphrase || '')
+  const [keyphraseSynonyms, setKeyphraseSynonyms] = useState(initial?.keyphrase_synonyms || '')
+  // What the source page had for these fields, so the UI can show a
+  // before/after comparison after cloning.
+  const [sourceYoast, setSourceYoast] = useState<{
+    title: string
+    metaDescription: string
+    focusKeyphrase: string
+    keyphraseSynonyms: string
+  } | null>(null)
 
   const [instructionSet, setInstructionSet] = useState<ArticleInstruction | null>(null)
   const [instructionId, setInstructionId] = useState<string | null>(initial?.instruction_id || null)
@@ -156,6 +172,16 @@ export default function SEOPageBuilder({ initial }: Props) {
       setSlug(data.clone.slug)
       setContent(data.clone.content)
       setExcerpt(data.clone.excerpt)
+      setYoastTitle(data.clone.yoast_title || '')
+      setYoastMetaDescription(data.clone.yoast_meta_description || '')
+      setFocusKeyphrase(data.clone.focus_keyphrase || '')
+      setKeyphraseSynonyms(data.clone.keyphrase_synonyms || '')
+      setSourceYoast({
+        title: data.source?.yoast_title || '',
+        metaDescription: data.source?.yoast_meta_description || '',
+        focusKeyphrase: data.source?.focus_keyphrase || '',
+        keyphraseSynonyms: data.source?.keyphrase_synonyms || '',
+      })
       toast.success('Cloned — every mention of the source city was swapped')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Clone failed')
@@ -214,6 +240,10 @@ export default function SEOPageBuilder({ initial }: Props) {
       featured_image_url: featuredImageUrl,
       featured_image_prompt: featuredImagePrompt,
       featured_image_alt: featuredImageAlt,
+      yoast_title: yoastTitle || null,
+      yoast_meta_description: yoastMetaDescription || null,
+      focus_keyphrase: focusKeyphrase || null,
+      keyphrase_synonyms: keyphraseSynonyms || null,
       ai_model: model || null,
       instruction_id: instructionId,
       rewrite_similarity: similarity,
@@ -613,6 +643,82 @@ export default function SEOPageBuilder({ initial }: Props) {
                 10% similar = heavy rewrite (almost all words changed). 90% similar = light freshening.
                 Headings stay word-for-word; word count is preserved within ±10%.
               </p>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
+              <Tag className="w-4 h-4 text-brand-500" />
+              4 · Yoast SEO fields
+            </div>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 -mt-1">
+              Copied from the source with only the city name swapped. The AI
+              rewrite step never touches these — what you see is what publishes.
+            </p>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">SEO title</label>
+              <input
+                type="text"
+                value={yoastTitle}
+                onChange={(e) => setYoastTitle(e.target.value)}
+                placeholder="Web Design in San Diego, CA | The X Digital"
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+              {sourceYoast?.title && sourceYoast.title !== yoastTitle && (
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Source: <span className="text-gray-500 dark:text-gray-400">{sourceYoast.title}</span>
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Meta description</label>
+              <textarea
+                value={yoastMetaDescription}
+                onChange={(e) => setYoastMetaDescription(e.target.value)}
+                placeholder="One sentence describing the page for search results."
+                rows={3}
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+              />
+              {sourceYoast?.metaDescription && sourceYoast.metaDescription !== yoastMetaDescription && (
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Source: <span className="text-gray-500 dark:text-gray-400">{sourceYoast.metaDescription}</span>
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Focus keyphrase</label>
+                <input
+                  type="text"
+                  value={focusKeyphrase}
+                  onChange={(e) => setFocusKeyphrase(e.target.value)}
+                  placeholder="web design san diego"
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                {sourceYoast?.focusKeyphrase && sourceYoast.focusKeyphrase !== focusKeyphrase && (
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Source: <span className="text-gray-500 dark:text-gray-400">{sourceYoast.focusKeyphrase}</span>
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Keyphrase synonyms</label>
+                <input
+                  type="text"
+                  value={keyphraseSynonyms}
+                  onChange={(e) => setKeyphraseSynonyms(e.target.value)}
+                  placeholder="san diego web designer, san diego website design"
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                {sourceYoast?.keyphraseSynonyms && sourceYoast.keyphraseSynonyms !== keyphraseSynonyms && (
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Source: <span className="text-gray-500 dark:text-gray-400">{sourceYoast.keyphraseSynonyms}</span>
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>

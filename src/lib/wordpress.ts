@@ -529,6 +529,12 @@ export interface WPPageFull extends WPPageSummary {
   excerpt: string
   featuredMediaId?: number
   featuredMediaUrl?: string
+  /** Yoast SEO meta as it lives on the source. Blank when the site doesn't
+   *  expose the fields over REST, or when the post never had them set. */
+  yoastTitle?: string
+  yoastMetaDescription?: string
+  focusKeyphrase?: string
+  keyphraseSynonyms?: string
 }
 
 /** WP renders titles/excerpts as HTML; the picker wants text. */
@@ -636,6 +642,15 @@ export async function getPostFull({
   const excerpt: string = data.excerpt?.raw ?? data.excerpt?.rendered ?? ''
   const title: string = stripEntities(data.title?.raw || data.title?.rendered || data.slug)
 
+  // Yoast fields land in `data.meta` when the site exposes them over REST
+  // (Yoast registers the keys as `show_in_rest`). Sites that don't expose
+  // them read as blank — the caller keeps whatever's already stored.
+  const meta = (data as { meta?: Record<string, unknown> }).meta ?? {}
+  const readMeta = (key: string): string | undefined => {
+    const v = meta[key]
+    return typeof v === 'string' && v.length > 0 ? v : undefined
+  }
+
   return {
     id: data.id,
     slug: data.slug,
@@ -646,6 +661,10 @@ export async function getPostFull({
     content,
     excerpt,
     featuredMediaId: typeof data.featured_media === 'number' && data.featured_media > 0 ? data.featured_media : undefined,
+    yoastTitle: readMeta('_yoast_wpseo_title'),
+    yoastMetaDescription: readMeta('_yoast_wpseo_metadesc'),
+    focusKeyphrase: readMeta('_yoast_wpseo_focuskw'),
+    keyphraseSynonyms: readMeta('_yoast_wpseo_keywordsynonyms'),
   }
 }
 

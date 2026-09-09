@@ -135,18 +135,38 @@ export async function POST(req: NextRequest) {
   const newContent = replaceInText(page.content, src, tgt)
   const newExcerpt = replaceInText(page.excerpt || '', src, tgt)
 
+  // Yoast fields get the same city swap as the body, and only that. The AI
+  // rewrite step (which only touches `content`) leaves them untouched, so
+  // what the user sees here is what publishes to WordPress verbatim.
+  const yoastTitle = page.yoastTitle ? replaceInText(page.yoastTitle, src, tgt) : ''
+  const yoastMetaDescription = page.yoastMetaDescription
+    ? replaceInText(page.yoastMetaDescription, src, tgt)
+    : ''
+  const focusKeyphrase = page.focusKeyphrase ? replaceInText(page.focusKeyphrase, src, tgt) : ''
+  const keyphraseSynonyms = page.keyphraseSynonyms
+    ? replaceInText(page.keyphraseSynonyms, src, tgt)
+    : ''
+
   return NextResponse.json({
     source: {
       id: page.id,
       slug: page.slug,
       title: page.title,
       link: page.link,
+      yoast_title: page.yoastTitle || '',
+      yoast_meta_description: page.yoastMetaDescription || '',
+      focus_keyphrase: page.focusKeyphrase || '',
+      keyphrase_synonyms: page.keyphraseSynonyms || '',
     },
     clone: {
       slug: newSlug,
       title: newTitle,
       content: newContent,
       excerpt: newExcerpt,
+      yoast_title: yoastTitle,
+      yoast_meta_description: yoastMetaDescription,
+      focus_keyphrase: focusKeyphrase,
+      keyphrase_synonyms: keyphraseSynonyms,
       source_city: src.display,
       target_city: tgt.display,
     },
