@@ -360,6 +360,7 @@ export async function publishPost({
   if (post.focusKeyphrase) meta['_yoast_wpseo_focuskw'] = post.focusKeyphrase
   if (post.yoastMetaDescription) meta['_yoast_wpseo_metadesc'] = post.yoastMetaDescription
   if (post.yoastTitle) meta['_yoast_wpseo_title'] = post.yoastTitle
+  if (post.keyphraseSynonyms) meta['_yoast_wpseo_keywordsynonyms'] = post.keyphraseSynonyms
   // Empty string is a valid value here — the flag decides content, not presence.
   if (post.locationMeta !== undefined) meta['_location'] = post.locationMeta
   if (Object.keys(meta).length > 0) body.meta = meta

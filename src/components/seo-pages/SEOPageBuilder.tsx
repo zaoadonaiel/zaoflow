@@ -833,9 +833,9 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
                 className="mt-0.5 w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-brand-600 focus:ring-brand-500"
               />
               <span className="text-sm text-gray-700 dark:text-gray-200">
-                Set <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-xs">_location</code> = <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-xs">1</code>
+                Tick the &ldquo;Location&rdquo; checkbox on the WP page
                 <span className="block text-[11px] text-gray-400 mt-0.5">
-                  Unchecked writes the key with an empty value.
+                  Writes <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-[10px]">_location = 1</code> on publish — the meta the theme reads for the location toggle. Unchecked writes an empty value instead.
                 </span>
               </span>
             </label>

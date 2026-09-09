@@ -65,13 +65,33 @@ function replaceOne(input: string, from: string, to: string): string {
   return input.replace(new RegExp(escapeRegex(from), 'gi'), to)
 }
 
+/**
+ * Build a case-insensitive regex that matches the human display form of a
+ * city name — tolerant of non-breaking spaces and `&nbsp;` between words.
+ * WP block editors serialise runs of whitespace as `&nbsp;` and U+00A0 in
+ * headings pretty often; a plain `"Los Angeles"` regex misses those.
+ */
+function displayRegex(display: string): RegExp {
+  const pattern = display
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(escapeRegex)
+    .join('(?:\\s|&nbsp;|\\u00a0)+')
+  return new RegExp(pattern, 'gi')
+}
+
+function replaceDisplay(input: string, src: City, tgt: City): string {
+  if (!src.display || !input) return input
+  return input.replace(displayRegex(src.display), tgt.display)
+}
+
 /** Longest form first so "los-angeles" never eats "los-angeles-ca" mid-replace. */
 function swapAllForms(text: string, src: City, tgt: City): string {
   let out = replaceOne(text, src.slug, tgt.slug)
   if (src.displaySlug !== src.slug) {
     out = replaceOne(out, src.displaySlug, tgt.displaySlug)
   }
-  out = replaceOne(out, src.display, tgt.display)
+  out = replaceDisplay(out, src, tgt)
   return out
 }
 
@@ -83,20 +103,41 @@ export function replaceCityInText(text: string, src: City, tgt: City): string {
 /**
  * HTML body swap.
  *
- * Split on tags and HTML/WP comments; the capture group keeps them in the
- * output. Even chunks are text (which we swap), odd chunks are tags or
- * comments (which we leave untouched). This is the point of the whole file:
- * a class name, an image URL, a Gutenberg block marker or a data attribute
- * that happens to contain the source city name will survive verbatim, so the
- * cloned page still renders.
+ * Three regions get different treatment:
  *
- * Trade-off: internal links whose href is city-specific (e.g. an on-page
- * "back to Los Angeles" link) won't retarget. Better a stale link than a
- * broken layout.
+ * - Text between tags: swap every form (display, display-slug, state-qualified
+ *   slug). This is the visible body content.
+ * - Inside `<tag …>` attribute lists: never touched. Classes, image src URLs,
+ *   data attributes, style attrs. Swapping those breaks the layout.
+ * - Inside `<!-- … -->` HTML/WP block comments: swap the display form ONLY.
+ *   Gutenberg stores block titles/captions/subtitles as JSON in comment
+ *   attributes (`{"title":"Los Angeles"}`), and the theme renders from those
+ *   at output — so the H2 on a cover hero can be stuck reading the old city
+ *   even when the body text swapped correctly. Swapping only the display
+ *   form here leaves URL-slug fields inside comment JSON alone (a cover
+ *   block's `"url":"…/los-angeles-hero.jpg"` stays valid).
  */
 export function replaceCityInHtml(html: string, src: City, tgt: City): string {
-  const parts = html.split(/(<!--[\s\S]*?-->|<[^>]+>)/g)
-  return parts.map((part, i) => (i % 2 === 1 ? part : swapAllForms(part, src, tgt))).join('')
+  // First pass: split on tags only. Even = non-tag content, odd = tags.
+  const byTag = html.split(/(<[^>]+>)/g)
+  return byTag
+    .map((chunk, i) => {
+      if (i % 2 === 1) return chunk // tag — leave alone
+      return swapWithCommentAwareness(chunk, src, tgt)
+    })
+    .join('')
+}
+
+/** For a chunk that isn't inside a tag, do the full swap on plain text and a
+ *  display-only swap inside block/HTML comments. */
+function swapWithCommentAwareness(chunk: string, src: City, tgt: City): string {
+  const byComment = chunk.split(/(<!--[\s\S]*?-->)/g)
+  return byComment
+    .map((piece, i) => {
+      if (i % 2 === 1) return replaceDisplay(piece, src, tgt) // inside comment
+      return swapAllForms(piece, src, tgt) // regular text
+    })
+    .join('')
 }
 
 /** URL slug — hyphens only, no spaces. Longest form first. */
