@@ -640,6 +640,17 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
             </div>
 
             <button
+              type="button"
+              onClick={swapCityOnly}
+              disabled={!sourceCity.trim() || !targetCity.trim()}
+              title="Just replace the city name across every field. No AI call, no cost."
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+            >
+              <MapPin className="w-4 h-4" />
+              Only city name
+            </button>
+
+            <button
               onClick={doClone}
               disabled={!canClone || cloning}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
@@ -756,31 +767,19 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
                   )
                 })}
               </div>
-              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={swapCityOnly}
-                  disabled={rewriting || !sourceCity.trim() || !targetCity.trim()}
-                  title="Just replace the city name across every field. No AI call, no cost."
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-                >
-                  <MapPin className="w-4 h-4" />
-                  Only city name
-                </button>
-                <button
-                  type="button"
-                  onClick={() => similarity && doRewrite(similarity)}
-                  disabled={rewriting || !canRewrite || similarity === null}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
-                >
-                  {rewriting
-                    ? <><Loader2 className="w-4 h-4 animate-spin" />Rewriting…</>
-                    : <><Wand2 className="w-4 h-4" />Rewrite{similarity ? ` at ${similarity}% similar` : ''}</>}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => similarity && doRewrite(similarity)}
+                disabled={rewriting || !canRewrite || similarity === null}
+                className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
+              >
+                {rewriting
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />Rewriting…</>
+                  : <><Wand2 className="w-4 h-4" />Rewrite{similarity ? ` at ${similarity}% similar` : ''}</>}
+              </button>
               <p className="text-[11px] text-gray-400 mt-1.5">
-                &quot;Only city name&quot; is a plain find-and-replace — no AI, no cost, tag internals stay untouched.
-                &quot;Rewrite&quot; sends the body to the model at the picked similarity; headings stay word-for-word and word count is preserved within ±10%.
+                Sends the body to the model at the picked similarity. Headings
+                stay word-for-word; word count is preserved within ±10%.
               </p>
             </div>
           </div>
