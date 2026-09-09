@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ExternalLink, Loader2, Search, Sparkles, Wand2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { CheckCircle2, ExternalLink, Loader2, Search, Sparkles, Wand2, XCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import Header from '@/components/layout/Header'
+import Modal from '@/components/ui/Modal'
 import {
   parseCity,
   enforceCityDisplayInHtml,
@@ -90,15 +91,12 @@ function titleWord(word: string): string {
  * Guess the set of city-name candidates for a WP site by taking the first
  * 1–3 words of every page title. Deduped and ranked by how many pages start
  * with each candidate — so a shared city ("La Habra" across ten pages)
- * floats to the top and one-off titles sink. The user still edits the value
- * freely; the list is only a shortcut.
+ * floats to the top and one-off titles sink.
  */
 function extractCityCandidates(titles: string[]): { display: string; count: number }[] {
   const counts = new Map<string, number>()
   for (const raw of titles) {
     if (!raw?.trim()) continue
-    // Ignore trailing digit-only tokens like "La Habra 2" — WP appends those
-    // as duplicate-slug counters, not part of the city.
     const words = raw
       .trim()
       .split(/\s+/)
@@ -106,7 +104,6 @@ function extractCityCandidates(titles: string[]): { display: string; count: numb
       .map(titleWord)
     for (let n = 1; n <= Math.min(3, words.length); n++) {
       const cand = words.slice(0, n).join(' ')
-      // Skip candidates ending in a bare hyphen/dash or with no letters.
       if (!/[A-Za-z]/.test(cand)) continue
       counts.set(cand, (counts.get(cand) ?? 0) + 1)
     }
@@ -114,6 +111,35 @@ function extractCityCandidates(titles: string[]): { display: string; count: numb
   return [...counts.entries()]
     .map(([display, count]) => ({ display, count }))
     .sort((a, b) => (b.count - a.count) || a.display.localeCompare(b.display))
+}
+
+/**
+ * Count how many spellings of the source city appear in one field. Matches
+ * every form the Fix will rewrite — display, lowercase, uppercase, slug
+ * (`la-habra`), space-stripped (`lahabra`) and single-letter deletion typos.
+ * The number shown to the user next to each row is meant to answer
+ * "will this field change?" without them having to read the whole diff.
+ */
+function countMatches(value: string, city: string): number {
+  if (!value || !city.trim()) return 0
+  const parsed = parseCity(city)
+  const stripped = parsed.display.replace(/\s+/g, '')
+  const variants = new Set<string>()
+  if (parsed.display) {
+    variants.add(parsed.display)
+    variants.add(parsed.display.toLowerCase())
+  }
+  if (parsed.displaySlug) variants.add(parsed.displaySlug)
+  if (parsed.slug) variants.add(parsed.slug)
+  if (stripped.length >= 3) variants.add(stripped)
+
+  let total = 0
+  for (const v of variants) {
+    if (!v) continue
+    const re = new RegExp(v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+    total += (value.match(re) || []).length
+  }
+  return total
 }
 
 export default function SEOCityFixer() {
@@ -131,10 +157,18 @@ export default function SEOCityFixer() {
   const [page, setPage] = useState<WPPageFullClient | null>(null)
 
   const [city, setCity] = useState('')
-  const [cityOpen, setCityOpen] = useState(false)
-  const cityBoxRef = useRef<HTMLDivElement | null>(null)
   const [applying, setApplying] = useState(false)
   const [lastLink, setLastLink] = useState<string | null>(null)
+  const [lastUpdate, setLastUpdate] = useState<{
+    changedFields: string[]
+    total: number
+    link: string | null
+  } | null>(null)
+
+  // Modal that hosts the search field, per-field match list and Fix button.
+  // Opens automatically as soon as the picked page finishes loading, so the
+  // user isn't stuck hunting for a Fix button on the main form.
+  const [modalOpen, setModalOpen] = useState(false)
 
   // Load WordPress sites once.
   useEffect(() => {
@@ -195,6 +229,8 @@ export default function SEOCityFixer() {
     setPageId(null)
     setPage(null)
     setLastLink(null)
+    setLastUpdate(null)
+    setModalOpen(false)
   }, [siteId, kind])
 
   // Fetch the full page (content + Yoast) whenever the picked id changes.
@@ -205,12 +241,16 @@ export default function SEOCityFixer() {
     }
     let cancelled = false
     setPageLoading(true)
+    setLastUpdate(null)
     fetch(`/api/seo-pages/wp-pages?site_id=${siteId}&page_id=${pageId}&kind=${kind}`)
       .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         if (cancelled) return
         if (!ok) throw new Error(d?.error || 'Failed to load the WordPress page')
         setPage(d.page as WPPageFullClient)
+        // Auto-open the fixer modal as soon as the page is ready — the user
+        // just clicked a page in the dropdown, so this is what they want.
+        setModalOpen(true)
       })
       .catch((err) => {
         if (cancelled) return
@@ -223,34 +263,15 @@ export default function SEOCityFixer() {
     return () => { cancelled = true }
   }, [siteId, pageId, kind])
 
-  // Close the city suggestion dropdown on any click outside it.
-  useEffect(() => {
-    if (!cityOpen) return
-    function onDown(e: MouseEvent | TouchEvent) {
-      if (!cityBoxRef.current) return
-      if (!cityBoxRef.current.contains(e.target as Node)) setCityOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('touchstart', onDown)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('touchstart', onDown)
-    }
-  }, [cityOpen])
-
-  // Pre-compute city candidates from every page title on this site, once per
-  // wpPages change. Kept out of the render path so filtering feels instant
-  // even for sites with a couple hundred pages.
+  // Pre-compute city candidates from every page title on this site.
   const cityCandidates = useMemo(
     () => extractCityCandidates(wpPages.map((p) => p.title || p.slug || '')),
     [wpPages],
   )
 
-  // Auto-populate the canonical city from the picked page's title so the
-  // Fix button becomes clickable right after picking a page — without
-  // requiring the user to open the dropdown and pick a city manually.
-  // Only fills when the user hasn't typed anything, so their manual input
-  // is never overwritten by a page switch.
+  // Auto-populate the canonical city from the picked page's title, so the
+  // search field already contains a sensible starting value when the modal
+  // opens. Only fills when the user hasn't typed anything.
   useEffect(() => {
     if (!page) return
     setCity((prev) => {
@@ -273,25 +294,25 @@ export default function SEOCityFixer() {
     })
   }, [page, cityCandidates])
 
-  const filteredCandidates = useMemo(() => {
-    const q = city.trim().toLowerCase()
-    if (!q) return cityCandidates.slice(0, 20)
-    return cityCandidates
-      .filter(({ display }) => display.toLowerCase().includes(q))
-      .slice(0, 20)
-  }, [cityCandidates, city])
-
   const previews = useMemo(() => {
     if (!page || !city.trim()) return null
     const parsed = parseCity(city)
     return FIELDS.map((spec) => {
       const before = String((page as unknown as Record<string, unknown>)[spec.key] ?? '')
       const after = fixField(spec, before, parsed.display)
-      return { spec, before, after, changed: before !== after, size: changeSize(before, after) }
+      return {
+        spec,
+        before,
+        after,
+        changed: before !== after,
+        size: changeSize(before, after),
+        matches: countMatches(before, city),
+      }
     })
   }, [page, city])
 
   const totalChanges = previews?.reduce((n, p) => n + (p.changed ? 1 : 0), 0) ?? 0
+  const totalMatches = previews?.reduce((n, p) => n + p.matches, 0) ?? 0
   const anyChanged = totalChanges > 0
 
   async function applyFix() {
@@ -307,9 +328,14 @@ export default function SEOCityFixer() {
       if (!res.ok) throw new Error(data.error || 'Fix failed')
       if (!data.updated) {
         toast(data.message || 'Nothing to fix — already clean.', { icon: 'ℹ️' })
+        setLastUpdate({ changedFields: [], total: 0, link: page?.link || null })
       } else {
+        const changedFields = Object.entries(data.changed || {})
+          .filter(([, v]) => v)
+          .map(([k]) => FIELDS.find((f) => f.key === k)?.label || k)
         toast.success(`Fixed and pushed to WordPress`)
         setLastLink(data.link || null)
+        setLastUpdate({ changedFields, total: changedFields.length, link: data.link || null })
         // Re-fetch so the preview reflects the freshly-saved state.
         const refresh = await fetch(`/api/seo-pages/wp-pages?site_id=${siteId}&page_id=${pageId}&kind=${kind}`)
         const rd = await refresh.json()
@@ -321,6 +347,8 @@ export default function SEOCityFixer() {
       setApplying(false)
     }
   }
+
+  const pickedPageOption = pageId ? wpPages.find((p) => p.id === pageId) : null
 
   return (
     <div>
@@ -395,170 +423,233 @@ export default function SEOCityFixer() {
               ))}
             </select>
             {wpPagesError && <p className="text-xs text-red-600 dark:text-red-400 mt-1">{wpPagesError}</p>}
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2">
+              Pick a {kind} to open the fixer — the modal shows every field with matches and lets you push the fix to WordPress.
+            </p>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-              Canonical city name (exactly as it should appear)
-            </label>
-            <div ref={cityBoxRef} className="relative">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                <input
-                  type="text"
-                  value={city}
-                  onChange={(e) => { setCity(e.target.value); setCityOpen(true) }}
-                  onFocus={() => setCityOpen(true)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') { setCityOpen(false); e.currentTarget.blur() }
-                    if (e.key === 'Enter' && filteredCandidates.length === 1) {
-                      setCity(filteredCandidates[0].display)
-                      setCityOpen(false)
-                      e.preventDefault()
-                    }
-                  }}
-                  placeholder={cityCandidates.length > 0 ? 'Type or pick a city — e.g. La Habra' : 'Sunset Beach'}
-                  className="w-full pl-9 pr-9 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => setCityOpen((o) => !o)}
-                  disabled={cityCandidates.length === 0}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30"
-                  title="Show suggestions"
+          {pageId && page && !modalOpen && (
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setModalOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700"
+              >
+                <Sparkles className="w-4 h-4" /> Open fixer for “{page.title || page.slug}”
+              </button>
+              {lastLink && (
+                <a
+                  href={lastLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-sm text-brand-600 dark:text-brand-400 hover:underline"
                 >
-                  <ChevronDown className={`w-4 h-4 transition-transform ${cityOpen ? 'rotate-180' : ''}`} />
-                </button>
-              </div>
-
-              {cityOpen && cityCandidates.length > 0 && (
-                <div className="absolute z-20 left-0 right-0 mt-1 max-h-72 overflow-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg">
-                  {filteredCandidates.length === 0 ? (
-                    <div className="px-3 py-2 text-xs text-gray-400">
-                      No matches — “{city.trim()}” will still work as a free-text value.
-                    </div>
-                  ) : (
-                    filteredCandidates.map(({ display, count }) => (
-                      <button
-                        key={display}
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => { setCity(display); setCityOpen(false) }}
-                        className={`w-full flex items-center justify-between px-3 py-1.5 text-sm text-left transition-colors ${
-                          city.trim().toLowerCase() === display.toLowerCase()
-                            ? 'bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-200'
-                            : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
-                        }`}
-                      >
-                        <span>{display}</span>
-                        <span className="text-[11px] text-gray-400">{count} page{count === 1 ? '' : 's'}</span>
-                      </button>
-                    ))
-                  )}
-                </div>
+                  Open the live page <ExternalLink className="w-3.5 h-3.5" />
+                </a>
               )}
             </div>
-            <p className="text-[11px] text-gray-400 mt-1">
-              Suggestions pulled from the first 1–3 words of every {kind} title on this site. Matches all forms — “sunset beach”, “SUNSET BEACH”, “sunset-beach”, single-letter typos — and rewrites them to what you pick.
-            </p>
-          </div>
+          )}
 
-          <div className="flex flex-wrap items-center gap-3 pt-1">
-            <button
-              type="button"
-              onClick={applyFix}
-              disabled={!siteId || !pageId || !city.trim() || applying || !anyChanged}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {applying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-              {applying
-                ? 'Updating WordPress…'
-                : anyChanged
-                  ? `Fix ${totalChanges} field${totalChanges === 1 ? '' : 's'} on WordPress`
-                  : previews
-                    ? 'Nothing to fix — already clean'
-                    : 'Fix on WordPress'}
-            </button>
-            {lastLink && (
-              <a
-                href={lastLink}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-sm text-brand-600 dark:text-brand-400 hover:underline"
-              >
-                Open the live page <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            )}
-            <p className="text-[11px] text-gray-500 dark:text-gray-400">
-              URL slug is left alone — changing a slug would break inbound links.
-            </p>
-          </div>
+          {pageLoading && (
+            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading page from WordPress…
+            </div>
+          )}
         </section>
+      </div>
 
-        {pageLoading && (
-          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-            <Loader2 className="w-4 h-4 animate-spin" /> Loading page from WordPress…
+      <Modal
+        open={modalOpen && !!page}
+        onClose={() => setModalOpen(false)}
+        maxWidth="max-w-3xl"
+        title={
+          <span className="flex items-center gap-2 min-w-0">
+            <Sparkles className="w-4 h-4 text-brand-500 shrink-0" />
+            <span className="truncate">{page?.title || pickedPageOption?.title || 'Fix city'}</span>
+          </span>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+              Canonical city name — every variant (“la-habra”, “LAHABRA”, “La-Habra”, typos) is rewritten to this
+            </label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="e.g. La Habra"
+                autoFocus
+                className="w-full pl-9 pr-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+            {cityCandidates.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {cityCandidates.slice(0, 8).map(({ display, count }) => {
+                  const active = city.trim().toLowerCase() === display.toLowerCase()
+                  return (
+                    <button
+                      key={display}
+                      type="button"
+                      onClick={() => setCity(display)}
+                      className={`px-2 py-0.5 rounded-full text-[11px] border transition-colors ${
+                        active
+                          ? 'bg-brand-600 text-white border-brand-600'
+                          : 'bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600'
+                      }`}
+                    >
+                      {display} <span className="opacity-60">· {count}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
-        )}
 
-        {previews && (
-          <section className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-700 space-y-4">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-brand-500" />
-              <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Preview</h2>
-              <span className="text-xs text-gray-500 dark:text-gray-400">
-                {anyChanged ? `${totalChanges} field${totalChanges === 1 ? '' : 's'} will change` : 'No changes needed'}
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-900/40 border-b border-gray-200 dark:border-gray-700">
+              <span className="text-xs font-medium text-gray-700 dark:text-gray-200">Fields on this page</span>
+              <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                {city.trim()
+                  ? `${totalMatches} match${totalMatches === 1 ? '' : 'es'} · ${totalChanges} field${totalChanges === 1 ? '' : 's'} will change`
+                  : 'Type a city to scan the fields'}
               </span>
             </div>
 
-            <div className="space-y-4">
-              {previews.map(({ spec, before, after, changed, size }) => (
-                <div
-                  key={spec.key}
-                  className={`rounded-lg border p-3 ${
-                    changed
-                      ? 'border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-900/10'
-                      : 'border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/20'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-gray-700 dark:text-gray-200">{spec.label}</span>
-                    <span className={`text-[11px] ${changed ? 'text-amber-700 dark:text-amber-300' : 'text-gray-400'}`}>
-                      {changed ? `${size} char${size === 1 ? '' : 's'} changed` : 'unchanged'}
-                    </span>
-                  </div>
-                  {changed ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">Before</div>
-                        <pre className="whitespace-pre-wrap break-words text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 border border-gray-200 dark:border-gray-700 max-h-40 overflow-auto">
-{preview(before, spec.isHtml)}
-                        </pre>
-                      </div>
-                      <div>
-                        <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">After</div>
-                        <pre className="whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800 rounded p-2 border border-amber-300 dark:border-amber-700 max-h-40 overflow-auto">
-{preview(after, spec.isHtml)}
-                        </pre>
-                      </div>
+            <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+              {(previews || FIELDS.map((spec) => ({
+                spec,
+                before: String((page as unknown as Record<string, unknown> | null)?.[spec.key] ?? ''),
+                after: '',
+                changed: false,
+                size: 0,
+                matches: 0,
+              }))).map(({ spec, before, after, changed, size, matches }) => (
+                <li key={spec.key} className="px-3 py-2">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5">
+                      {changed ? (
+                        <CheckCircle2 className="w-4 h-4 text-amber-500" />
+                      ) : before.trim() ? (
+                        <XCircle className="w-4 h-4 text-gray-300 dark:text-gray-600" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-gray-200 dark:text-gray-700" />
+                      )}
                     </div>
-                  ) : (
-                    <p className="text-[11px] text-gray-400">
-                      {before.trim() ? 'No variants of the city found in this field.' : '(empty)'}
-                    </p>
-                  )}
-                </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">
+                          {spec.label}
+                        </span>
+                        <span
+                          className={`text-[11px] shrink-0 ${
+                            changed
+                              ? 'text-amber-700 dark:text-amber-300'
+                              : matches > 0
+                                ? 'text-gray-500 dark:text-gray-400'
+                                : 'text-gray-400'
+                          }`}
+                        >
+                          {city.trim()
+                            ? changed
+                              ? `${matches} match${matches === 1 ? '' : 'es'} · ${size} char${size === 1 ? '' : 's'} change`
+                              : matches > 0
+                                ? `${matches} already canonical`
+                                : before.trim()
+                                  ? 'no match'
+                                  : '(empty)'
+                            : before.trim() ? `${before.replace(/<[^>]+>/g, '').length} chars` : '(empty)'}
+                        </span>
+                      </div>
+                      {changed && (
+                        <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">Before</div>
+                            <pre className="whitespace-pre-wrap break-words text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-900/40 rounded p-2 border border-gray-200 dark:border-gray-700 max-h-32 overflow-auto">
+{preview(before, spec.isHtml)}
+                            </pre>
+                          </div>
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">After</div>
+                            <pre className="whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100 bg-amber-50/40 dark:bg-amber-900/10 rounded p-2 border border-amber-300 dark:border-amber-700 max-h-32 overflow-auto">
+{preview(after, spec.isHtml)}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </li>
               ))}
-            </div>
-          </section>
-        )}
+            </ul>
+          </div>
 
-        {page && !city.trim() && (
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Type the canonical city name above to see what will change.
-          </p>
-        )}
-      </div>
+          {lastUpdate && (
+            <div
+              className={`rounded-lg border px-3 py-2 text-xs ${
+                lastUpdate.total > 0
+                  ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-200'
+                  : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40 text-gray-600 dark:text-gray-300'
+              }`}
+            >
+              {lastUpdate.total > 0 ? (
+                <>
+                  Pushed <strong>{lastUpdate.total}</strong> field
+                  {lastUpdate.total === 1 ? '' : 's'} to WordPress:{' '}
+                  {lastUpdate.changedFields.join(', ')}.
+                </>
+              ) : (
+                <>No changes were needed — every reference already uses the canonical spelling.</>
+              )}
+              {lastUpdate.link && (
+                <>
+                  {' '}
+                  <a
+                    href={lastUpdate.link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 underline"
+                  >
+                    View the live page <ExternalLink className="w-3 h-3" />
+                  </a>
+                </>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
+            <p className="text-[11px] text-gray-500 dark:text-gray-400">
+              URL slug is left alone — changing a slug would break inbound links.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setModalOpen(false)}
+                className="px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={applyFix}
+                disabled={!siteId || !pageId || !city.trim() || applying || !anyChanged}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {applying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                {applying
+                  ? 'Updating WordPress…'
+                  : anyChanged
+                    ? `Fix ${totalChanges} field${totalChanges === 1 ? '' : 's'} on WordPress`
+                    : previews
+                      ? 'Nothing to fix — already clean'
+                      : 'Fix on WordPress'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
