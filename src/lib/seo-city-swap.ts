@@ -173,10 +173,28 @@ export function replaceCityInHtml(html: string, src: City, tgt: City): string {
   const byComment = html.split(/(<!--[\s\S]*?-->)/g)
   return byComment
     .map((piece, i) => {
-      if (i % 2 === 1) return replaceDisplay(piece, src, tgt) // inside a comment
+      if (i % 2 === 1) return swapInsideComment(piece, src, tgt)
       return swapOutsideTags(piece, src, tgt)
     })
     .join('')
+}
+
+/** Inside a `<!-- … -->` chunk, swap the source city's display form (Gutenberg
+ *  block titles like `{"title":"Los Angeles"}`) AND its slug form when the
+ *  slug is an entire quoted value (`{"title":"los-angeles"}`), but never when
+ *  the slug is embedded in a longer path — so `"url":"/img/los-angeles-hero.jpg"`
+ *  stays intact. Keeping URL paths untouched matters because they point at
+ *  real images/routes that don't get renamed when the city is normalised. */
+function swapInsideComment(piece: string, src: City, tgt: City): string {
+  let out = replaceDisplay(piece, src, tgt)
+  const forms = [src.slug]
+  if (src.displaySlug !== src.slug) forms.push(src.displaySlug)
+  for (const form of forms) {
+    if (!form) continue
+    const quoted = new RegExp(`"${escapeRegex(form)}"`, 'gi')
+    out = out.replace(quoted, `"${tgt.display}"`)
+  }
+  return out
 }
 
 /** For a chunk with no HTML comments, swap text nodes and leave `<tag …>`
@@ -203,6 +221,14 @@ function swapOutsideTags(chunk: string, src: City, tgt: City): string {
 export function enforceCityDisplayInHtml(html: string, city: City): string {
   if (!city.display || !html) return html
   return replaceCityInHtml(html, city, city)
+}
+
+/** Text-field counterpart to `enforceCityDisplayInHtml`, for plain-text
+ *  values like the post title, Yoast title, meta description, focus keyphrase
+ *  and keyphrase synonyms. */
+export function enforceCityDisplayInText(text: string, city: City): string {
+  if (!city.display || !text) return text
+  return replaceCityInText(text, city, city)
 }
 
 /** URL slug — hyphens only, no spaces. Longest form first. */
