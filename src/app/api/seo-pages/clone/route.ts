@@ -2,43 +2,78 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getPostFull } from '@/lib/wordpress'
 
-/** "Los Angeles CA" → { slug: "los-angeles-ca", display: "Los Angeles" }.
- *  Strips a trailing 2-letter state code from the display form only, so the
- *  slug keeps its state qualifier while the body text does not read "San
- *  Diego CA" mid-sentence. */
-function normaliseCity(raw: string): { slug: string; display: string } {
-  const trimmed = raw.trim()
-  if (!trimmed) return { slug: '', display: '' }
+interface City {
+  /** Human form for headings/body: "Los Angeles". */
+  display: string
+  /** Slug form without state: "los-angeles". */
+  displaySlug: string
+  /** State-qualified slug: "los-angeles-ca", or same as displaySlug when no state. */
+  slug: string
+  /** Two-letter state code, lowercase, or null when the input didn't include one. */
+  state: string | null
+}
 
-  const slug = trimmed
+/** Parse "Los Angeles CA" into its parts.
+ *  A trailing 2-letter token is treated as a state code, so the slug can keep
+ *  its "-ca" qualifier while the body text reads "Los Angeles" rather than
+ *  "Los Angeles CA" mid-sentence. When the target city has no state and
+ *  `fallbackState` is passed, the state inherits from the source — so typing
+ *  just "Oakland" produces the slug "oakland-ca" when the source is "-ca". */
+function parseCity(raw: string, fallbackState: string | null = null): City {
+  const trimmed = raw.trim()
+  if (!trimmed) return { display: '', displaySlug: '', slug: '', state: null }
+
+  const words = trimmed.split(/\s+/)
+  const last = words[words.length - 1]
+  const hasState = words.length > 1 && /^[A-Za-z]{2}$/.test(last)
+
+  const cityWords = hasState ? words.slice(0, -1) : words
+  const state = hasState ? last.toLowerCase() : fallbackState
+
+  const display = cityWords
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ')
+
+  const displaySlug = display
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, ' ')
     .trim()
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
 
-  // Drop trailing state token for the body display: "san diego ca" → "san diego".
-  const words = trimmed.split(/\s+/)
-  const displayWords = words.length > 1 && /^[A-Za-z]{2}$/.test(words[words.length - 1])
-    ? words.slice(0, -1)
-    : words
-  const display = displayWords
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(' ')
+  const slug = state ? `${displaySlug}-${state}` : displaySlug
 
-  return { slug, display }
+  return { display, displaySlug, slug, state }
 }
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-/** Case-insensitive, whole-substring replacement. Runs over the display string
- *  ("Los Angeles") and, separately, over the slug string ("los-angeles-ca") so
- *  the two live in different regexes and can't clobber each other. */
+/** Case-insensitive, whole-substring replacement. */
 function replaceCityEverywhere(input: string, from: string, to: string): string {
   if (!from || !input) return input
   return input.replace(new RegExp(escapeRegex(from), 'gi'), to)
+}
+
+/** Longest first so "los-angeles" never eats "los-angeles-ca" mid-replace. */
+function replaceInSlug(slug: string, src: City, tgt: City): string {
+  let out = replaceCityEverywhere(slug, src.slug, tgt.slug)
+  if (src.displaySlug !== src.slug) {
+    out = replaceCityEverywhere(out, src.displaySlug, tgt.displaySlug)
+  }
+  return out
+}
+
+/** Titles, headings, paragraphs — any embedded URL fragments swap first so the
+ *  bare-city replacement doesn't leave a half-rewritten slug behind. */
+function replaceInText(text: string, src: City, tgt: City): string {
+  let out = replaceCityEverywhere(text, src.slug, tgt.slug)
+  if (src.displaySlug !== src.slug) {
+    out = replaceCityEverywhere(out, src.displaySlug, tgt.displaySlug)
+  }
+  out = replaceCityEverywhere(out, src.display, tgt.display)
+  return out
 }
 
 export async function POST(req: NextRequest) {
@@ -90,35 +125,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 502 })
   }
 
-  const src = normaliseCity(source_city)
-  const tgt = normaliseCity(target_city)
+  const src = parseCity(source_city)
+  // Target inherits the source's state code when the user typed just the city
+  // name, so "Oakland" → "oakland-ca" when the source was "-ca".
+  const tgt = parseCity(target_city, src.state)
 
-  // Slug first, then display — the slug form usually contains the display form
-  // as a substring ("los-angeles" ⊂ "los-angeles-ca") so replacing the longer
-  // one first prevents a partial match from wrecking the state qualifier.
-  const newSlug = replaceCityEverywhere(
-    replaceCityEverywhere(page.slug, src.slug, tgt.slug),
-    src.display.toLowerCase(),
-    tgt.display.toLowerCase(),
-  )
-
-  const newTitle = replaceCityEverywhere(
-    replaceCityEverywhere(page.title, src.slug, tgt.slug),
-    src.display,
-    tgt.display,
-  )
-
-  const newContent = replaceCityEverywhere(
-    replaceCityEverywhere(page.content, src.slug, tgt.slug),
-    src.display,
-    tgt.display,
-  )
-
-  const newExcerpt = replaceCityEverywhere(
-    replaceCityEverywhere(page.excerpt || '', src.slug, tgt.slug),
-    src.display,
-    tgt.display,
-  )
+  const newSlug = replaceInSlug(page.slug, src, tgt)
+  const newTitle = replaceInText(page.title, src, tgt)
+  const newContent = replaceInText(page.content, src, tgt)
+  const newExcerpt = replaceInText(page.excerpt || '', src, tgt)
 
   return NextResponse.json({
     source: {
