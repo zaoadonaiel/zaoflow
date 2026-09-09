@@ -9,10 +9,16 @@ import Modal from '@/components/ui/Modal'
 import type { GeneratedImage } from '@/types'
 import toast from 'react-hot-toast'
 
-const GROUP_SIZES = ['One person', 'More than one person'] as const
+const GROUP_SIZES = ['1', '2', '3', '4', '5', '6', '7-10', '11-20', '20+'] as const
 const GENDERS = ['Male', 'Female', 'Both'] as const
+const NATIONALITIES = [
+  'White', 'Latino', 'Islander', 'Black', 'Middle Eastern', 'Indian', 'Asian', 'Mixed',
+] as const
 const AGE_RANGES = ['20-30', '30-40', '40-50', '50-60', '60-70', '70+'] as const
-const EXPRESSIONS = ['Serious', 'Laughing', 'Smiling', 'Surprised', 'Shocked', 'Sad', 'Stressed'] as const
+const EXPRESSIONS = [
+  'Serious', 'Laughing', 'Smiling', 'Surprised', 'Shocked', 'Sad', 'Stressed',
+  'Focused', 'No expression',
+] as const
 const ERAS = ['Modern', "Early 2000's", '1950s', '1960-1970', '1980s', '1990s'] as const
 const CLASSES = ['Professional', 'Middle-class', 'Luxury'] as const
 const LOCATIONS = ['New York', 'Hawaii', 'Miami', 'Los Angeles', 'Atlanta', 'Puerto Rico', 'Midwest', 'Chicago'] as const
@@ -21,6 +27,7 @@ const SETTINGS = ['Indoor', 'Outdoor'] as const
 interface Filters {
   groupSize: string | null
   gender: string | null
+  nationality: string | null
   ageRange: string | null
   expression: string | null
   era: string | null
@@ -29,9 +36,30 @@ interface Filters {
   setting: string | null
 }
 
+// `nationality` seeds to Mixed so the default output isn't ethnically one-note
+// without the user having asked for it. Every other filter stays unset.
 const EMPTY_FILTERS: Filters = {
-  groupSize: null, gender: null, ageRange: null, expression: null, era: null,
-  socioClass: null, location: null, setting: null,
+  groupSize: null, gender: null, nationality: 'Mixed', ageRange: null, expression: null,
+  era: null, socioClass: null, location: null, setting: null,
+}
+
+/** Numeric bucket → the phrase the model actually reads. */
+function groupSizePhrase(value: string): string {
+  if (value === '1') return '1 person in the frame'
+  if (value === '20+') return 'A large crowd of more than 20 people in the frame'
+  if (value.includes('-')) return `A group of ${value} people in the frame`
+  return `${value} people in the frame`
+}
+
+/** Ethnicity bucket → the phrase the model actually reads. Kept plain so the
+ *  model doesn't attach clichés — only "in the frame" descriptors, no
+ *  suggested styling or setting. */
+function nationalityPhrase(value: string): string {
+  if (value === 'Mixed') return 'A mix of ethnicities in the frame'
+  if (value === 'Islander') return 'Pacific Islander appearance'
+  if (value === 'Indian') return 'South Asian (Indian) appearance'
+  if (value === 'Latino') return 'Latino / Hispanic appearance'
+  return `${value} appearance`
 }
 
 interface Props {
@@ -191,13 +219,14 @@ export default function ImageGenerator({
     const parts: string[] = [base.trim()]
 
     if (allowPeople) {
-      if (filters.groupSize === 'One person') parts.push('A single person in the frame')
-      else if (filters.groupSize === 'More than one person') parts.push('A group of people in the frame')
+      if (filters.groupSize) parts.push(groupSizePhrase(filters.groupSize))
       if (filters.gender === 'Male') parts.push('Male subject(s) only — no women in the frame')
       else if (filters.gender === 'Female') parts.push('Female subject(s) only — no men in the frame')
       else if (filters.gender === 'Both') parts.push('A mix of men and women in the frame')
+      if (filters.nationality) parts.push(nationalityPhrase(filters.nationality))
       if (filters.ageRange) parts.push(`Aged ${filters.ageRange}`)
-      if (filters.expression) parts.push(`${filters.expression} expression`)
+      if (filters.expression === 'No expression') parts.push('Neutral face, no distinct expression')
+      else if (filters.expression) parts.push(`${filters.expression} expression`)
     }
     if (filters.era) parts.push(filters.era === 'Modern' ? 'Modern-day aesthetic' : `${filters.era} aesthetic and fashion`)
     if (filters.socioClass) parts.push(`${filters.socioClass} styling, clothing and setting details`)
@@ -625,6 +654,9 @@ export default function ImageGenerator({
               </FilterSection>
               <FilterSection title="Gender">
                 <ChipRow options={GENDERS} value={filters.gender} onSelect={(v) => setFilter('gender', v)} />
+              </FilterSection>
+              <FilterSection title="Nationality">
+                <ChipRow options={NATIONALITIES} value={filters.nationality} onSelect={(v) => setFilter('nationality', v)} />
               </FilterSection>
               <FilterSection title="Age range">
                 <ChipRow options={AGE_RANGES} value={filters.ageRange} onSelect={(v) => setFilter('ageRange', v)} />
