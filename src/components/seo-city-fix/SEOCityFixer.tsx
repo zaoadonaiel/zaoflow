@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, ChevronDown, ExternalLink, Loader2, Search, Sparkles, Wand2, XCircle } from 'lucide-react'
+import { CheckCircle2, ChevronDown, ExternalLink, LayoutGrid, List, Loader2, Search, Sparkles, Wand2, XCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import Header from '@/components/layout/Header'
@@ -468,7 +468,7 @@ export default function SEOCityFixer() {
       <Modal
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        maxWidth="max-w-2xl"
+        maxWidth="max-w-6xl"
         title={
           <span className="flex items-center gap-2 min-w-0">
             <Search className="w-4 h-4 text-brand-500 shrink-0" />
@@ -688,9 +688,12 @@ export default function SEOCityFixer() {
   )
 }
 
-/** Searchable list of WordPress pages/posts shown inside the picker modal.
- *  Matches title and slug/URL against the query so users can find a page
- *  without scrolling the full list. */
+const PICKER_VIEW_KEY = 'zaoflo_city_fix_picker_view'
+
+/** Searchable list/grid of WordPress pages/posts shown inside the picker
+ *  modal. Matches title and slug/URL against the query so users can find a
+ *  page without scrolling the full list. View mode (list vs. grid) persists
+ *  across sessions in localStorage. */
 function PagePicker({
   pages,
   query,
@@ -706,6 +709,16 @@ function PagePicker({
   onPick: (id: number) => void
   kind: 'post' | 'page'
 }) {
+  const [view, setView] = useState<'list' | 'grid'>(() => {
+    if (typeof window === 'undefined') return 'list'
+    return (window.localStorage.getItem(PICKER_VIEW_KEY) as 'list' | 'grid') || 'list'
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(PICKER_VIEW_KEY, view)
+  }, [view])
+
   const q = query.trim().toLowerCase()
   const filtered = useMemo(() => {
     if (!q) return pages
@@ -719,16 +732,48 @@ function PagePicker({
 
   return (
     <div className="space-y-3">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => onQueryChange(e.target.value)}
-          placeholder={`Search ${pages.length} ${kind}${pages.length === 1 ? '' : 's'} by title or URL…`}
-          autoFocus
-          className="w-full pl-9 pr-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-        />
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            placeholder={`Search ${pages.length} ${kind}${pages.length === 1 ? '' : 's'} by title or URL…`}
+            autoFocus
+            className="w-full pl-9 pr-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+          />
+        </div>
+        <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 shrink-0">
+          <button
+            type="button"
+            onClick={() => setView('list')}
+            aria-label="List view"
+            aria-pressed={view === 'list'}
+            title="List view"
+            className={`px-2.5 py-2 transition-colors ${
+              view === 'list'
+                ? 'bg-brand-600 text-white'
+                : 'bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+            }`}
+          >
+            <List className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setView('grid')}
+            aria-label="Grid view"
+            aria-pressed={view === 'grid'}
+            title="Grid view"
+            className={`px-2.5 py-2 transition-colors ${
+              view === 'grid'
+                ? 'bg-brand-600 text-white'
+                : 'bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+            }`}
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       <div className="text-[11px] text-gray-500 dark:text-gray-400">
@@ -737,36 +782,64 @@ function PagePicker({
           : `${pages.length} ${kind}${pages.length === 1 ? '' : 's'}`}
       </div>
 
-      <ul className="max-h-[60vh] overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700 rounded-lg border border-gray-200 dark:border-gray-700">
-        {filtered.length === 0 && (
-          <li className="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
-            No {kind}s match “{query}”.
-          </li>
-        )}
-        {filtered.map((p) => {
-          const isSelected = p.id === selectedId
-          return (
-            <li key={p.id}>
-              <button
-                type="button"
-                onClick={() => onPick(p.id)}
-                className={`w-full text-left px-3 py-2 flex flex-col gap-0.5 transition-colors ${
-                  isSelected
-                    ? 'bg-brand-50 dark:bg-brand-900/30'
-                    : 'hover:bg-gray-50 dark:hover:bg-gray-700/60'
-                }`}
-              >
-                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                  {p.title || p.slug}
-                </span>
-                <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
-                  {p.link || `/${p.slug}`}
-                </span>
-              </button>
-            </li>
-          )
-        })}
-      </ul>
+      {filtered.length === 0 ? (
+        <div className="px-3 py-10 text-center text-sm text-gray-500 dark:text-gray-400 rounded-lg border border-gray-200 dark:border-gray-700">
+          No {kind}s match “{query}”.
+        </div>
+      ) : view === 'list' ? (
+        <ul className="max-h-[70vh] overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700 rounded-lg border border-gray-200 dark:border-gray-700">
+          {filtered.map((p) => {
+            const isSelected = p.id === selectedId
+            return (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onClick={() => onPick(p.id)}
+                  className={`w-full text-left px-3 py-2 flex flex-col gap-0.5 transition-colors ${
+                    isSelected
+                      ? 'bg-brand-50 dark:bg-brand-900/30'
+                      : 'hover:bg-gray-50 dark:hover:bg-gray-700/60'
+                  }`}
+                >
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                    {p.title || p.slug}
+                  </span>
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                    {p.link || `/${p.slug}`}
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      ) : (
+        <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+            {filtered.map((p) => {
+              const isSelected = p.id === selectedId
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => onPick(p.id)}
+                  className={`text-left p-3 rounded-lg border transition-colors flex flex-col gap-1 ${
+                    isSelected
+                      ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-400 dark:border-brand-500'
+                      : 'bg-gray-50 dark:bg-gray-700/40 border-gray-200 dark:border-gray-600 hover:bg-white dark:hover:bg-gray-700 hover:border-brand-300 dark:hover:border-brand-600'
+                  }`}
+                >
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100 line-clamp-2">
+                    {p.title || p.slug}
+                  </span>
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate mt-auto">
+                    {p.link || `/${p.slug}`}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
