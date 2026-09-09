@@ -42,6 +42,11 @@ export interface WPPostResult {
   categories?: number[]
   /** Set when the requested category could not be applied — the post is live but in Uncategorized. */
   categoryWarning?: string
+  /** Set when one or more Yoast meta keys we asked for weren't reflected on
+   *  the post after write (WP silently drops meta that isn't registered as
+   *  `show_in_rest` for that post type, or that the connected user lacks
+   *  permission to write). The post is live either way. */
+  yoastWarning?: string
 }
 
 /** WordPress wants a naive ISO string for date_gmt — no trailing Z, no offset. */
@@ -434,6 +439,67 @@ export async function publishPost({
       result.categoryWarning =
         `WordPress did not apply category ${missing.join(', ')} — the post is in Uncategorized. ` +
         `Check that the category still exists on the site and that the connected user can assign categories.`
+    }
+  }
+
+  // Yoast + `_location` meta persistence.
+  //
+  // Sending `meta` alongside title/content/etc. in one call works when the
+  // meta keys are registered as `show_in_rest`. But on plenty of WordPress
+  // installs — especially themes where Yoast registered underscore-prefixed
+  // keys only for `post` and not `page`, or app-password users lacking
+  // `edit_others_pages` — the meta object is silently dropped from a
+  // combined request. WP's dedicated meta-update path is more forgiving, so
+  // we retry meta by itself, then read the post back and warn about any key
+  // that still didn't stick.
+  if (Object.keys(meta).length > 0 && data.id) {
+    try {
+      await fetch(`${baseUrl}/wp-json/wp/v2/${resource}/${data.id}`, {
+        method: 'POST',
+        headers: {
+          Authorization: getAuthHeader(username, appPassword),
+          'User-Agent': USER_AGENT,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ meta }),
+        signal: AbortSignal.timeout(20000),
+      })
+    } catch {
+      // Best-effort — the main publish already succeeded; a follow-up failure
+      // gets caught by the verification pass below.
+    }
+
+    try {
+      const verifyRes = await fetch(
+        `${baseUrl}/wp-json/wp/v2/${resource}/${data.id}?context=edit`,
+        {
+          headers: {
+            Authorization: getAuthHeader(username, appPassword),
+            'User-Agent': USER_AGENT,
+          },
+          signal: AbortSignal.timeout(15000),
+        },
+      )
+      if (verifyRes.ok) {
+        const verifyData = (await verifyRes.json()) as {
+          meta?: Record<string, unknown>
+        }
+        const gotMeta = verifyData.meta ?? {}
+        const missed: string[] = []
+        for (const key of Object.keys(meta)) {
+          const wanted = meta[key]
+          const got = gotMeta[key]
+          if (String(got ?? '') !== String(wanted ?? '')) missed.push(key)
+        }
+        if (missed.length) {
+          result.yoastWarning =
+            `WordPress didn't accept these meta keys: ${missed.join(', ')}. ` +
+            `Usually the Yoast SEO plugin isn't registering them for this post type, ` +
+            `or the connected user lacks permission to write them. The ${resource === 'pages' ? 'page' : 'post'} is live either way.`
+        }
+      }
+    } catch {
+      // Verification is diagnostic — don't fail the publish if it can't run.
     }
   }
 

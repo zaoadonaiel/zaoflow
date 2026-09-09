@@ -381,6 +381,9 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
       } else {
         toast.success('Published to WordPress')
       }
+      if (data.yoastWarning) {
+        toast.error(`Yoast SEO: ${data.yoastWarning}`, { duration: 12000 })
+      }
       // Sync the URL so a refresh lands on the edit route, but don't `push` —
       // `router.replace` keeps the freshly-set banner state in view instead of
       // resetting the component on navigation.

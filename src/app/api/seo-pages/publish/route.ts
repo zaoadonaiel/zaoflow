@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
       id: wpResult.id,
       url: wpResult.link,
       imageWarning,
+      yoastWarning: wpResult.yoastWarning,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Publish failed'
