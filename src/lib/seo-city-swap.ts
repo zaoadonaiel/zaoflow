@@ -166,26 +166,43 @@ export function replaceCityInText(text: string, src: City, tgt: City): string {
  *   block's `"url":"…/los-angeles-hero.jpg"` stays valid).
  */
 export function replaceCityInHtml(html: string, src: City, tgt: City): string {
-  // First pass: split on tags only. Even = non-tag content, odd = tags.
-  const byTag = html.split(/(<[^>]+>)/g)
-  return byTag
-    .map((chunk, i) => {
-      if (i % 2 === 1) return chunk // tag — leave alone
-      return swapWithCommentAwareness(chunk, src, tgt)
+  // Comments FIRST — `<[^>]+>` would otherwise swallow a whole `<!-- … -->`
+  // as one "tag" (comments start with `<`, have no `>` in the body, and end
+  // with `>`), so any tag-first split silently strips comments from the
+  // comment-aware pass and leaves the block-attr JSON un-swapped.
+  const byComment = html.split(/(<!--[\s\S]*?-->)/g)
+  return byComment
+    .map((piece, i) => {
+      if (i % 2 === 1) return replaceDisplay(piece, src, tgt) // inside a comment
+      return swapOutsideTags(piece, src, tgt)
     })
     .join('')
 }
 
-/** For a chunk that isn't inside a tag, do the full swap on plain text and a
- *  display-only swap inside block/HTML comments. */
-function swapWithCommentAwareness(chunk: string, src: City, tgt: City): string {
-  const byComment = chunk.split(/(<!--[\s\S]*?-->)/g)
-  return byComment
-    .map((piece, i) => {
-      if (i % 2 === 1) return replaceDisplay(piece, src, tgt) // inside comment
-      return swapAllForms(piece, src, tgt) // regular text
-    })
+/** For a chunk with no HTML comments, swap text nodes and leave `<tag …>`
+ *  attribute lists alone (so classes, `src` URLs and style attributes
+ *  survive). */
+function swapOutsideTags(chunk: string, src: City, tgt: City): string {
+  const byTag = chunk.split(/(<[^>]+>)/g)
+  return byTag
+    .map((part, i) => (i % 2 === 1 ? part : swapAllForms(part, src, tgt)))
     .join('')
+}
+
+/**
+ * Force a target city name to its exact display form throughout an HTML body.
+ *
+ * The AI rewrite step tends to drift the target city's case ("San Francisco"
+ * becomes "san francisco" mid-paragraph) or slug-ify it into visible text
+ * ("san-francisco"), even when the prompt tells it not to. Runs the standard
+ * tag-safe swap with the target on BOTH sides, so any case-insensitive
+ * variant of the target — including its slug forms — collapses back to the
+ * canonical display form. Attribute lists inside `<tag …>` stay untouched so
+ * legitimate URLs like `href="/san-francisco-events/"` survive.
+ */
+export function enforceCityDisplayInHtml(html: string, city: City): string {
+  if (!city.display || !html) return html
+  return replaceCityInHtml(html, city, city)
 }
 
 /** URL slug — hyphens only, no spaces. Longest form first. */

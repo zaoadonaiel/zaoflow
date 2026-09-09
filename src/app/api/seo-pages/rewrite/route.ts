@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { recordUsage, readUsage } from '@/lib/ai-cost'
+import { parseCity, enforceCityDisplayInHtml } from '@/lib/seo-city-swap'
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const VALID_SIMILARITIES = [10, 25, 50, 90] as const
@@ -132,11 +133,19 @@ ${content}`
   const rawContent: string = data.choices?.[0]?.message?.content || ''
 
   // Strip any accidental code fences the model wraps around the HTML.
-  const cleaned = rawContent
+  const stripped = rawContent
     .trim()
     .replace(/^```(?:html)?\s*/i, '')
     .replace(/\s*```$/, '')
     .trim()
+
+  // The prompt says "keep every reference to <target_city> exactly as
+  // written," but the model routinely writes "san francisco" or
+  // "san-francisco" mid-paragraph. Force the canonical display form back in
+  // — tag-safe so href="/san-francisco-events/" URLs still work.
+  const cleaned = target_city
+    ? enforceCityDisplayInHtml(stripped, parseCity(target_city))
+    : stripped
 
   const newWordCount = htmlToText(cleaned).split(/\s+/).filter(Boolean).length
 
