@@ -662,6 +662,38 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
+          {/* Primary action row — Clone, Publish, New in equal thirds. Sits
+              above every step card so the three most-used actions are one
+              click from the top no matter how far down the user has
+              scrolled the content pane. */}
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={doClone}
+              disabled={!canClone || cloning}
+              className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
+            >
+              {cloning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />}
+              Clone
+            </button>
+            <button
+              type="button"
+              onClick={publishNow}
+              disabled={saving || publishing || !title || !content}
+              className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
+            >
+              {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
+              Publish
+            </button>
+            <Link
+              href="/seo-pages/new"
+              className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              New
+            </Link>
+          </div>
+
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
               <MapPin className="w-4 h-4 text-brand-500" />
