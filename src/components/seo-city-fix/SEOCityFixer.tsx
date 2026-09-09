@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { ExternalLink, Loader2, Sparkles, Wand2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronDown, ExternalLink, Loader2, Search, Sparkles, Wand2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import Header from '@/components/layout/Header'
@@ -78,6 +78,44 @@ function preview(value: string, isHtml: boolean, limit = 800): string {
   return text.length > limit ? text.slice(0, limit) + ' …' : text
 }
 
+/** Title-case a word — capitalises the first letter, keeps the rest as-is,
+ *  so acronyms embedded in a page title (e.g. "USA", "LA") don't get
+ *  destroyed. Fine for typical city names. */
+function titleWord(word: string): string {
+  if (!word) return word
+  return word.charAt(0).toUpperCase() + word.slice(1)
+}
+
+/**
+ * Guess the set of city-name candidates for a WP site by taking the first
+ * 1–3 words of every page title. Deduped and ranked by how many pages start
+ * with each candidate — so a shared city ("La Habra" across ten pages)
+ * floats to the top and one-off titles sink. The user still edits the value
+ * freely; the list is only a shortcut.
+ */
+function extractCityCandidates(titles: string[]): { display: string; count: number }[] {
+  const counts = new Map<string, number>()
+  for (const raw of titles) {
+    if (!raw?.trim()) continue
+    // Ignore trailing digit-only tokens like "La Habra 2" — WP appends those
+    // as duplicate-slug counters, not part of the city.
+    const words = raw
+      .trim()
+      .split(/\s+/)
+      .filter((w) => !/^\d+$/.test(w))
+      .map(titleWord)
+    for (let n = 1; n <= Math.min(3, words.length); n++) {
+      const cand = words.slice(0, n).join(' ')
+      // Skip candidates ending in a bare hyphen/dash or with no letters.
+      if (!/[A-Za-z]/.test(cand)) continue
+      counts.set(cand, (counts.get(cand) ?? 0) + 1)
+    }
+  }
+  return [...counts.entries()]
+    .map(([display, count]) => ({ display, count }))
+    .sort((a, b) => (b.count - a.count) || a.display.localeCompare(b.display))
+}
+
 export default function SEOCityFixer() {
   const [sites, setSites] = useState<Site[]>([])
   const [sitesLoading, setSitesLoading] = useState(true)
@@ -93,6 +131,8 @@ export default function SEOCityFixer() {
   const [page, setPage] = useState<WPPageFullClient | null>(null)
 
   const [city, setCity] = useState('')
+  const [cityOpen, setCityOpen] = useState(false)
+  const cityBoxRef = useRef<HTMLDivElement | null>(null)
   const [applying, setApplying] = useState(false)
   const [lastLink, setLastLink] = useState<string | null>(null)
 
@@ -182,6 +222,37 @@ export default function SEOCityFixer() {
       })
     return () => { cancelled = true }
   }, [siteId, pageId, kind])
+
+  // Close the city suggestion dropdown on any click outside it.
+  useEffect(() => {
+    if (!cityOpen) return
+    function onDown(e: MouseEvent | TouchEvent) {
+      if (!cityBoxRef.current) return
+      if (!cityBoxRef.current.contains(e.target as Node)) setCityOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('touchstart', onDown)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('touchstart', onDown)
+    }
+  }, [cityOpen])
+
+  // Pre-compute city candidates from every page title on this site, once per
+  // wpPages change. Kept out of the render path so filtering feels instant
+  // even for sites with a couple hundred pages.
+  const cityCandidates = useMemo(
+    () => extractCityCandidates(wpPages.map((p) => p.title || p.slug || '')),
+    [wpPages],
+  )
+
+  const filteredCandidates = useMemo(() => {
+    const q = city.trim().toLowerCase()
+    if (!q) return cityCandidates.slice(0, 20)
+    return cityCandidates
+      .filter(({ display }) => display.toLowerCase().includes(q))
+      .slice(0, 20)
+  }, [cityCandidates, city])
 
   const previews = useMemo(() => {
     if (!page || !city.trim()) return null
@@ -303,15 +374,65 @@ export default function SEOCityFixer() {
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
               Canonical city name (exactly as it should appear)
             </label>
-            <input
-              type="text"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder="Sunset Beach"
-              className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
+            <div ref={cityBoxRef} className="relative">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={city}
+                  onChange={(e) => { setCity(e.target.value); setCityOpen(true) }}
+                  onFocus={() => setCityOpen(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') { setCityOpen(false); e.currentTarget.blur() }
+                    if (e.key === 'Enter' && filteredCandidates.length === 1) {
+                      setCity(filteredCandidates[0].display)
+                      setCityOpen(false)
+                      e.preventDefault()
+                    }
+                  }}
+                  placeholder={cityCandidates.length > 0 ? 'Type or pick a city — e.g. La Habra' : 'Sunset Beach'}
+                  className="w-full pl-9 pr-9 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setCityOpen((o) => !o)}
+                  disabled={cityCandidates.length === 0}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30"
+                  title="Show suggestions"
+                >
+                  <ChevronDown className={`w-4 h-4 transition-transform ${cityOpen ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+
+              {cityOpen && cityCandidates.length > 0 && (
+                <div className="absolute z-20 left-0 right-0 mt-1 max-h-72 overflow-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg">
+                  {filteredCandidates.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-gray-400">
+                      No matches — “{city.trim()}” will still work as a free-text value.
+                    </div>
+                  ) : (
+                    filteredCandidates.map(({ display, count }) => (
+                      <button
+                        key={display}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => { setCity(display); setCityOpen(false) }}
+                        className={`w-full flex items-center justify-between px-3 py-1.5 text-sm text-left transition-colors ${
+                          city.trim().toLowerCase() === display.toLowerCase()
+                            ? 'bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-200'
+                            : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        <span>{display}</span>
+                        <span className="text-[11px] text-gray-400">{count} page{count === 1 ? '' : 's'}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
             <p className="text-[11px] text-gray-400 mt-1">
-              Matches all forms — “sunset beach”, “SUNSET BEACH”, “sunset-beach” and single-letter typos — and rewrites them to what you typed.
+              Suggestions pulled from the first 1–3 words of every {kind} title on this site. Matches all forms — “sunset beach”, “SUNSET BEACH”, “sunset-beach”, single-letter typos — and rewrites them to what you pick.
             </p>
           </div>
 
