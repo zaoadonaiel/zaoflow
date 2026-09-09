@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Copy, Loader2, MapPin, Rocket, Save, Sparkles, Wand2, Calendar as CalendarIcon,
-  ExternalLink, RefreshCw, ChevronDown, ChevronUp, Tag,
+  ExternalLink, RefreshCw, ChevronDown, ChevronUp, Tag, Receipt,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -792,6 +792,23 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
         </div>
 
         <div className="space-y-6">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Receipt className="w-4 h-4 text-gray-400" />
+                Total cost
+              </h3>
+              <span className="text-lg font-mono font-semibold text-gray-900 dark:text-white">
+                ${costTotal.toFixed(4)}
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-400">
+              Sum of every AI usage row tied to this SEO page — rewrites plus
+              image generations. Cloning and the &ldquo;Only city name&rdquo;
+              button don&apos;t cost anything.
+            </p>
+          </div>
+
           {/* Featured image is optional on SEO pages — muted until touched so
               the card doesn't read as a required step. Focus/hover restores
               full opacity, and any generated image obviously restores it. */}
