@@ -10,6 +10,7 @@ import type { GeneratedImage } from '@/types'
 import toast from 'react-hot-toast'
 
 const GROUP_SIZES = ['One person', 'More than one person'] as const
+const GENDERS = ['Male', 'Female', 'Both'] as const
 const AGE_RANGES = ['20-30', '30-40', '40-50', '50-60', '60-70', '70+'] as const
 const EXPRESSIONS = ['Serious', 'Laughing', 'Smiling', 'Surprised', 'Shocked', 'Sad', 'Stressed'] as const
 const ERAS = ['Modern', "Early 2000's", '1950s', '1960-1970', '1980s', '1990s'] as const
@@ -19,6 +20,7 @@ const SETTINGS = ['Indoor', 'Outdoor'] as const
 
 interface Filters {
   groupSize: string | null
+  gender: string | null
   ageRange: string | null
   expression: string | null
   era: string | null
@@ -28,7 +30,7 @@ interface Filters {
 }
 
 const EMPTY_FILTERS: Filters = {
-  groupSize: null, ageRange: null, expression: null, era: null,
+  groupSize: null, gender: null, ageRange: null, expression: null, era: null,
   socioClass: null, location: null, setting: null,
 }
 
@@ -191,6 +193,9 @@ export default function ImageGenerator({
     if (allowPeople) {
       if (filters.groupSize === 'One person') parts.push('A single person in the frame')
       else if (filters.groupSize === 'More than one person') parts.push('A group of people in the frame')
+      if (filters.gender === 'Male') parts.push('Male subject(s) only — no women in the frame')
+      else if (filters.gender === 'Female') parts.push('Female subject(s) only — no men in the frame')
+      else if (filters.gender === 'Both') parts.push('A mix of men and women in the frame')
       if (filters.ageRange) parts.push(`Aged ${filters.ageRange}`)
       if (filters.expression) parts.push(`${filters.expression} expression`)
     }
@@ -617,6 +622,9 @@ export default function ImageGenerator({
             <>
               <FilterSection title="Group size">
                 <ChipRow options={GROUP_SIZES} value={filters.groupSize} onSelect={(v) => setFilter('groupSize', v)} />
+              </FilterSection>
+              <FilterSection title="Gender">
+                <ChipRow options={GENDERS} value={filters.gender} onSelect={(v) => setFilter('gender', v)} />
               </FilterSection>
               <FilterSection title="Age range">
                 <ChipRow options={AGE_RANGES} value={filters.ageRange} onSelect={(v) => setFilter('ageRange', v)} />
