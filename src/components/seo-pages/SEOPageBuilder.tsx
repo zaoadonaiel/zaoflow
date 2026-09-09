@@ -352,7 +352,11 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
       if (!silent) toast.success('Draft saved')
       return seoPage
     } catch (err) {
-      if (!silent) toast.error(err instanceof Error ? err.message : 'Save failed')
+      // Errors always surface, even in "silent" mode. Silent was meant to
+      // suppress redundant success toasts on publish/schedule flows, not to
+      // hide failures — swallowing errors made a failed save look like a
+      // dead Publish button.
+      toast.error(err instanceof Error ? err.message : 'Save failed', { duration: 8000 })
       return null
     } finally {
       setSaving(false)
