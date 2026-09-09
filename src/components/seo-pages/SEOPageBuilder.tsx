@@ -14,6 +14,12 @@ import ArticleEditor from '@/components/articles/ArticleEditor'
 import ImageGenerator from '@/components/articles/ImageGenerator'
 import InstructionSets from '@/components/articles/InstructionSets'
 import ModelSelect from '@/components/ui/ModelSelect'
+import {
+  parseCity,
+  replaceCityInText,
+  replaceCityInHtml,
+  replaceCityInSlug,
+} from '@/lib/seo-city-swap'
 import type { ArticleInstruction, SEOPage, Site, SEOPageSimilarity, WPPageOption } from '@/types'
 
 interface Props {
@@ -233,6 +239,28 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
     } finally {
       setRewriting(false)
     }
+  }
+
+  /** Re-run the city swap on the current fields, without touching the AI.
+   *  Useful when the user has manually edited content and wants the city
+   *  swap re-applied, or when all they wanted was the city change to begin
+   *  with. Uses the same tag-aware swap the clone endpoint uses. */
+  function swapCityOnly() {
+    if (!sourceCity.trim() || !targetCity.trim()) {
+      toast.error('Set the source and target city first')
+      return
+    }
+    const src = parseCity(sourceCity)
+    const tgt = parseCity(targetCity, src.state)
+    setTitle((v) => replaceCityInText(v, src, tgt))
+    setSlug((v) => replaceCityInSlug(v, src, tgt))
+    setContent((v) => replaceCityInHtml(v, src, tgt))
+    setExcerpt((v) => replaceCityInText(v, src, tgt))
+    setYoastTitle((v) => replaceCityInText(v, src, tgt))
+    setYoastMetaDescription((v) => replaceCityInText(v, src, tgt))
+    setFocusKeyphrase((v) => replaceCityInText(v, src, tgt))
+    setKeyphraseSynonyms((v) => replaceCityInText(v, src, tgt))
+    toast.success(`Swapped “${src.display}” → “${tgt.display}” in every field`)
   }
 
   function buildPayload(status: SEOPage['status'] = 'draft') {
@@ -657,19 +685,31 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
                   )
                 })}
               </div>
-              <button
-                type="button"
-                onClick={() => similarity && doRewrite(similarity)}
-                disabled={rewriting || !canRewrite || similarity === null}
-                className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
-              >
-                {rewriting
-                  ? <><Loader2 className="w-4 h-4 animate-spin" />Rewriting…</>
-                  : <><Wand2 className="w-4 h-4" />Rewrite{similarity ? ` at ${similarity}% similar` : ''}</>}
-              </button>
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={swapCityOnly}
+                  disabled={rewriting || !sourceCity.trim() || !targetCity.trim()}
+                  title="Just replace the city name across every field. No AI call, no cost."
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+                >
+                  <MapPin className="w-4 h-4" />
+                  Only city name
+                </button>
+                <button
+                  type="button"
+                  onClick={() => similarity && doRewrite(similarity)}
+                  disabled={rewriting || !canRewrite || similarity === null}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
+                >
+                  {rewriting
+                    ? <><Loader2 className="w-4 h-4 animate-spin" />Rewriting…</>
+                    : <><Wand2 className="w-4 h-4" />Rewrite{similarity ? ` at ${similarity}% similar` : ''}</>}
+                </button>
+              </div>
               <p className="text-[11px] text-gray-400 mt-1.5">
-                10% similar = heavy rewrite (almost all words changed). 90% similar = light freshening.
-                Headings stay word-for-word; word count is preserved within ±10%.
+                &quot;Only city name&quot; is a plain find-and-replace — no AI, no cost, tag internals stay untouched.
+                &quot;Rewrite&quot; sends the body to the model at the picked similarity; headings stay word-for-word and word count is preserved within ±10%.
               </p>
             </div>
           </div>
