@@ -51,15 +51,21 @@ function groupSizePhrase(value: string): string {
   return `${value} people in the frame`
 }
 
-/** Ethnicity bucket → the phrase the model actually reads. Kept plain so the
- *  model doesn't attach clichés — only "in the frame" descriptors, no
- *  suggested styling or setting. */
+/** Ethnicity bucket → the phrase the model actually reads. Kept neutral so
+ *  the model doesn't attach clichés — only "of X descent" descriptors, no
+ *  suggested styling or setting. Google Gemini's safety filter rejects
+ *  race-plus-"appearance" phrasing as `INVALID_ARGUMENT`; "of X descent"
+ *  is factual demographic language and passes. */
 function nationalityPhrase(value: string): string {
-  if (value === 'Mixed') return 'A mix of ethnicities in the frame'
-  if (value === 'Islander') return 'Pacific Islander appearance'
-  if (value === 'Indian') return 'South Asian (Indian) appearance'
-  if (value === 'Latino') return 'Latino / Hispanic appearance'
-  return `${value} appearance`
+  if (value === 'Mixed') return 'Ethnically diverse group of people'
+  if (value === 'Islander') return 'People of Pacific Islander descent'
+  if (value === 'Indian') return 'People of South Asian (Indian) descent'
+  if (value === 'Latino') return 'People of Latin American descent'
+  if (value === 'Middle Eastern') return 'People of Middle Eastern descent'
+  if (value === 'White') return 'People of European descent'
+  if (value === 'Black') return 'People of African descent'
+  if (value === 'Asian') return 'People of East Asian descent'
+  return `People of ${value} descent`
 }
 
 interface Props {
@@ -224,9 +230,12 @@ export default function ImageGenerator({
 
     if (allowPeople) {
       if (filters.groupSize) parts.push(groupSizePhrase(filters.groupSize))
-      if (filters.gender === 'Male') parts.push('Male subject(s) only — no women in the frame')
-      else if (filters.gender === 'Female') parts.push('Female subject(s) only — no men in the frame')
-      else if (filters.gender === 'Both') parts.push('A mix of men and women in the frame')
+      // Soft phrasings — Google Gemini's safety filter rejects hard
+      // gender-exclusion negations ("no women") as `INVALID_ARGUMENT`, so
+      // describe the desired subjects positively instead of forbidding others.
+      if (filters.gender === 'Male') parts.push('All subjects are men')
+      else if (filters.gender === 'Female') parts.push('All subjects are women')
+      else if (filters.gender === 'Both') parts.push('Both men and women in the frame')
       if (filters.nationality) parts.push(nationalityPhrase(filters.nationality))
       if (filters.ageRange) parts.push(`Aged ${filters.ageRange}`)
       if (filters.expression === 'No expression') parts.push('Neutral face, no distinct expression')

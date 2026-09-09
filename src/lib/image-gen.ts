@@ -130,7 +130,22 @@ export async function generateImage({
       throw new Error('Your OpenRouter account has no credits. Add credits at openrouter.ai.')
     }
     const body = await response.json().catch(() => ({}))
-    throw new Error(body?.error?.message || `Image generation failed: ${response.status}`)
+    const raw: string = body?.error?.message || `Image generation failed: ${response.status}`
+
+    // Google Gemini answers "Request contains an invalid argument" verbatim
+    // when its safety filter refuses the prompt — no useful detail. Most
+    // common trigger from this app: race/ethnicity or gender-negation
+    // wording in the filter block. Nudge the user toward a workaround
+    // instead of surfacing the opaque upstream string.
+    if (/invalid argument/i.test(raw)) {
+      throw new Error(
+        `The image provider refused the request ("${raw}"). ` +
+        `Usually the safety filter on Google Gemini — try switching to ` +
+        `openai/gpt-image-1, turning off the Nationality or Gender filter, ` +
+        `or picking a preset size instead of a custom width×height.`,
+      )
+    }
+    throw new Error(raw)
   }
 
   const data = await response.json()
