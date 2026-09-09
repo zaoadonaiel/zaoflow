@@ -91,11 +91,12 @@ export default function SitesPage() {
     setDeletingId(id)
     try {
       const res = await fetch(`/api/sites/${id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Delete failed')
+      const data = await res.json().catch(() => ({} as { error?: string }))
+      if (!res.ok) throw new Error(data.error || `Delete failed (${res.status})`)
       setSites((prev) => prev.filter((s) => s.id !== id))
       toast.success(`${name} removed`)
-    } catch {
-      toast.error('Failed to remove site')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to remove site', { duration: 8000 })
     } finally {
       setDeletingId(null)
     }

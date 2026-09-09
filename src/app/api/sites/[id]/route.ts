@@ -11,13 +11,48 @@ export async function DELETE(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { error } = await supabase
+  // Confirm the row is visible under this user's session before deleting.
+  // Without this, `.delete()` on a row RLS filters out would return success
+  // with zero rows affected — the UI would flash the site away and then have
+  // it reappear on the next fetch, which reads as "won't let me delete".
+  const { data: existing, error: findErr } = await supabase
+    .from('sites')
+    .select('id')
+    .eq('id', params.id)
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (findErr) return NextResponse.json({ error: findErr.message }, { status: 500 })
+  if (!existing) return NextResponse.json({ error: 'Site not found' }, { status: 404 })
+
+  // `select()` gives us the deleted rows back so we can prove one was removed.
+  // A foreign key blocking the delete — a table that references sites without
+  // `on delete cascade`, drift between the migrations and the live schema —
+  // surfaces as a Postgres error here; we forward the `details`/`hint` so the
+  // caller sees which relationship is pinning the row in place.
+  const { data: deleted, error } = await supabase
     .from('sites')
     .delete()
     .eq('id', params.id)
     .eq('user_id', user.id)
+    .select('id')
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    const extra = (error as { details?: string | null; hint?: string | null }).details
+      || (error as { hint?: string | null }).hint
+    return NextResponse.json(
+      { error: extra ? `${error.message} — ${extra}` : error.message },
+      { status: 500 },
+    )
+  }
+
+  if (!deleted || deleted.length === 0) {
+    return NextResponse.json(
+      { error: 'The site could not be deleted — the database refused the request without an error.' },
+      { status: 500 },
+    )
+  }
+
   return NextResponse.json({ success: true })
 }
 
