@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, ExternalLink, Loader2, Search, Sparkles, Wand2, XCircle } from 'lucide-react'
+import { CheckCircle2, ChevronDown, ExternalLink, Loader2, Search, Sparkles, Wand2, XCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import Header from '@/components/layout/Header'
@@ -166,9 +166,13 @@ export default function SEOCityFixer() {
   } | null>(null)
 
   // Modal that hosts the search field, per-field match list and Fix button.
-  // Opens automatically as soon as the picked page finishes loading, so the
-  // user isn't stuck hunting for a Fix button on the main form.
+  // Opens when the user clicks the "Open fixer" button after picking a page.
   const [modalOpen, setModalOpen] = useState(false)
+
+  // Picker modal for choosing which WordPress page to fix. Replaces the long
+  // dropdown so the user can search by title or URL instead of scrolling.
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerQuery, setPickerQuery] = useState('')
 
   // Load WordPress sites once.
   useEffect(() => {
@@ -248,9 +252,6 @@ export default function SEOCityFixer() {
         if (cancelled) return
         if (!ok) throw new Error(d?.error || 'Failed to load the WordPress page')
         setPage(d.page as WPPageFullClient)
-        // Auto-open the fixer modal as soon as the page is ready — the user
-        // just clicked a page in the dropdown, so this is what they want.
-        setModalOpen(true)
       })
       .catch((err) => {
         if (cancelled) return
@@ -403,28 +404,34 @@ export default function SEOCityFixer() {
               {kind === 'page' ? 'Page' : 'Post'} to fix
               {wpPagesLoading && <Loader2 className="inline-block w-3 h-3 animate-spin ml-2" />}
             </label>
-            <select
-              value={pageId ?? ''}
-              onChange={(e) => setPageId(e.target.value ? Number(e.target.value) : null)}
-              disabled={!siteId || wpPagesLoading}
-              className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+            <button
+              type="button"
+              onClick={() => {
+                setPickerQuery('')
+                setPickerOpen(true)
+              }}
+              disabled={!siteId || wpPagesLoading || wpPages.length === 0}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-left text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <option value="">
-                {!siteId
-                  ? 'Pick a site first'
-                  : wpPagesLoading
-                    ? `Loading ${kind}s…`
-                    : wpPages.length === 0
-                      ? `No ${kind}s found`
-                      : `Pick a ${kind} (${wpPages.length})`}
-              </option>
-              {wpPages.map((p) => (
-                <option key={p.id} value={p.id}>{p.title || p.slug} — /{p.slug}</option>
-              ))}
-            </select>
+              <span className="truncate min-w-0">
+                {pickedPageOption
+                  ? <><span className="font-medium">{pickedPageOption.title || pickedPageOption.slug}</span> <span className="text-gray-500 dark:text-gray-400">— /{pickedPageOption.slug}</span></>
+                  : !siteId
+                    ? 'Pick a site first'
+                    : wpPagesLoading
+                      ? `Loading ${kind}s…`
+                      : wpPages.length === 0
+                        ? `No ${kind}s found`
+                        : `Search ${wpPages.length} ${kind}${wpPages.length === 1 ? '' : 's'}…`}
+              </span>
+              <span className="shrink-0 inline-flex items-center gap-1 text-gray-400">
+                <Search className="w-4 h-4" />
+                <ChevronDown className="w-4 h-4" />
+              </span>
+            </button>
             {wpPagesError && <p className="text-xs text-red-600 dark:text-red-400 mt-1">{wpPagesError}</p>}
             <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2">
-              Pick a {kind} to open the fixer — the modal shows every field with matches and lets you push the fix to WordPress.
+              Search by title or URL, pick a {kind}, then click <span className="font-medium">Open fixer</span> to review the fields and push the change.
             </p>
           </div>
 
@@ -457,6 +464,33 @@ export default function SEOCityFixer() {
           )}
         </section>
       </div>
+
+      <Modal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        maxWidth="max-w-2xl"
+        title={
+          <span className="flex items-center gap-2 min-w-0">
+            <Search className="w-4 h-4 text-brand-500 shrink-0" />
+            <span className="truncate">Pick a {kind} to fix</span>
+            <span className="text-xs font-normal text-gray-500 dark:text-gray-400 shrink-0">
+              ({wpPages.length})
+            </span>
+          </span>
+        }
+      >
+        <PagePicker
+          pages={wpPages}
+          query={pickerQuery}
+          onQueryChange={setPickerQuery}
+          selectedId={pageId}
+          onPick={(id) => {
+            setPageId(id)
+            setPickerOpen(false)
+          }}
+          kind={kind}
+        />
+      </Modal>
 
       <Modal
         open={modalOpen && !!page}
@@ -650,6 +684,89 @@ export default function SEOCityFixer() {
           </div>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+/** Searchable list of WordPress pages/posts shown inside the picker modal.
+ *  Matches title and slug/URL against the query so users can find a page
+ *  without scrolling the full list. */
+function PagePicker({
+  pages,
+  query,
+  onQueryChange,
+  selectedId,
+  onPick,
+  kind,
+}: {
+  pages: WPPageOption[]
+  query: string
+  onQueryChange: (q: string) => void
+  selectedId: number | null
+  onPick: (id: number) => void
+  kind: 'post' | 'page'
+}) {
+  const q = query.trim().toLowerCase()
+  const filtered = useMemo(() => {
+    if (!q) return pages
+    return pages.filter((p) => {
+      const title = (p.title || '').toLowerCase()
+      const slug = (p.slug || '').toLowerCase()
+      const link = (p.link || '').toLowerCase()
+      return title.includes(q) || slug.includes(q) || link.includes(q)
+    })
+  }, [pages, q])
+
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder={`Search ${pages.length} ${kind}${pages.length === 1 ? '' : 's'} by title or URL…`}
+          autoFocus
+          className="w-full pl-9 pr-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+        />
+      </div>
+
+      <div className="text-[11px] text-gray-500 dark:text-gray-400">
+        {q
+          ? `${filtered.length} match${filtered.length === 1 ? '' : 'es'} of ${pages.length}`
+          : `${pages.length} ${kind}${pages.length === 1 ? '' : 's'}`}
+      </div>
+
+      <ul className="max-h-[60vh] overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700 rounded-lg border border-gray-200 dark:border-gray-700">
+        {filtered.length === 0 && (
+          <li className="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+            No {kind}s match “{query}”.
+          </li>
+        )}
+        {filtered.map((p) => {
+          const isSelected = p.id === selectedId
+          return (
+            <li key={p.id}>
+              <button
+                type="button"
+                onClick={() => onPick(p.id)}
+                className={`w-full text-left px-3 py-2 flex flex-col gap-0.5 transition-colors ${
+                  isSelected
+                    ? 'bg-brand-50 dark:bg-brand-900/30'
+                    : 'hover:bg-gray-50 dark:hover:bg-gray-700/60'
+                }`}
+              >
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                  {p.title || p.slug}
+                </span>
+                <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                  {p.link || `/${p.slug}`}
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }
