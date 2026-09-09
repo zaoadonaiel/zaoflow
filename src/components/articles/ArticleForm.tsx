@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   Sparkles, Save, Send, Calendar, Loader2, Globe, Search, FolderOpen,
   ExternalLink, Check, CheckCircle2, ChevronDown, ChevronUp, AlertCircle, Plus, ImageUp, Zap,
-  ClipboardList, BookMarked, Link2,
+  ClipboardList, BookMarked, Link2, History,
 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import ConfirmSiteModal from '@/components/ui/ConfirmSiteModal'
@@ -81,6 +81,12 @@ interface Props {
   articleId?: string
   /** An idea being taken back out of Archive → Ideas and written up. */
   ideaId?: string | null
+}
+
+/** Date → the value shape `<input type="datetime-local">` accepts (no zone). */
+function toLocalInputValue(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 /**
@@ -161,6 +167,11 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   const [scheduledAt, setScheduledAt] = useState('')
   const [scheduledTz, setScheduledTz] = useState('PST')
   const [showScheduler, setShowScheduler] = useState(false)
+  // Backdate flow — publishing right now, but stamping WordPress with the
+  // chosen date. `backdateAt` is a datetime-local string (no timezone); it's
+  // converted to ISO when handed to the API.
+  const [showBackdate, setShowBackdate] = useState(false)
+  const [backdateAt, setBackdateAt] = useState('')
   // A generated article is thousands of words tall, which buried the SEO fields
   // under it. The body opens on demand instead of by default.
   const [contentExpanded, setContentExpanded] = useState(false)
@@ -654,7 +665,10 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   // The calendar does the same with the slot it just picked.
   async function handleSave(
     modeOverride?: PublishMode,
-    scheduleOverride?: { iso: string; tz: string }
+    scheduleOverride?: { iso: string; tz: string },
+    /** ISO instant to stamp the WordPress post with when publishing now.
+     *  Only honoured for mode === 'now'. */
+    backdateIso?: string,
   ): Promise<boolean> {
     const mode = modeOverride ?? publishMode
     const when = scheduleOverride?.iso ?? scheduledAt
@@ -701,15 +715,25 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
       const savedId: string = data.article.id
 
       if (mode === 'now') {
-        // Publish immediately to WordPress
+        // Publish immediately to WordPress. `publishAt` is what carries the
+        // backdate; the API keeps status = 'publish' and just overrides the
+        // date on the WP post.
         const pubRes = await fetch('/api/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ articleId: savedId }),
+          body: JSON.stringify({
+            articleId: savedId,
+            publishAt: backdateIso || undefined,
+          }),
         })
         const pubData = await pubRes.json()
         if (!pubRes.ok) throw new Error(pubData.error || 'Publish failed')
-        toast.success(isNodeSite ? 'Article published to Node.js site!' : 'Article published to WordPress!')
+        const target = isNodeSite ? 'Node.js site' : 'WordPress'
+        toast.success(
+          backdateIso
+            ? `Article published to ${target} — dated ${new Date(backdateIso).toLocaleDateString()}`
+            : `Article published to ${target}!`,
+        )
         if (pubData.imageWarning) {
           toast.error(`Featured image: ${pubData.imageWarning}`, { duration: 8000 })
         }
@@ -969,6 +993,19 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
               Schedule for later
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => {
+              if (!backdateAt) setBackdateAt(toLocalInputValue(new Date(Date.now() - 24 * 60 * 60 * 1000)))
+              setShowBackdate(true)
+            }}
+            className={`${PILL_BASE} ${PILL_ACTION}`}
+            title="Publish now but stamp the WP post with a chosen date"
+          >
+            <History className="w-3.5 h-3.5" />
+            Backdate…
+          </button>
 
           <button
             onClick={() => { setPublishMode('now'); handleSave('now') }}
@@ -1404,6 +1441,19 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
         )}
 
         <button
+          type="button"
+          onClick={() => {
+            if (!backdateAt) setBackdateAt(toLocalInputValue(new Date(Date.now() - 24 * 60 * 60 * 1000)))
+            setShowBackdate(true)
+          }}
+          className={`w-full sm:w-auto justify-center ${PILL_BASE} ${PILL_ACTION}`}
+          title="Publish now but stamp the WP post with a chosen date"
+        >
+          <History className="w-3.5 h-3.5" />
+          Backdate…
+        </button>
+
+        <button
           onClick={() => { setPublishMode('now'); handleSave('now') }}
           disabled={saving || generating}
           className={`w-full sm:w-auto justify-center ${PILL_BASE} ${PILL_PRIMARY}`}
@@ -1414,6 +1464,50 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
       </div>
 
       {scheduler}
+
+      <Modal
+        open={showBackdate}
+        onClose={() => setShowBackdate(false)}
+        title="Publish with a chosen date"
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Publishes immediately, but WordPress will show this date on the post.
+            Uses your browser&apos;s local time.
+          </p>
+          <input
+            type="datetime-local"
+            value={backdateAt}
+            onChange={(e) => setBackdateAt(e.target.value)}
+            className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowBackdate(false)}
+              className={`${PILL_BASE} ${PILL_ACTION}`}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!backdateAt) { toast.error('Pick a date and time'); return }
+                const iso = new Date(backdateAt).toISOString()
+                setPublishMode('now')
+                const ok = await handleSave('now', undefined, iso)
+                if (ok) setShowBackdate(false)
+              }}
+              disabled={saving || generating || !backdateAt}
+              className={`${PILL_BASE} ${PILL_PRIMARY}`}
+            >
+              <Send className="w-3.5 h-3.5" />
+              Publish with this date
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         open={showInstructions}

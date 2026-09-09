@@ -8,7 +8,14 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { articleId, scheduledAt } = await req.json()
+  const { articleId, scheduledAt, publishAt } = await req.json() as {
+    articleId?: string
+    /** Future ISO — creates a WP "future" post; WP publishes it at the slot. */
+    scheduledAt?: string
+    /** Historical ISO — publishes immediately but stamps the WP post's date
+     *  with this value. Ignored when `scheduledAt` is set. */
+    publishAt?: string
+  }
   if (!articleId) return NextResponse.json({ error: 'articleId is required' }, { status: 400 })
 
   // Load article + site
@@ -44,6 +51,9 @@ export async function POST(req: NextRequest) {
 
   if (site.site_type === 'nodejs') {
     try {
+      // Backdate only applies when we're publishing immediately — a scheduled
+      // run owns its own date.
+      const nodePublishedAt = scheduledAt || publishAt || new Date().toISOString()
       const nodeResult = await publishNodePost({
         apiUrl: site.node_api_url,
         apiKey: site.secret_token,
@@ -55,13 +65,13 @@ export async function POST(req: NextRequest) {
           metaDescription: article.meta_description || article.yoast_meta_description || undefined,
           featuredImageUrl: article.featured_image_url || undefined,
           status: scheduledAt ? 'draft' : 'publish',
-          publishedAt: scheduledAt || new Date().toISOString(),
+          publishedAt: nodePublishedAt,
         },
       })
 
       await supabase.from('articles').update({
         status: 'published',
-        published_at: new Date().toISOString(),
+        published_at: (!scheduledAt && publishAt) ? publishAt : new Date().toISOString(),
         node_post_id: nodeResult.id,
         node_post_url: nodeResult.url,
         updated_at: new Date().toISOString(),
@@ -101,6 +111,11 @@ export async function POST(req: NextRequest) {
 
   try {
     const postStatus = scheduledAt ? 'future' : 'publish'
+    // `publishAt` only kicks in for the immediate path; a scheduled post owns
+    // its own date. Sent as `dateGmt` so WordPress stops interpreting it in
+    // the site's local timezone and stamps the post to the exact instant the
+    // caller asked for.
+    const wpDateGmt = scheduledAt || (postStatus === 'publish' ? publishAt : undefined)
 
     // Upload featured image to WordPress if present
     let featuredMediaId: number | undefined
@@ -130,7 +145,7 @@ export async function POST(req: NextRequest) {
         content: article.content,
         excerpt: article.excerpt || '',
         status: postStatus,
-        date: scheduledAt || undefined,
+        dateGmt: wpDateGmt,
         categories: article.wp_category_id ? [article.wp_category_id] : undefined,
         slug: article.slug || undefined,
         featuredMediaId,
@@ -141,10 +156,11 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Update article as published
+    // Update article as published — a backdated publish stamps the row with
+    // the chosen instant so the dashboard's "published on" matches WP.
     await supabase.from('articles').update({
       status: 'published',
-      published_at: new Date().toISOString(),
+      published_at: (postStatus === 'publish' && publishAt) ? publishAt : new Date().toISOString(),
       wp_post_id: wpResult.id,
       wp_post_url: wpResult.link,
       updated_at: new Date().toISOString(),
