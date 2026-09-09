@@ -85,6 +85,38 @@ function replaceDisplay(input: string, src: City, tgt: City): string {
   return input.replace(displayRegex(src.display), tgt.display)
 }
 
+/**
+ * Every single-character-deletion variant of the display form, minus the
+ * original itself. Catches the most common typo class on source pages —
+ * a missing letter, like "Los Angles" for "Los Angeles" or "Agora Hills"
+ * for "Agoura Hills". Skipped when the variant would collapse a word
+ * boundary (turning "Los Angeles" into "LosAngeles" is not a typo) or drop
+ * below 5 characters (too short — a stray match against unrelated words).
+ */
+function deletionVariants(display: string): string[] {
+  const out = new Set<string>()
+  for (let i = 0; i < display.length; i++) {
+    const v = display.slice(0, i) + display.slice(i + 1)
+    if (v.length < 5) continue
+    // A variant that removed a space glues two words together — that's a
+    // formatting error the theme wouldn't produce, not a typo worth swapping.
+    if (/\s{2,}/.test(v)) continue
+    if (display[i] === ' ') continue
+    if (v.toLowerCase() === display.toLowerCase()) continue
+    out.add(v)
+  }
+  return [...out]
+}
+
+/** Case-insensitive plain replacement bounded by word edges, so a deletion
+ *  variant like "Los Angles" doesn't stray into "los-angles" URL fragments
+ *  or other unrelated contexts. */
+function replaceWord(input: string, from: string, to: string): string {
+  if (!from || !input) return input
+  const re = new RegExp(`(?<![A-Za-z0-9])${escapeRegex(from)}(?![A-Za-z0-9])`, 'gi')
+  return input.replace(re, to)
+}
+
 /** Longest form first so "los-angeles" never eats "los-angeles-ca" mid-replace. */
 function swapAllForms(text: string, src: City, tgt: City): string {
   let out = replaceOne(text, src.slug, tgt.slug)
@@ -92,6 +124,12 @@ function swapAllForms(text: string, src: City, tgt: City): string {
     out = replaceOne(out, src.displaySlug, tgt.displaySlug)
   }
   out = replaceDisplay(out, src, tgt)
+  // Typo tolerance: catch single-missing-letter misspellings of the display
+  // form ("Los Angles" for "Los Angeles"). Word-bounded so the shorter
+  // variant can't leak into unrelated tokens.
+  for (const variant of deletionVariants(src.display)) {
+    out = replaceWord(out, variant, tgt.display)
+  }
   return out
 }
 
