@@ -77,6 +77,8 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
   // clicks the star button next to the source-page dropdown.
   const [starredPageId, setStarredPageId] = useState<number | null>(null)
 
+  const [detectingCity, setDetectingCity] = useState(false)
+
   const [wpPages, setWpPages] = useState<WPPageOption[]>([])
   const [wpPagesLoading, setWpPagesLoading] = useState(false)
   const [wpPagesError, setWpPagesError] = useState<string | null>(null)
@@ -203,6 +205,19 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
     const stored = window.localStorage.getItem(starKeyFor(siteId))
     setStarredPageId(stored ? Number(stored) : null)
   }, [siteId])
+
+  // Auto-detect the source city whenever the user picks a source page and
+  // the field is still empty. Fills only if empty, so a user who typed a
+  // city up front doesn't get overwritten. On the edit route, `initial`
+  // already carries a saved city — skip the call there entirely.
+  useEffect(() => {
+    if (!sourcePageId || initial) return
+    if (sourceCity.trim()) return
+    void detectSourceCity({ autoFill: true })
+    // Intentionally not depending on `sourceCity`/`detectSourceCity` — we
+    // fire once per source-page pick, not on every keystroke in the city input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourcePageId])
 
   useEffect(() => {
     if (!siteId) {
@@ -347,6 +362,58 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
     setFocusKeyphrase((v) => replaceCityInText(v, src, tgt))
     setKeyphraseSynonyms((v) => replaceCityInText(v, src, tgt))
     toast.success(`Swapped “${src.display}” → “${tgt.display}” in every field`)
+  }
+
+  /** Ask a small model to name the city the picked source page is about.
+   *  Runs on demand from the "Detect" button next to the Source city input,
+   *  and automatically when the user picks a page from the dropdown (if
+   *  Source city is still empty). Overwrites the field on manual runs;
+   *  fills-only-if-empty on the auto run so a user who typed a city first
+   *  doesn't get clobbered by the model's guess. */
+  async function detectSourceCity(opts: { autoFill?: boolean } = {}) {
+    if (!siteId || !sourcePageId) return
+    const page = wpPageLookup.get(sourcePageId)
+    if (!page) return
+    setDetectingCity(true)
+    try {
+      // Fetch the full source so the model has the body's opening sentences
+      // to disambiguate. Cheap — the same endpoint the clone step uses.
+      let content = ''
+      try {
+        const fullRes = await fetch(
+          `/api/seo-pages/wp-pages?site_id=${siteId}&page_id=${sourcePageId}&kind=${sourceKind}`,
+        )
+        const fullData = await fullRes.json()
+        if (fullRes.ok) content = (fullData.page?.content as string) || ''
+      } catch {
+        // Body is a bonus; title + slug are enough for the model.
+      }
+
+      const res = await fetch('/api/seo-pages/detect-city', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: page.title,
+          slug: page.slug,
+          content,
+          seo_page_id: savedId || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Detection failed')
+      if (data.usage?.cost_usd) setCostTotal((t) => t + Number(data.usage.cost_usd))
+      if (!data.city) {
+        if (!opts.autoFill) toast(`Couldn't confidently name the city on that ${sourceKind}`, { icon: 'ℹ️' })
+        return
+      }
+      if (opts.autoFill && sourceCity.trim()) return
+      setSourceCity(data.city)
+      if (!opts.autoFill) toast.success(`Detected: ${data.city}`)
+    } catch (err) {
+      if (!opts.autoFill) toast.error(err instanceof Error ? err.message : 'Detection failed')
+    } finally {
+      setDetectingCity(false)
+    }
   }
 
   /** Ad-hoc find/replace across every field. Case-insensitive. Content is
@@ -721,7 +788,20 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Source city</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Source city</label>
+                  <button
+                    type="button"
+                    onClick={() => detectSourceCity()}
+                    disabled={!sourcePageId || detectingCity}
+                    title="Ask AI to read the source page and name its city"
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-600 dark:text-brand-400 hover:underline disabled:text-gray-400 dark:disabled:text-gray-500 disabled:no-underline"
+                  >
+                    {detectingCity
+                      ? <><Loader2 className="w-3 h-3 animate-spin" />Detecting…</>
+                      : <><Sparkles className="w-3 h-3" />Detect</>}
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={sourceCity}
@@ -729,7 +809,7 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
                   placeholder="Los Angeles CA"
                   className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
-                <p className="text-[11px] text-gray-400 mt-1">City on the source page — state code optional.</p>
+                <p className="text-[11px] text-gray-400 mt-1">City on the source page — state code optional. Auto-detects when you pick a page; use &ldquo;Detect&rdquo; to re-run.</p>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Target city</label>
