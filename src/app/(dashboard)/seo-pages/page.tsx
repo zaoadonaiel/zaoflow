@@ -236,6 +236,18 @@ export default function SEOPagesPage() {
           </div>
         )}
       </div>
+
+      {/* Floating action button — quick way to start a new SEO page from any
+          scroll position, without going back to the header. Same target as
+          the header link. */}
+      <Link
+        href="/seo-pages/new"
+        aria-label="New SEO page"
+        title="New SEO page"
+        className="fixed bottom-6 right-6 z-40 flex items-center justify-center w-14 h-14 rounded-full bg-brand-600 text-white shadow-lg hover:bg-brand-700 hover:shadow-xl transition-all"
+      >
+        <Plus className="w-6 h-6" />
+      </Link>
     </div>
   )
 }
