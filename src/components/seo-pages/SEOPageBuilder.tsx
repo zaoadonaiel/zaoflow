@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ArrowLeft, Copy, Loader2, Lock, LockOpen, MapPin, Plus, Rocket, Save, Sparkles, Star, Wand2, Calendar as CalendarIcon,
+  ArrowLeft, Check, Copy, Loader2, Lock, LockOpen, MapPin, Plus, Rocket, Save, Sparkles, Star, Wand2, Calendar as CalendarIcon,
   ExternalLink, RefreshCw, ChevronDown, ChevronUp, Tag, Receipt,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -89,6 +89,14 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
   // every fresh SEO page for that site. Turned off, the persisted value
   // is cleared. See `LOCKED_CITY_KEY_PREFIX`.
   const [sourceCityLocked, setSourceCityLocked] = useState(false)
+
+  // "Step done" ticks on the primary action row. Seeded from `initial` so
+  // reopening a saved draft with body content shows the clone step already
+  // green, and a previously published page shows publish green. Cleared
+  // for a fresh draft — user sees both circles grey until they complete
+  // each step.
+  const [cloneDone, setCloneDone] = useState<boolean>(Boolean(initial?.content))
+  const [publishDone, setPublishDone] = useState<boolean>(Boolean(initial?.wp_page_url))
 
   const [wpPages, setWpPages] = useState<WPPageOption[]>([])
   const [wpPagesLoading, setWpPagesLoading] = useState(false)
@@ -315,6 +323,7 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
         focusKeyphrase: data.source?.focus_keyphrase || '',
         keyphraseSynonyms: data.source?.keyphrase_synonyms || '',
       })
+      setCloneDone(true)
       toast.success('Cloned — every mention of the source city was swapped')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Clone failed')
@@ -520,6 +529,7 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Publish failed')
       if (data.url) setWpPageUrl(data.url)
+      setPublishDone(true)
       if (data.imageWarning) {
         toast.error(`Published, but featured image: ${data.imageWarning}`, { duration: 6000 })
       } else {
@@ -651,38 +661,6 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          {/* Primary action row — Clone, Publish, New in equal thirds. Sits
-              above every step card so the three most-used actions are one
-              click from the top no matter how far down the user has
-              scrolled the content pane. */}
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={doClone}
-              disabled={!canClone || cloning}
-              className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
-            >
-              {cloning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />}
-              Clone
-            </button>
-            <button
-              type="button"
-              onClick={publishNow}
-              disabled={saving || publishing || !title || !content}
-              className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
-            >
-              {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
-              Publish
-            </button>
-            <Link
-              href="/seo-pages/new"
-              className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              New
-            </Link>
-          </div>
-
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
               <MapPin className="w-4 h-4 text-brand-500" />
@@ -907,14 +885,39 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
               </button>
             </div>
 
-            <button
-              onClick={doClone}
-              disabled={!canClone || cloning}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
-            >
-              {cloning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />}
-              Clone into draft
-            </button>
+            {/* Primary action row — Clone, Publish, New in equal thirds.
+                The small circular check on Clone and Publish greys until
+                that action has completed successfully, then flips green,
+                so a user glancing at the row can see where they are in
+                the flow. `New` has no check — it's a navigation, not a
+                step to complete. */}
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={doClone}
+                disabled={!canClone || cloning}
+                className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
+              >
+                <StepCheck done={cloneDone} loading={cloning} />
+                Clone
+              </button>
+              <button
+                type="button"
+                onClick={publishNow}
+                disabled={saving || publishing || !title || !content}
+                className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
+              >
+                <StepCheck done={publishDone} loading={publishing} />
+                Publish
+              </button>
+              <Link
+                href="/seo-pages/new"
+                className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                New
+              </Link>
+            </div>
           </div>
 
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-4">
@@ -1335,4 +1338,33 @@ function toLocalInputValue(iso: string): string {
   const d = new Date(iso)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/** Small step-status indicator sitting inside a primary action button.
+ *  Three states, same shape in each: a check-in-circle that goes from
+ *  a muted grey to solid emerald once the step succeeds.
+ *   - loading: white spinner (the action is running right now)
+ *   - done: white check on emerald circle
+ *   - pending: soft check on a translucent white circle (visible against
+ *     the brand-color button, "not done yet") */
+function StepCheck({
+  done,
+  loading,
+}: {
+  done: boolean
+  loading: boolean
+}) {
+  if (loading) return <Loader2 className="w-4 h-4 animate-spin" />
+  return (
+    <span
+      className={`inline-flex items-center justify-center w-4 h-4 rounded-full transition-colors ${
+        done ? 'bg-emerald-500' : 'bg-white/30'
+      }`}
+    >
+      <Check
+        className={`w-3 h-3 ${done ? 'text-white' : 'text-white/70'}`}
+        strokeWidth={3}
+      />
+    </span>
+  )
 }
