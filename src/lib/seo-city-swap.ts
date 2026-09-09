@@ -117,11 +117,19 @@ function replaceWord(input: string, from: string, to: string): string {
   return input.replace(re, to)
 }
 
-/** Longest form first so "los-angeles" never eats "los-angeles-ca" mid-replace. */
+/** Longest form first so "los-angeles" never eats "los-angeles-ca" mid-replace.
+ *  Slug-form matches emit the TARGET DISPLAY form, not the target slug —
+ *  because this runs on human-readable text (titles, headings, meta,
+ *  visible body content). A source that happens to carry a slug-form
+ *  reference ("yorba-linda-events" in a title, or the WP title falling
+ *  back to `data.slug` when the source title is blank) would otherwise
+ *  land the target's slug form ("el-modena-events") in a place a reader
+ *  sees, instead of "El Modena events". URL slug fields go through
+ *  `replaceCityInSlug` and keep hyphenation as intended. */
 function swapAllForms(text: string, src: City, tgt: City): string {
-  let out = replaceOne(text, src.slug, tgt.slug)
+  let out = replaceOne(text, src.slug, tgt.display)
   if (src.displaySlug !== src.slug) {
-    out = replaceOne(out, src.displaySlug, tgt.displaySlug)
+    out = replaceOne(out, src.displaySlug, tgt.display)
   }
   out = replaceDisplay(out, src, tgt)
   // Typo tolerance: catch single-missing-letter misspellings of the display
@@ -143,8 +151,10 @@ export function replaceCityInText(text: string, src: City, tgt: City): string {
  *
  * Three regions get different treatment:
  *
- * - Text between tags: swap every form (display, display-slug, state-qualified
- *   slug). This is the visible body content.
+ * - Text between tags: match every form of the source (display, display-slug,
+ *   state-qualified slug) but always emit the target's display form, since
+ *   this is the visible body content and no reader should see "el-modena"
+ *   where "El Modena" belongs.
  * - Inside `<tag …>` attribute lists: never touched. Classes, image src URLs,
  *   data attributes, style attrs. Swapping those breaks the layout.
  * - Inside `<!-- … -->` HTML/WP block comments: swap the display form ONLY.
