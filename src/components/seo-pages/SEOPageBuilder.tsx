@@ -64,6 +64,11 @@ export default function SEOPageBuilder({ initial }: Props) {
     initial?.scheduled_at ? toLocalInputValue(initial.scheduled_at) : '',
   )
 
+  // Live WP URL kept in local state so it appears the moment publish resolves,
+  // without waiting for the /[id] route to re-fetch. Seeded from `initial` so
+  // reopening a published page keeps the banner visible.
+  const [wpPageUrl, setWpPageUrl] = useState<string | null>(initial?.wp_page_url ?? null)
+
   // Defaults to true — the common case is to write `_location = 1`.
   const [setLocationMeta, setSetLocationMeta] = useState<boolean>(
     initial?.set_location_meta ?? true,
@@ -261,12 +266,16 @@ export default function SEOPageBuilder({ initial }: Props) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Publish failed')
+      if (data.url) setWpPageUrl(data.url)
       if (data.imageWarning) {
         toast.error(`Published, but featured image: ${data.imageWarning}`, { duration: 6000 })
       } else {
         toast.success('Published to WordPress')
       }
-      router.push(`/seo-pages/${saved.id}`)
+      // Sync the URL so a refresh lands on the edit route, but don't `push` —
+      // `router.replace` keeps the freshly-set banner state in view instead of
+      // resetting the component on navigation.
+      if (!initial) router.replace(`/seo-pages/${saved.id}`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Publish failed')
     } finally {
@@ -288,8 +297,9 @@ export default function SEOPageBuilder({ initial }: Props) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Schedule failed')
+      if (data.url) setWpPageUrl(data.url)
       toast.success(`Scheduled for ${new Date(iso).toLocaleString()}`)
-      router.push(`/seo-pages/${saved.id}`)
+      if (!initial) router.replace(`/seo-pages/${saved.id}`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Schedule failed')
     } finally {
@@ -333,6 +343,26 @@ export default function SEOPageBuilder({ initial }: Props) {
           </div>
         }
       />
+
+      {wpPageUrl && (
+        <div className="mb-6 rounded-2xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-900/20 p-4 flex items-start gap-3">
+          <Rocket className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+              Live on WordPress
+            </p>
+            <a
+              href={wpPageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-300 hover:underline break-all"
+            >
+              <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
+              {wpPageUrl}
+            </a>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
@@ -647,17 +677,19 @@ export default function SEOPageBuilder({ initial }: Props) {
             </p>
           </div>
 
-          {initial?.wp_page_url && (
+          {wpPageUrl && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Live post</h3>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                Live {sourceKind}
+              </h3>
               <a
-                href={initial.wp_page_url}
+                href={wpPageUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-sm text-brand-600 dark:text-brand-400 hover:underline break-all"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                {initial.wp_page_url}
+                {wpPageUrl}
               </a>
             </div>
           )}
