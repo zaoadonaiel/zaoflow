@@ -49,6 +49,7 @@ export async function PATCH(
     'word_count', 'wp_post_id', 'wp_post_url', 'wp_category_id',
     'focus_keyphrase', 'keyphrase_synonyms', 'yoast_title', 'yoast_meta_description', 'slug',
     'featured_image_url', 'featured_image_prompt', 'featured_image_alt',
+    'compress_on_publish',
   ]
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -58,7 +59,7 @@ export async function PATCH(
 
   const { data: article, error } = await writeWithOptionalColumn<{ id: string }>(
     updates,
-    'featured_image_alt',
+    ['featured_image_alt', 'compress_on_publish'],
     (payload) => supabase
       .from('articles')
       .update(payload)

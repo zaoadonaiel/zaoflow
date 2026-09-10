@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
     word_count, excerpt, meta_description,
     focus_keyphrase, keyphrase_synonyms, yoast_title, yoast_meta_description, slug,
     featured_image_url, featured_image_prompt, featured_image_alt, wp_category_id,
+    compress_on_publish,
     usage_ids,
   } = body
 
@@ -96,8 +97,12 @@ export async function POST(req: NextRequest) {
       // Dropping this silently sent every new article to Uncategorized, since
       // the publish route reads it back off the row to set WP categories
       wp_category_id: wp_category_id || null,
+      // Default true handled by the migration; only send when the client
+      // explicitly picked a value so a pre-migration database still accepts
+      // the insert with the field dropped by the optional-column fallback.
+      ...(typeof compress_on_publish === 'boolean' ? { compress_on_publish } : {}),
     },
-    'featured_image_alt',
+    ['featured_image_alt', 'compress_on_publish'],
     (payload) => supabase.from('articles').insert(payload).select().single(),
   )
 

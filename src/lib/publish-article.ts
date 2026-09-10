@@ -1,6 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { publishPost, uploadMedia, extensionForImageUrl } from './wordpress'
 import { publishPost as publishNodePost } from './nodejs-site'
+import {
+  compressImageFromUrl,
+  storeCompressedToStorage,
+  type ServerCompressionResult,
+} from './image-compression-server'
 
 /**
  * Putting one article onto WordPress.
@@ -69,10 +74,46 @@ export async function publishArticle({
     status: 'pending',
   }).select().single()
 
+  // Everything after this point may want a compressed featured image. The
+  // toggle lives on the article row (default true, see migration 034) so a
+  // person can opt out per-post when they need the full resolution. Skipped
+  // silently when the column has not been migrated yet -- an older row simply
+  // publishes uncompressed, the way it always did.
+  const wantsCompression = (article as { compress_on_publish?: boolean }).compress_on_publish !== false
+  const shouldCompress = wantsCompression && !!article.featured_image_url
+
   // Node.js sites have no native future-post scheduling like WordPress does,
   // so they only ever publish immediately — scheduledAt is a WordPress-only
   // concept here and the article editor doesn't offer it for Node.js sites.
   if (site.site_type === 'nodejs') {
+    // Node sites fetch the featured URL themselves, so a compressed publish
+    // needs the smaller file living somewhere the site can reach -- Supabase
+    // storage. The article row is also pointed at the new URL, so a later
+    // edit does not silently revert to the pre-compression file.
+    let nodeImageUrl = article.featured_image_url || undefined
+    let nodeImageWarning: string | undefined
+    if (shouldCompress) {
+      try {
+        const compressed = await compressImageFromUrl(article.featured_image_url as string)
+        if (!compressed.skipped) {
+          const newUrl = await storeCompressedToStorage(userId, compressed)
+          nodeImageUrl = newUrl
+          await supabase
+            .from('articles')
+            .update({ featured_image_url: newUrl })
+            .eq('id', articleId)
+            .eq('user_id', userId)
+          if (compressed.overTarget) {
+            nodeImageWarning = `Featured image could not be shrunk under 1 MB (ended at ${Math.round(compressed.bytes / 1024)} KB).`
+          }
+        }
+      } catch (err) {
+        nodeImageWarning = err instanceof Error
+          ? `Compression skipped: ${err.message}`
+          : 'Compression skipped'
+      }
+    }
+
     try {
       const nodeResult = await publishNodePost({
         apiUrl: site.node_api_url!,
@@ -83,7 +124,7 @@ export async function publishArticle({
           content: article.content,
           excerpt: article.excerpt || undefined,
           metaDescription: article.meta_description || article.yoast_meta_description || undefined,
-          featuredImageUrl: article.featured_image_url || undefined,
+          featuredImageUrl: nodeImageUrl,
           status: 'publish',
           publishedAt: new Date().toISOString(),
         },
@@ -105,7 +146,12 @@ export async function publishArticle({
         }).eq('id', logEntry.id)
       }
 
-      return { success: true, nodePostId: nodeResult.id, nodePostUrl: nodeResult.url }
+      return {
+        success: true,
+        nodePostId: nodeResult.id,
+        nodePostUrl: nodeResult.url,
+        imageWarning: nodeImageWarning,
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Publish failed'
 
@@ -126,7 +172,32 @@ export async function publishArticle({
     if (article.featured_image_url) {
       try {
         const imgUrl = article.featured_image_url as string
-        const ext = extensionForImageUrl(imgUrl)
+
+        // Shrink first when compress_on_publish is on. The bytes are handed
+        // straight to uploadMedia so it does not refetch (and lose) them.
+        // A compression failure never blocks the publish -- we fall back to
+        // the URL-fetch path with a warning surfaced on the outcome.
+        let compressed: ServerCompressionResult | null = null
+        if (shouldCompress) {
+          try {
+            compressed = await compressImageFromUrl(imgUrl)
+            if (compressed.overTarget) {
+              imageWarning = `Featured image could not be shrunk under 1 MB (ended at ${Math.round(compressed.bytes / 1024)} KB).`
+            }
+          } catch (cmpErr) {
+            imageWarning = cmpErr instanceof Error
+              ? `Compression skipped: ${cmpErr.message}`
+              : 'Compression skipped'
+          }
+        }
+
+        // Slug + ext for the WP filename. When we compressed to WebP the ext
+        // must match the compressed mime -- WordPress rejects a mismatch --
+        // so use the compressor's ext when present.
+        const ext = compressed && !compressed.skipped
+          ? `.${compressed.ext}`
+          : extensionForImageUrl(imgUrl)
+
         featuredMediaId = await uploadMedia({
           siteUrl: site.url,
           username: site.wp_username,
@@ -134,6 +205,8 @@ export async function publishArticle({
           imageUrl: imgUrl,
           filename: `${article.slug || article.id}${ext}`,
           altText: article.featured_image_alt || undefined,
+          bytes: compressed && !compressed.skipped ? compressed.buffer : undefined,
+          mime: compressed && !compressed.skipped ? compressed.mime : undefined,
         })
       } catch (imgErr) {
         imageWarning = imgErr instanceof Error ? imgErr.message : 'Featured image upload failed'

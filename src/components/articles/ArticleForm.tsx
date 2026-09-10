@@ -244,6 +244,9 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   const [featuredImageUrl, setFeaturedImageUrl] = useState('')
   const [featuredImagePrompt, setFeaturedImagePrompt] = useState('')
   const [featuredImageAlt, setFeaturedImageAlt] = useState('')
+  // On by default -- a scheduled post that fires from cron should ship the
+  // shrunken image unless the user has said otherwise on this specific post.
+  const [compressOnPublish, setCompressOnPublish] = useState(true)
 
   // The category list is the last thing to land, so the clean snapshot below
   // waits for it — otherwise the article would look edited the moment its own
@@ -256,6 +259,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
     siteId, title, content, keywords, instructions, wpCategoryId,
     focusKeyphrase, keyphraseSynonyms, yoastTitle, yoastMetaDescription, slug,
     featuredImageUrl, featuredImagePrompt, featuredImageAlt,
+    compressOnPublish,
     publishMode, scheduledAt, scheduledTz,
   ])
 
@@ -376,6 +380,9 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
         // Loaded, not left empty: the save writes this field back, so an alt
         // the form never read would be wiped by the next save of the article.
         setFeaturedImageAlt(a.featured_image_alt || '')
+        // Only the explicit false flips it off — a pre-migration row (undefined)
+        // or a row from before this feature (null) keeps the on-by-default.
+        setCompressOnPublish(a.compress_on_publish !== false)
         if (a.wp_category_id) pendingCategoryRef.current = a.wp_category_id
         if (a.scheduled_at) {
           setPublishMode('scheduled')
@@ -564,6 +571,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
       featured_image_url: featuredImageUrl,
       featured_image_prompt: featuredImagePrompt || null,
       featured_image_alt: featuredImageAlt || null,
+      compress_on_publish: compressOnPublish,
     }
   }
 
@@ -1393,6 +1401,28 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
               pushReceipt(records)
             }}
           />
+
+          {/* Compress-on-publish toggle. Default on, and only shown once
+              there is an image the toggle would apply to. The compression
+              runs at publish time (immediate or scheduled/cron), so leaving
+              this on means a queued post going out at 3 a.m. still ships
+              the shrunken image. */}
+          {featuredImageUrl && (
+            <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={compressOnPublish}
+                onChange={(e) => setCompressOnPublish(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-500 dark:bg-gray-700"
+              />
+              <span className="text-sm">
+                <span className="font-medium text-gray-800 dark:text-gray-200">Compress on publish</span>
+                <span className="block text-xs text-gray-500 dark:text-gray-400">
+                  Shrinks the featured image to ~1 MB before sending. Turn off to keep the original file.
+                </span>
+              </span>
+            </label>
+          )}
 
           {/* An article that went out without an image can be given one here
               without republishing the whole post over whatever WordPress now

@@ -28,21 +28,33 @@ function isUnknownColumn(error: any): boolean {
  */
 export async function writeWithOptionalColumn<T>(
   payload: Record<string, unknown>,
-  optional: string,
+  optional: string | string[],
   // PromiseLike, not Promise: a Supabase query builder is awaitable but is not
   // itself a Promise, and callers pass one straight through.
   write: (payload: Record<string, unknown>) => PromiseLike<{ data: T | null; error: any }>
 ): Promise<{ data: T | null; error: any }> {
-  const first = await write(payload)
+  // Track which columns we have already dropped so a retry does not keep
+  // trying the same one when a payload has several optionals in flight.
+  const optionals = Array.isArray(optional) ? optional : [optional]
+  const remaining = new Set(optionals)
+  let current: Record<string, unknown> = payload
 
-  if (
-    !first.error ||
-    !isUnknownColumn(first.error) ||
-    !String(first.error.message || '').includes(optional)
-  ) {
-    return first
+  // Bounded by the number of optionals -- each iteration either succeeds or
+  // drops exactly one column. An unrelated failure short-circuits.
+  for (let i = 0; i <= optionals.length; i++) {
+    const result = await write(current)
+
+    if (!result.error || !isUnknownColumn(result.error)) return result
+
+    const message = String(result.error.message || '')
+    const culprit = [...remaining].find((col) => message.includes(col))
+    if (!culprit) return result
+
+    remaining.delete(culprit)
+    const { [culprit]: _dropped, ...rest } = current
+    current = rest
   }
 
-  const { [optional]: _dropped, ...rest } = payload
-  return write(rest)
+  // All optionals dropped and still failing -- return the last attempt.
+  return write(current)
 }

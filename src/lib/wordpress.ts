@@ -128,6 +128,8 @@ export async function uploadMedia({
   filename,
   altText,
   title,
+  bytes,
+  mime,
 }: {
   siteUrl: string
   username: string
@@ -143,15 +145,18 @@ export async function uploadMedia({
    * user-facing title should read the way the caller wrote it.
    */
   title?: string
+  /**
+   * Pre-fetched bytes to upload instead of downloading from imageUrl. Set
+   * by the publish path when it has already compressed the featured image
+   * server-side — refetching would either lose the compression or waste a
+   * round-trip. imageUrl is still passed through for the .jpg fallback on
+   * filename derivation and for the error message, but the wire body is
+   * these bytes.
+   */
+  bytes?: ArrayBuffer | Buffer
+  /** Mime that goes with `bytes`. Required when `bytes` is set. */
+  mime?: string
 }): Promise<number> {
-  const imgRes = await fetch(imageUrl)
-  if (!imgRes.ok) {
-    throw new Error(`Failed to download image from ${imageUrl}: ${imgRes.status}`)
-  }
-
-  const contentType = imgRes.headers.get('content-type') || 'image/jpeg'
-  const mimeBase = contentType.split(';')[0].trim()
-
   const extMap: Record<string, string> = {
     'image/jpeg': '.jpg',
     'image/png': '.png',
@@ -160,9 +165,31 @@ export async function uploadMedia({
     // .jpg while declaring image/gif, and WordPress rejects that mismatch.
     'image/gif': '.gif',
   }
-  const ext = extMap[mimeBase] ?? '.jpg'
 
-  const arrayBuffer = await imgRes.arrayBuffer()
+  let mimeBase: string
+  // Fetch's BodyInit does not accept Node's Buffer directly (structurally not
+  // a Uint8Array in TS's view), so caller-supplied Buffers are widened to
+  // Uint8Array here -- Buffer *is* a Uint8Array at runtime, just typed as
+  // its own class in @types/node.
+  let arrayBuffer: ArrayBuffer | Uint8Array
+
+  if (bytes && mime) {
+    mimeBase = mime.split(';')[0].trim()
+    arrayBuffer = bytes instanceof ArrayBuffer
+      ? bytes
+      : new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  } else {
+    const imgRes = await fetch(imageUrl)
+    if (!imgRes.ok) {
+      throw new Error(`Failed to download image from ${imageUrl}: ${imgRes.status}`)
+    }
+
+    const contentType = imgRes.headers.get('content-type') || 'image/jpeg'
+    mimeBase = contentType.split(';')[0].trim()
+    arrayBuffer = await imgRes.arrayBuffer()
+  }
+
+  const ext = extMap[mimeBase] ?? '.jpg'
 
   const baseUrl = normalizeUrl(siteUrl)
   const res = await fetch(`${baseUrl}/wp-json/wp/v2/media`, {
@@ -173,7 +200,9 @@ export async function uploadMedia({
       'Content-Type': mimeBase,
       'Content-Disposition': `attachment; filename="${filename || 'featured' + ext}"`,
     },
-    body: arrayBuffer,
+    // Cast is only for TS 5.7+'s tightened Uint8Array<ArrayBufferLike>
+    // vs BodyInit's Uint8Array<ArrayBuffer> -- runtime fetch accepts both.
+    body: arrayBuffer as BodyInit,
     signal: AbortSignal.timeout(60000),
   })
 
