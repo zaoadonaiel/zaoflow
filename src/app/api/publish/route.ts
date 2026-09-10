@@ -2,11 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { publishPost, uploadMedia } from '@/lib/wordpress'
 import { publishPost as publishNodePost } from '@/lib/nodejs-site'
-import {
-  compressImageFromUrl,
-  storeCompressedToStorage,
-  type ServerCompressionResult,
-} from '@/lib/image-compression-server'
+import { compressImageFromUrl, type ServerCompressionResult } from '@/lib/image-compression-server'
+import { storeCompressedToStorage } from '@/lib/image-compression-storage'
 
 export async function POST(req: NextRequest) {
   const supabase = createClient()

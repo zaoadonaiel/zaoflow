@@ -1,11 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { publishPost, uploadMedia, extensionForImageUrl } from './wordpress'
 import { publishPost as publishNodePost } from './nodejs-site'
-import {
-  compressImageFromUrl,
-  storeCompressedToStorage,
-  type ServerCompressionResult,
-} from './image-compression-server'
+import { compressImageFromUrl, type ServerCompressionResult } from './image-compression-server'
+import { storeCompressedToStorage } from './image-compression-storage'
 
 /**
  * Putting one article onto WordPress.
