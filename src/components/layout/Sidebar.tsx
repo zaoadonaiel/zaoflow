@@ -23,6 +23,7 @@ import {
   Plus,
   Activity,
   Wand2,
+  Trash2,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import ThemeToggle from '@/components/ui/ThemeToggle'
@@ -36,6 +37,7 @@ const NAV_ITEMS = [
   { href: '/articles', label: 'Articles', icon: FileText },
   { href: '/seo-pages', label: 'SEO Pages', icon: MapPin },
   { href: '/seo-city-fix', label: 'SEO City Fix', icon: Wand2 },
+  { href: '/page-remover', label: 'Page Remover', icon: Trash2 },
   { href: '/schedules', label: 'Schedules', icon: Calendar },
   { href: '/images', label: 'Images', icon: ImageIcon },
   { href: '/clients', label: 'Clients', icon: Users },

@@ -498,15 +498,22 @@ export async function deletePost({
   username,
   appPassword,
   postId,
+  resource = 'posts',
+  force = true,
 }: {
   siteUrl: string
   username: string
   appPassword: string
   postId: number
+  resource?: 'posts' | 'pages'
+  /** When true (default) the item is deleted permanently. When false WP
+   *  moves it to Trash and it can be restored via `restorePost`. */
+  force?: boolean
 }): Promise<void> {
   const baseUrl = normalizeUrl(siteUrl)
 
-  const res = await fetch(`${baseUrl}/wp-json/wp/v2/posts/${postId}?force=true`, {
+  const url = `${baseUrl}/wp-json/wp/v2/${resource}/${postId}${force ? '?force=true' : ''}`
+  const res = await fetch(url, {
     method: 'DELETE',
     headers: { Authorization: getAuthHeader(username, appPassword), 'User-Agent': USER_AGENT },
     signal: AbortSignal.timeout(15000),
@@ -516,6 +523,46 @@ export async function deletePost({
     const err = await res.json().catch(() => ({}))
     throw new Error(err?.message || `WordPress delete failed: ${res.status}`)
   }
+}
+
+/**
+ * Move a trashed item back to `draft` status. WordPress has no dedicated
+ * restore endpoint — restoring is just a status update — but callers reading
+ * this file shouldn't have to know that.
+ */
+export async function restorePost({
+  siteUrl,
+  username,
+  appPassword,
+  postId,
+  resource = 'posts',
+}: {
+  siteUrl: string
+  username: string
+  appPassword: string
+  postId: number
+  resource?: 'posts' | 'pages'
+}): Promise<{ id: number; status: string; link: string }> {
+  const baseUrl = normalizeUrl(siteUrl)
+
+  const res = await fetch(`${baseUrl}/wp-json/wp/v2/${resource}/${postId}`, {
+    method: 'POST',
+    headers: {
+      Authorization: getAuthHeader(username, appPassword),
+      'User-Agent': USER_AGENT,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ status: 'draft' }),
+    signal: AbortSignal.timeout(15000),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.message || `WordPress restore failed: ${res.status}`)
+  }
+
+  const data = await res.json()
+  return { id: data.id, status: data.status, link: data.link }
 }
 
 /**
@@ -570,6 +617,11 @@ export interface WPPageSummary {
   link: string
   status: string
   modifiedGmt?: string
+  /** Published date (or scheduled instant) in UTC. Some views want the
+   *  original publish date rather than the last-modified stamp — Page Remover
+   *  filters by it so a search on "before 2024" behaves like the user
+   *  expects. */
+  dateGmt?: string
 }
 
 export interface WPPageFull extends WPPageSummary {
@@ -611,6 +663,7 @@ interface WPListItem {
   link: string
   status: string
   modified_gmt?: string
+  date_gmt?: string
 }
 
 function mapWpListItem(p: WPListItem): WPPageSummary {
@@ -621,6 +674,7 @@ function mapWpListItem(p: WPListItem): WPPageSummary {
     link: p.link,
     status: p.status,
     modifiedGmt: p.modified_gmt ? `${p.modified_gmt}Z` : undefined,
+    dateGmt: p.date_gmt ? `${p.date_gmt}Z` : undefined,
   }
 }
 
@@ -638,6 +692,10 @@ export async function listPosts({
   search,
   resource = 'posts',
   maxPages = 50,
+  status = 'publish,draft,pending,private,future',
+  afterGmt,
+  beforeGmt,
+  orderBy = 'modified',
 }: {
   siteUrl: string
   username: string
@@ -646,6 +704,14 @@ export async function listPosts({
   resource?: 'posts' | 'pages'
   /** Safety cap on paginated fetches (100 items per page) — 50 = 5,000 items. */
   maxPages?: number
+  /** WP `status` query — comma-separated. Pass `'trash'` for Trash view. */
+  status?: string
+  /** ISO instant; WP filters items with date >= this value. */
+  afterGmt?: string
+  /** ISO instant; WP filters items with date <= this value. */
+  beforeGmt?: string
+  /** WP `orderby` — `'date'` sorts by publish date, `'modified'` by last edit. */
+  orderBy?: 'date' | 'modified' | 'title' | 'slug' | 'id'
 }): Promise<WPPageSummary[]> {
   const baseUrl = normalizeUrl(siteUrl)
   const headers = { Authorization: getAuthHeader(username, appPassword), 'User-Agent': USER_AGENT }
@@ -654,13 +720,15 @@ export async function listPosts({
     const params = new URLSearchParams({
       per_page: '100',
       page: String(page),
-      status: 'publish,draft,pending,private,future',
-      orderby: 'modified',
+      status,
+      orderby: orderBy,
       order: 'desc',
       context: 'edit',
-      _fields: 'id,slug,title,link,status,modified_gmt',
+      _fields: 'id,slug,title,link,status,modified_gmt,date_gmt',
     })
     if (search) params.set('search', search)
+    if (afterGmt) params.set('after', afterGmt)
+    if (beforeGmt) params.set('before', beforeGmt)
     return params
   }
 
