@@ -69,6 +69,8 @@ export default function PageRemover() {
   const [dateTo, setDateTo] = useState('')
 
   const [busyId, setBusyId] = useState<number | null>(null)
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
 
   useEffect(() => {
     setSitesLoading(true)
@@ -138,6 +140,93 @@ export default function PageRemover() {
       return title.includes(q) || slug.includes(q) || link.includes(q)
     })
   }, [items, query])
+
+  // Reset selection whenever the underlying data pool changes so a stale id
+  // from a previous site/view can't linger and trigger a hidden bulk action.
+  useEffect(() => {
+    setSelected(new Set())
+  }, [siteId, kind, view])
+
+  const filteredIds = useMemo(() => filtered.map((p) => p.id), [filtered])
+  const selectedInView = useMemo(
+    () => filteredIds.filter((id) => selected.has(id)),
+    [filteredIds, selected],
+  )
+  const allFilteredSelected = filtered.length > 0 && selectedInView.length === filtered.length
+  const someFilteredSelected = selectedInView.length > 0 && !allFilteredSelected
+
+  function toggleOne(id: number) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAllFiltered() {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (allFilteredSelected) {
+        for (const id of filteredIds) next.delete(id)
+      } else {
+        for (const id of filteredIds) next.add(id)
+      }
+      return next
+    })
+  }
+
+  async function actOnId(pageId: number, action: 'trash' | 'restore' | 'delete') {
+    const res = await fetch('/api/page-remover/item', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ site_id: siteId, page_id: pageId, kind, action }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data?.error || 'Action failed')
+  }
+
+  async function bulkAct(action: 'trash' | 'restore' | 'delete') {
+    const ids = Array.from(selected)
+    if (ids.length === 0) return
+    const label = action === 'trash' ? 'move to trash' : action === 'restore' ? 'restore' : 'permanently delete'
+    if (action === 'delete') {
+      if (!confirm(`Permanently delete ${ids.length} item${ids.length === 1 ? '' : 's'}? This cannot be undone.`)) return
+    } else if (!confirm(`${label.charAt(0).toUpperCase()}${label.slice(1)} ${ids.length} item${ids.length === 1 ? '' : 's'}?`)) {
+      return
+    }
+
+    setBulkBusy(true)
+    const results = await Promise.allSettled(ids.map((id) => actOnId(id, action)))
+    const succeeded: number[] = []
+    const failures: string[] = []
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') succeeded.push(ids[i])
+      else failures.push(r.reason instanceof Error ? r.reason.message : String(r.reason))
+    })
+
+    if (succeeded.length > 0) {
+      const succeededSet = new Set(succeeded)
+      setItems((prev) => prev.filter((p) => !succeededSet.has(p.id)))
+      setSelected((prev) => {
+        const next = new Set(prev)
+        for (const id of succeeded) next.delete(id)
+        return next
+      })
+    }
+    if (failures.length === 0) {
+      toast.success(
+        action === 'trash'
+          ? `Moved ${succeeded.length} to trash`
+          : action === 'restore'
+            ? `Restored ${succeeded.length} as drafts`
+            : `Deleted ${succeeded.length} permanently`,
+      )
+    } else {
+      toast.error(`${failures.length} of ${ids.length} failed: ${failures[0]}`)
+    }
+    setBulkBusy(false)
+  }
 
   async function act(item: WPItem, action: 'trash' | 'restore' | 'delete') {
     if (action === 'delete') {
@@ -313,22 +402,85 @@ export default function PageRemover() {
         </section>
 
         <section className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/40">
-            <div className="text-sm text-gray-700 dark:text-gray-200">
-              {loading ? (
-                <span className="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Loading…
-                </span>
-              ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/40">
+            <div className="flex items-center gap-3">
+              <input
+                ref={(el) => {
+                  if (el) el.indeterminate = someFilteredSelected
+                }}
+                type="checkbox"
+                aria-label="Select all items on this view"
+                checked={allFilteredSelected}
+                onChange={toggleAllFiltered}
+                disabled={loading || filtered.length === 0}
+                className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-brand-600 focus:ring-brand-500 disabled:opacity-40"
+              />
+              <div className="text-sm text-gray-700 dark:text-gray-200">
+                {loading ? (
+                  <span className="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+                  </span>
+                ) : selected.size > 0 ? (
+                  <>
+                    <strong>{selected.size}</strong> selected
+                  </>
+                ) : (
+                  <>
+                    <strong>{filtered.length}</strong> {view === 'trash' ? 'in trash' : 'active'}
+                    {filtered.length !== items.length && (
+                      <span className="text-gray-500 dark:text-gray-400"> of {items.length}</span>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {selected.size > 0 && (
                 <>
-                  <strong>{filtered.length}</strong> {view === 'trash' ? 'in trash' : 'active'}
-                  {filtered.length !== items.length && (
-                    <span className="text-gray-500 dark:text-gray-400"> of {items.length}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(new Set())}
+                    disabled={bulkBusy}
+                    className="text-xs text-gray-600 dark:text-gray-300 hover:underline disabled:opacity-50"
+                  >
+                    Clear
+                  </button>
+                  {view === 'active' ? (
+                    <button
+                      type="button"
+                      onClick={() => bulkAct('trash')}
+                      disabled={bulkBusy}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {bulkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      Trash selected
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => bulkAct('restore')}
+                        disabled={bulkBusy}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {bulkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                        Restore selected
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => bulkAct('delete')}
+                        disabled={bulkBusy}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {bulkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                        Delete selected
+                      </button>
+                    </>
                   )}
                 </>
               )}
+              {error && <span className="text-xs text-red-600 dark:text-red-400">{error}</span>}
             </div>
-            {error && <span className="text-xs text-red-600 dark:text-red-400">{error}</span>}
           </div>
 
           {!loading && filtered.length === 0 ? (
@@ -345,8 +497,17 @@ export default function PageRemover() {
             <ul className="divide-y divide-gray-100 dark:divide-gray-700">
               {filtered.map((item) => {
                 const busy = busyId === item.id
+                const checked = selected.has(item.id)
                 return (
                   <li key={item.id} className="px-4 py-3 flex flex-wrap items-center gap-3">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${item.title || item.slug}`}
+                      checked={checked}
+                      onChange={() => toggleOne(item.id)}
+                      disabled={bulkBusy}
+                      className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-brand-600 focus:ring-brand-500 disabled:opacity-40"
+                    />
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                         {item.title || item.slug}
