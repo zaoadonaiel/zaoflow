@@ -1,30 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { recordUsage, readUsage } from '@/lib/ai-cost'
-import { parseCity, enforceCityDisplayInHtml } from '@/lib/seo-city-swap'
-
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const VALID_SIMILARITIES = [10, 25, 50, 90] as const
-type Similarity = (typeof VALID_SIMILARITIES)[number]
-
-function htmlToText(input: string): string {
-  return input.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-}
-
-function similarityBrief(pct: Similarity): string {
-  // The user's mental model: 10% similar = heavily rewritten (only 10% of the
-  // original wording carries over); 90% similar = nearly the same page.
-  switch (pct) {
-    case 10:
-      return `Aggressively rephrase every sentence. Only about 10% of the original wording should remain — swap sentence structures, replace verbs and nouns with synonyms, reorder clauses. The meaning stays; the wording changes almost completely.`
-    case 25:
-      return `Heavily rewrite every paragraph. Only about 25% of the original wording should remain — keep the point, but change most of the words, phrasings, and sentence shapes.`
-    case 50:
-      return `Rewrite about half of each paragraph. Keep roughly 50% of the original wording, replacing the rest with synonyms and alternative phrasings.`
-    case 90:
-      return `Lightly edit for freshness. Only about 10% of the wording should change — mostly small synonym swaps and minor phrasing tweaks. Keep sentences recognisable.`
-  }
-}
+import {
+  rewriteSeoContent,
+  VALID_SIMILARITIES,
+  type Similarity,
+} from '@/lib/seo-rewrite'
 
 export async function POST(req: NextRequest) {
   const supabase = createClient()
@@ -75,98 +55,27 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const originalWordCount = htmlToText(content).split(/\s+/).filter(Boolean).length
-
-  const systemPrompt = `You are an expert SEO editor rewriting a location-cloned WordPress page so it is not a duplicate of the source. You output ONLY HTML, no code fences, no commentary.`
-
-  const userPrompt = `Rewrite the HTML below.
-
-HARD RULES — never break these:
-- Preserve every heading tag EXACTLY: <h1>, <h2>, <h3>, <h4>, <h5>, <h6>. Their text stays word-for-word identical to the input. Do not add, remove, reorder or rename any heading.
-- Preserve the HTML structure and tags: same paragraphs, same lists, same links, same images, same order.
-- Keep the overall word count within ±10% of the original (${originalWordCount} words).
-- Never change any city name that appears — keep every reference to "${target_city || '<the target city>'}" exactly as written.
-- Output ONLY the rewritten HTML body. No <html>, <head>, <body>, no code fences, no explanatory text.
-
-REWRITE INSTRUCTION (${similarity}% similar to the source):
-${similarityBrief(similarity as Similarity)}
-${instructions?.trim() ? `\nADDITIONAL AUTHOR INSTRUCTIONS (secondary to the hard rules):\n${instructions.trim()}\n` : ''}
-HTML to rewrite:
-${content}`
-
-  const response = await fetch(OPENROUTER_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://zaoflo.com',
-      'X-Title': 'Zaoflo - SEO Pages',
-    },
-    body: JSON.stringify({
+  try {
+    const result = await rewriteSeoContent({
+      apiKey,
+      content,
       model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      // Similarity=10 needs the model to keep almost nothing — a low
-      // temperature strangles the variety it needs to actually diverge.
-      temperature: similarity === 10 ? 0.9 : similarity === 25 ? 0.8 : similarity === 50 ? 0.7 : 0.5,
-      max_tokens: 8000,
-    }),
-  })
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    if (response.status === 401 || response.status === 403) {
+      similarity: similarity as Similarity,
+      instructions,
+      targetCity: target_city,
+      supabase,
+      userId: user.id,
+      seoPageId: seo_page_id || null,
+    })
+    return NextResponse.json(result)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Rewrite failed'
+    if (msg.includes('401') || msg.includes('403')) {
       return NextResponse.json({ error: 'Invalid OpenRouter API key. Update it in Settings.' }, { status: 400 })
     }
-    if (response.status === 402) {
+    if (msg.includes('402')) {
       return NextResponse.json({ error: 'OpenRouter account has no credits.' }, { status: 400 })
     }
-    return NextResponse.json(
-      { error: err?.error?.message || `OpenRouter error: ${response.status}` },
-      { status: 500 },
-    )
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
-
-  const data = await response.json()
-  const rawContent: string = data.choices?.[0]?.message?.content || ''
-
-  // Strip any accidental code fences the model wraps around the HTML.
-  const stripped = rawContent
-    .trim()
-    .replace(/^```(?:html)?\s*/i, '')
-    .replace(/\s*```$/, '')
-    .trim()
-
-  // The prompt says "keep every reference to <target_city> exactly as
-  // written," but the model routinely writes "san francisco" or
-  // "san-francisco" mid-paragraph. Force the canonical display form back in
-  // — tag-safe so href="/san-francisco-events/" URLs still work.
-  const cleaned = target_city
-    ? enforceCityDisplayInHtml(stripped, parseCity(target_city))
-    : stripped
-
-  const newWordCount = htmlToText(cleaned).split(/\s+/).filter(Boolean).length
-
-  // Cost tracking — best-effort. A missing seo_page_id (first rewrite before
-  // saving) still records the row against the user, so the total lights up as
-  // soon as the page saves and the builder re-fetches.
-  const usage = readUsage(data, model || 'unknown')
-  const rec = await recordUsage({
-    supabase,
-    userId: user.id,
-    step: 'rewrite',
-    usage,
-    seoPageId: seo_page_id || null,
-  })
-
-  return NextResponse.json({
-    content: cleaned,
-    originalWordCount,
-    newWordCount,
-    model,
-    similarity,
-    usage: rec,
-  })
 }

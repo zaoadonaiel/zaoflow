@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { MapPin, Plus, Search, Trash2, ExternalLink, Globe, Pencil } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import Badge, { statusToBadgeVariant } from '@/components/ui/Badge'
+import AutoPostCard from '@/components/seo-pages/AutoPostCard'
 import type { SEOPage, Site } from '@/types'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -76,6 +77,8 @@ export default function SEOPagesPage() {
           </Link>
         }
       />
+
+      <AutoPostCard />
 
       <div className="flex items-center gap-3 mb-6">
         <div className="relative flex-1 max-w-sm">
