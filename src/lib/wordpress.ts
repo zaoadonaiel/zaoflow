@@ -852,6 +852,53 @@ export async function getPostFull({
   }
 }
 
+/**
+ * Look up a published/draft/private/future WP item by slug. Returns null when
+ * nothing matches — trash is excluded so a soft-deleted page doesn't block a
+ * fresh publish. Used by the SEO Pages publish flow to detect that another
+ * WordPress page already occupies the target slug (which WP would otherwise
+ * silently suffix as `-2`).
+ */
+export async function findPostBySlug({
+  siteUrl,
+  username,
+  appPassword,
+  slug,
+  resource = 'posts',
+}: {
+  siteUrl: string
+  username: string
+  appPassword: string
+  slug: string
+  resource?: 'posts' | 'pages'
+}): Promise<{ id: number; slug: string; title: string; link: string; status: string } | null> {
+  const baseUrl = normalizeUrl(siteUrl)
+  const params = new URLSearchParams({
+    slug,
+    status: 'publish,draft,pending,private,future',
+    per_page: '1',
+    _fields: 'id,slug,title,link,status',
+  })
+  const res = await fetch(`${baseUrl}/wp-json/wp/v2/${resource}?${params}`, {
+    headers: { Authorization: getAuthHeader(username, appPassword), 'User-Agent': USER_AGENT },
+    signal: AbortSignal.timeout(30000),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.message || `WordPress slug lookup failed: ${res.status}`)
+  }
+  const data = (await res.json()) as WPListItem[]
+  if (!Array.isArray(data) || data.length === 0) return null
+  const p = data[0]
+  return {
+    id: p.id,
+    slug: p.slug,
+    title: stripEntities(p.title?.raw || p.title?.rendered || p.slug),
+    link: p.link,
+    status: p.status,
+  }
+}
+
 export async function updatePost({
   siteUrl,
   username,

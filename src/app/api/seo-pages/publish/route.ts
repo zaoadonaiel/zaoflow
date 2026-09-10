@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { publishPost, uploadMedia, extensionForImageUrl } from '@/lib/wordpress'
+import {
+  findPostBySlug,
+  publishPost,
+  uploadMedia,
+  extensionForImageUrl,
+} from '@/lib/wordpress'
 
 export async function POST(req: NextRequest) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { seoPageId, scheduledAt } = await req.json()
+  const { seoPageId, scheduledAt, override } = await req.json()
   if (!seoPageId) return NextResponse.json({ error: 'seoPageId is required' }, { status: 400 })
 
   const { data: seoPage } = await supabase
@@ -57,6 +62,36 @@ export async function POST(req: NextRequest) {
 
     const resource: 'posts' | 'pages' = seoPage.source_kind === 'page' ? 'pages' : 'posts'
 
+    // Slug-collision check. If this SEO page isn't already bound to a WP post
+    // (fresh publish), and a different WP page owns the same slug, WordPress
+    // would auto-suffix ours as `-2` on POST — leaving the old design live and
+    // the new one on a different URL. Detect it, ask the user once, then reuse
+    // that WP id on `override=true` so publishPost does a PUT that overwrites
+    // the existing page in place.
+    let overrideTargetId: number | undefined = seoPage.wp_page_id || undefined
+    if (!overrideTargetId && seoPage.slug) {
+      const existing = await findPostBySlug({
+        siteUrl: site.url,
+        username: site.wp_username,
+        appPassword: site.wp_app_password,
+        slug: seoPage.slug,
+        resource,
+      })
+      if (existing) {
+        if (!override) {
+          await supabase.from('seo_pages').update({ status: 'draft' }).eq('id', seoPageId)
+          return NextResponse.json(
+            {
+              error: 'A WordPress page with this slug already exists.',
+              conflict: existing,
+            },
+            { status: 409 },
+          )
+        }
+        overrideTargetId = existing.id
+      }
+    }
+
     const wpResult = await publishPost({
       siteUrl: site.url,
       username: site.wp_username,
@@ -83,7 +118,7 @@ export async function POST(req: NextRequest) {
         // the theme's default template.
         template: typeof seoPage.source_template === 'string' ? seoPage.source_template : undefined,
       },
-      existingPostId: seoPage.wp_page_id || undefined,
+      existingPostId: overrideTargetId,
       resource,
     })
 

@@ -160,6 +160,17 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
   // before (wpPageUrl is set) and the user hasn't chosen to skip the prompt.
   const [showRepublishConfirm, setShowRepublishConfirm] = useState(false)
 
+  // Slug-collision override modal. Set when the publish endpoint responds 409
+  // because another WP page already occupies the target slug. On confirm we
+  // re-post with `override: true` and the server PUTs over that WP page.
+  const [overrideConflict, setOverrideConflict] = useState<{
+    id: number
+    link: string
+    title: string
+    status: string
+    scheduledAt: string | null
+  } | null>(null)
+
   // Running total of what AI usage has cost against this page. Seeded from a
   // server aggregate on load (so re-opening a page shows history), then bumped
   // locally as each rewrite / image generation returns its cost.
@@ -515,22 +526,41 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
   }
 
   /** The real publish call — kept separate so both the direct path and the
-   *  "Yes, override" modal buttons can reuse it. */
-  async function doPublish() {
+   *  "Yes, override" modal buttons can reuse it. When the server responds 409
+   *  because a WP page with the same slug already exists (and this SEO page
+   *  isn't already bound to it), the conflict is captured for the override
+   *  modal instead of surfacing as a toast — resubmit with `override: true`
+   *  to overwrite the existing page in place. */
+  async function doPublish(options: { override?: boolean; scheduledAt?: string | null } = {}) {
     const saved = await saveDraft(true)
     if (!saved) return
     setPublishing(true)
     try {
+      const body: Record<string, unknown> = { seoPageId: saved.id }
+      if (options.scheduledAt) body.scheduledAt = options.scheduledAt
+      if (options.override) body.override = true
       const res = await fetch('/api/seo-pages/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ seoPageId: saved.id }),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
+      if (res.status === 409 && data?.conflict) {
+        setOverrideConflict({
+          id: data.conflict.id,
+          link: data.conflict.link,
+          title: data.conflict.title,
+          status: data.conflict.status,
+          scheduledAt: options.scheduledAt ?? null,
+        })
+        return
+      }
       if (!res.ok) throw new Error(data.error || 'Publish failed')
       if (data.url) setWpPageUrl(data.url)
       setPublishDone(true)
-      if (data.imageWarning) {
+      if (options.scheduledAt) {
+        toast.success(`Scheduled for ${new Date(options.scheduledAt).toLocaleString()}`)
+      } else if (data.imageWarning) {
         toast.error(`Published, but featured image: ${data.imageWarning}`, { duration: 6000 })
       } else {
         toast.success('Published to WordPress')
@@ -554,26 +584,7 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
 
   async function scheduleForPublish() {
     if (!scheduledAt) { toast.error('Pick a date and time first'); return }
-    const saved = await saveDraft(true)
-    if (!saved) return
-    setPublishing(true)
-    try {
-      const iso = new Date(scheduledAt).toISOString()
-      const res = await fetch('/api/seo-pages/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ seoPageId: saved.id, scheduledAt: iso }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Schedule failed')
-      if (data.url) setWpPageUrl(data.url)
-      toast.success(`Scheduled for ${new Date(iso).toLocaleString()}`)
-      if (!initial) router.replace(`/seo-pages/${saved.id}`)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Schedule failed')
-    } finally {
-      setPublishing(false)
-    }
+    await doPublish({ scheduledAt: new Date(scheduledAt).toISOString() })
   }
 
   const wpPageLookup = useMemo(() => new Map(wpPages.map((p) => [p.id, p])), [wpPages])
@@ -1325,6 +1336,62 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
               className="flex-1 px-4 py-2.5 rounded-lg border border-brand-300 dark:border-brand-700 bg-brand-50 dark:bg-brand-900/20 text-sm font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/30 transition-colors"
             >
               Yes, don&apos;t ask again
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(overrideConflict)}
+        onClose={() => setOverrideConflict(null)}
+        title="Are you sure you want to overwrite this page?"
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            A WordPress page with this slug already exists on the site.
+            Continuing will wipe the current content at that URL and replace it
+            with this SEO page — the old design will be gone.
+          </p>
+          {overrideConflict && (
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3 space-y-1">
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                {overrideConflict.title || `/${slug}`}
+              </p>
+              <a
+                href={overrideConflict.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-brand-600 dark:text-brand-400 hover:underline break-all"
+              >
+                <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                {overrideConflict.link}
+              </a>
+              <p className="text-[11px] uppercase tracking-wide text-gray-400">
+                Status: {overrideConflict.status}
+              </p>
+            </div>
+          )}
+          <div className="flex flex-col sm:flex-row gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setOverrideConflict(null)}
+              className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              No, cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const pending = overrideConflict
+                setOverrideConflict(null)
+                if (pending) {
+                  void doPublish({ override: true, scheduledAt: pending.scheduledAt })
+                }
+              }}
+              className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
+            >
+              Yes, override
             </button>
           </div>
         </div>
