@@ -10,8 +10,10 @@ import { listPosts } from '@/lib/wordpress'
  *   kind         — 'page' (default) or 'post'
  *   view         — 'active' (default) or 'trash'
  *   search       — passed to WP as a title/content match
- *   after        — ISO instant, filters items published on or after
- *   before       — ISO instant, filters items published on or before
+ *   after        — ISO instant, filters items on or after
+ *   before       — ISO instant, filters items on or before
+ *   date_field   — 'published' (default) or 'modified'; picks the WP
+ *                  column the date range applies to and the sort order
  */
 export async function GET(req: NextRequest) {
   const supabase = createClient()
@@ -25,6 +27,8 @@ export async function GET(req: NextRequest) {
   const search = searchParams.get('search') || undefined
   const after = searchParams.get('after') || undefined
   const before = searchParams.get('before') || undefined
+  const dateField: 'published' | 'modified' =
+    searchParams.get('date_field') === 'modified' ? 'modified' : 'published'
 
   const resource: 'posts' | 'pages' = kindParam === 'post' ? 'posts' : 'pages'
   const view: 'active' | 'trash' = viewParam === 'trash' ? 'trash' : 'active'
@@ -55,7 +59,8 @@ export async function GET(req: NextRequest) {
       status: view === 'trash' ? 'trash' : 'publish,draft,pending,private,future',
       afterGmt: after,
       beforeGmt: before,
-      orderBy: 'date',
+      orderBy: dateField === 'modified' ? 'modified' : 'date',
+      dateField,
     })
     return NextResponse.json({ pages, view, kind: resource })
   } catch (err) {

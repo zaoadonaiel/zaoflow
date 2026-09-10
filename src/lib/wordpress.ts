@@ -696,6 +696,7 @@ export async function listPosts({
   afterGmt,
   beforeGmt,
   orderBy = 'modified',
+  dateField = 'published',
 }: {
   siteUrl: string
   username: string
@@ -712,6 +713,12 @@ export async function listPosts({
   beforeGmt?: string
   /** WP `orderby` — `'date'` sorts by publish date, `'modified'` by last edit. */
   orderBy?: 'date' | 'modified' | 'title' | 'slug' | 'id'
+  /** Which date column `afterGmt`/`beforeGmt` filter against. `'published'`
+   *  maps to WP's `after`/`before` (default), `'modified'` maps to
+   *  `modified_after`/`modified_before` (WordPress 5.7+). Older WP silently
+   *  ignores the modified variants, which just means the range has no
+   *  effect on those sites — nothing breaks. */
+  dateField?: 'published' | 'modified'
 }): Promise<WPPageSummary[]> {
   const baseUrl = normalizeUrl(siteUrl)
   const headers = { Authorization: getAuthHeader(username, appPassword), 'User-Agent': USER_AGENT }
@@ -727,8 +734,8 @@ export async function listPosts({
       _fields: 'id,slug,title,link,status,modified_gmt,date_gmt',
     })
     if (search) params.set('search', search)
-    if (afterGmt) params.set('after', afterGmt)
-    if (beforeGmt) params.set('before', beforeGmt)
+    if (afterGmt) params.set(dateField === 'modified' ? 'modified_after' : 'after', afterGmt)
+    if (beforeGmt) params.set(dateField === 'modified' ? 'modified_before' : 'before', beforeGmt)
     return params
   }
 

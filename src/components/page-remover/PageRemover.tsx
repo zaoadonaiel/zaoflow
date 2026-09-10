@@ -26,8 +26,10 @@ interface WPItem {
 
 type View = 'active' | 'trash'
 type Kind = 'post' | 'page'
+type DateField = 'published' | 'modified'
 
 const LAST_SITE_KEY = 'zaoflo_page_remover_last_site_id'
+const LAST_DATE_FIELD_KEY = 'zaoflo_page_remover_date_field'
 
 function formatDate(iso?: string): string {
   if (!iso) return '—'
@@ -56,6 +58,7 @@ export default function PageRemover() {
 
   const [kind, setKind] = useState<Kind>('page')
   const [view, setView] = useState<View>('active')
+  const [dateField, setDateField] = useState<DateField>('published')
 
   const [items, setItems] = useState<WPItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -96,6 +99,17 @@ export default function PageRemover() {
     window.localStorage.setItem(LAST_SITE_KEY, siteId)
   }, [siteId])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const saved = window.localStorage.getItem(LAST_DATE_FIELD_KEY)
+    if (saved === 'modified' || saved === 'published') setDateField(saved)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(LAST_DATE_FIELD_KEY, dateField)
+  }, [dateField])
+
   // Load the item list whenever the site, kind, view, or date range changes.
   // Search is applied client-side (fast) but also forwarded to WP so a search
   // string can narrow the fetched set on very large sites.
@@ -107,7 +121,7 @@ export default function PageRemover() {
     let cancelled = false
     setLoading(true)
     setError(null)
-    const params = new URLSearchParams({ site_id: siteId, kind, view })
+    const params = new URLSearchParams({ site_id: siteId, kind, view, date_field: dateField })
     const after = toIso(dateFrom, false)
     const before = toIso(dateTo, true)
     if (after) params.set('after', after)
@@ -128,7 +142,7 @@ export default function PageRemover() {
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [siteId, kind, view, dateFrom, dateTo])
+  }, [siteId, kind, view, dateFrom, dateTo, dateField])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -358,7 +372,9 @@ export default function PageRemover() {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">From date</label>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                {dateField === 'modified' ? 'Modified from' : 'Published from'}
+              </label>
               <input
                 type="date"
                 value={dateFrom}
@@ -367,7 +383,9 @@ export default function PageRemover() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">To date</label>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                {dateField === 'modified' ? 'Modified to' : 'Published to'}
+              </label>
               <input
                 type="date"
                 value={dateTo}
@@ -375,6 +393,33 @@ export default function PageRemover() {
                 className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+              Date filter target
+            </label>
+            <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 text-sm max-w-sm">
+              {(['published', 'modified'] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setDateField(f)}
+                  className={`flex-1 py-2 transition-colors capitalize ${
+                    dateField === f
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1">
+              {dateField === 'modified'
+                ? 'Date range filters by last-modified. Pages edited after the “to” date are hidden.'
+                : 'Date range filters by publish date. Modification date is ignored.'}
+            </p>
           </div>
 
           {(dateActive || searchActive) && (
