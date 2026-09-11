@@ -92,7 +92,23 @@ function DateBlock({
 
   return (
     <div className="flex-shrink-0 w-32 sm:w-44 rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-4 flex flex-col">
-      <div className="h-5 flex items-center justify-start">{children}</div>
+      <div className="h-5 flex items-center justify-between gap-1">
+        <div className="flex items-center gap-1">{children}</div>
+        {/* A live-green tick sits above the date once the article is out, so
+            the Published filter reads as a wall of "done" at a glance rather
+            than a wall of dates the client has to parse to know the state.
+            Kept on the All tab too — it belongs to the article, not the
+            filter. */}
+        {published && (
+          <span
+            className="flex items-center justify-center w-5 h-5 rounded-full bg-[#39ff14] shadow-[0_0_6px_rgba(57,255,20,0.7)]"
+            aria-label="Published"
+            title="Published"
+          >
+            <Check className="w-3 h-3 text-gray-900" strokeWidth={3.5} />
+          </span>
+        )}
+      </div>
 
       {parts ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center">
