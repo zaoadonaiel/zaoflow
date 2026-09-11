@@ -21,6 +21,11 @@ interface Idea {
   usageId?: string | null
   /** Full usage row so the receipt can itemise this line without a re-fetch. */
   receipt?: UsageRecord[] | null
+  /** Whether live web search was on when this idea was generated. When the
+   *  user accepts the idea the article generator's toggles inherit this,
+   *  so a research-backed idea flows into a research-backed article without
+   *  a second click. */
+  webSearch?: boolean
 }
 
 interface Props {
@@ -370,7 +375,10 @@ export default function IdeaGenerator({
                 : <><RefreshCw className="w-3.5 h-3.5" />Regenerate</>}
             </button>
             <button
-              onClick={() => { onAccept(idea); setIdea(null); setRejected([]); setNewKeyword('') }}
+              onClick={() => {
+                onAccept({ ...idea, webSearch })
+                setIdea(null); setRejected([]); setNewKeyword('')
+              }}
               disabled={loading}
               className="flex items-center gap-2 bg-green-600 text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
             >

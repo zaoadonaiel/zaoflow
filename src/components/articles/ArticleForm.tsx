@@ -474,6 +474,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
     keywords: string[]
     usageId?: string | null
     receipt?: UsageRecord[] | null
+    webSearch?: boolean
   }) {
     const hasContent = content.replace(/<[^>]*>/g, '').trim().length > 0
     if (hasContent && !confirm('Replace what you have written with this idea?')) return
@@ -485,6 +486,14 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
     collectUsage(idea.usageId)
     pushReceipt(idea.receipt)
     if (idea.keywords?.length && keywords.length === 0) setKeywords(idea.keywords)
+    // A research-backed idea flows into a research-backed article: both
+    // toggles mirror the idea's web search state, so the article publishes
+    // with the same posture the idea was generated under unless the user
+    // flips them back.
+    if (typeof idea.webSearch === 'boolean') {
+      setWebSearch(idea.webSearch)
+      setCitations(idea.webSearch)
+    }
     toast.success('Idea applied — hit Generate with AI to write it')
   }
 
