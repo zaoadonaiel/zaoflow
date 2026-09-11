@@ -2,14 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarDays, Clock, GripVertical, Loader2, AlertCircle, Pause, Play } from 'lucide-react'
+import toast from 'react-hot-toast'
 import Modal from './Modal'
 import MonthScroller from '@/components/schedules/MonthScroller'
 import RearrangeQueue from '@/components/schedules/RearrangeQueue'
 import {
   useSiteCalendar, useScheduleActions,
   RING_CLASS, DOT_LABEL, type DayMark,
-  dayKey, partsOfKey,
+  dayKey, partsOfKey, civilKey, readableDay,
+  collidingArticles as findCollisions,
+  computeInsertCascade,
 } from '@/lib/schedule-calendar'
+import type { Article } from '@/types'
 import {
   SCHEDULE_ZONES,
   getZonedParts,
@@ -46,6 +50,12 @@ interface Props {
    */
   onCalendarChanged?: () => void
   onSave: (iso: string, tzId: string) => void
+  /**
+   * The id of the article being scheduled, so it isn't counted as a
+   * collision with itself when rescheduling. Null for a brand-new article
+   * that has not been persisted yet.
+   */
+  excludeArticleId?: string | null
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0')
@@ -61,7 +71,7 @@ const DEFAULT_HOUR_24 = 9
 
 export default function ScheduleCalendarModal({
   open, onClose, articleTitle, currentIso, currentTz, saving, onSave, saveLabel = 'Save',
-  siteId, siteName, onCalendarChanged,
+  siteId, siteName, onCalendarChanged, excludeArticleId,
 }: Props) {
   // What this site already has on the calendar, so a new slot is picked next to
   // the existing run rather than blindly on top of it.
@@ -236,6 +246,94 @@ export default function ScheduleCalendarModal({
     SCHEDULE_ZONES.find((z) => z.id === tzId)?.label ?? tzId
   }`
 
+  // The day the chosen slot lands on, in the picker's own zone. Used to spot
+  // day-level collisions with other articles already queued for this site.
+  const selectedDayKey = useMemo(
+    () => civilKey(selected.year, selected.month, selected.day),
+    [selected],
+  )
+
+  const collisions = useMemo(
+    () => findCollisions(articles, excludeArticleId ?? null, selectedDayKey),
+    [articles, excludeArticleId, selectedDayKey],
+  )
+
+  // Deferred slot: once the user clicks Save on a colliding day, the slot
+  // sits here until Replace or Post 2 answers the collision modal.
+  const [pendingCollision, setPendingCollision] = useState<
+    { iso: string; tzId: string; day: string } | null
+  >(null)
+  const [cascading, setCascading] = useState(false)
+
+  function handleSaveClick() {
+    if (collisions.length > 0) {
+      setPendingCollision({ iso: resultIso, tzId, day: selectedDayKey })
+      return
+    }
+    onSave(resultIso, tzId)
+  }
+
+  async function cascadeAndSave() {
+    if (!pendingCollision) return
+    setCascading(true)
+    try {
+      const moves = computeInsertCascade(
+        articles,
+        excludeArticleId ?? null,
+        pendingCollision.day,
+      )
+
+      // Reverse-chronological order: the tail article moves first, so the
+      // cascade never briefly parks two articles on the same slot mid-flight.
+      const failures: { title: string; error: string }[] = []
+      for (const move of moves) {
+        try {
+          const res = await fetch(`/api/articles/${move.article.id}/schedule`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scheduled_at: move.newIso }),
+          })
+          const data = await res.json().catch(() => ({}))
+          if (!res.ok) throw new Error(data?.error || 'Move failed')
+          if (data?.wpWarning) failures.push({ title: move.article.title, error: data.wpWarning })
+        } catch (err) {
+          failures.push({
+            title: move.article.title,
+            error: err instanceof Error ? err.message : 'Move failed',
+          })
+        }
+      }
+
+      if (failures.length) {
+        toast.error(
+          `${failures.length} article${failures.length === 1 ? '' : 's'} could not be moved — the rest were bumped forward.`,
+          { duration: 8000 },
+        )
+      } else if (moves.length) {
+        toast.success(
+          `Bumped ${moves.length} article${moves.length === 1 ? '' : 's'} forward`,
+        )
+      }
+
+      // Refresh the calendar behind us so the picker's own view stays in sync.
+      reloadCalendar()
+      onCalendarChanged?.()
+
+      // Finally save the new article's slot. Kept last so the parent's
+      // onSave-closes-the-modal reflex fires after the cascade has landed.
+      onSave(pendingCollision.iso, pendingCollision.tzId)
+      setPendingCollision(null)
+    } finally {
+      setCascading(false)
+    }
+  }
+
+  function acceptDoublePost() {
+    if (!pendingCollision) return
+    onSave(pendingCollision.iso, pendingCollision.tzId)
+    setPendingCollision(null)
+  }
+
   // Wide on purpose: a day cell has to be able to hold a title, or the calendar
   // can only say that something is scheduled, not what. The clock that used to
   // sit beside it in a 15rem column is a modal of its own now, so the month has
@@ -311,11 +409,11 @@ export default function ScheduleCalendarModal({
           </button>
           <button
             type="button"
-            disabled={isPast || saving}
-            onClick={() => onSave(resultIso, tzId)}
+            disabled={isPast || saving || cascading}
+            onClick={handleSaveClick}
             className="h-9 sm:h-10 px-4 sm:px-6 rounded-xl bg-[#39ff14] text-gray-900 text-sm font-bold hover:bg-[#2ee600] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            {(saving || cascading) && <Loader2 className="w-4 h-4 animate-spin" />}
             {saveLabel}
           </button>
         </>
@@ -339,6 +437,18 @@ export default function ScheduleCalendarModal({
             setTimeTouched(true)
             setShowClock(false)
           }}
+        />
+      )}
+
+      {pendingCollision && (
+        <CollisionModal
+          incomingTitle={articleTitle}
+          collisions={collisions}
+          dayLabel={readableDay(pendingCollision.day)}
+          cascading={cascading}
+          onCancel={() => { if (!cascading) setPendingCollision(null) }}
+          onReplace={cascadeAndSave}
+          onDoublePost={acceptDoublePost}
         />
       )}
 
@@ -668,6 +778,87 @@ function ClockModal({
         >
           OK
         </button>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * The picker's decision when a day is already taken.
+ *
+ * Replace shifts the day's article — and every article after it — forward
+ * by the queue's own cadence, keeping each article's time-of-day intact.
+ * Post double leaves the queue where it is and lands the new article on
+ * the same day as the existing one.
+ */
+function CollisionModal({
+  incomingTitle,
+  collisions,
+  dayLabel,
+  cascading,
+  onCancel,
+  onReplace,
+  onDoublePost,
+}: {
+  incomingTitle: string
+  collisions: Article[]
+  dayLabel: string
+  cascading: boolean
+  onCancel: () => void
+  onReplace: () => void
+  onDoublePost: () => void
+}) {
+  const total = 1 + collisions.length
+  return (
+    <Modal open onClose={onCancel} title={`${dayLabel} is already taken`} maxWidth="max-w-md">
+      <div className="space-y-3">
+        <p className="text-sm text-gray-600 dark:text-gray-300">
+          You already have {collisions.length === 1 ? 'an article' : `${collisions.length} articles`}{' '}
+          scheduled for {dayLabel}:
+        </p>
+        <ul className="rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
+          {collisions.map((a) => (
+            <li key={a.id} className="px-3 py-2 text-sm text-gray-800 dark:text-gray-100 truncate">
+              {a.title || 'Untitled'}
+            </li>
+          ))}
+          <li className="px-3 py-2 text-sm font-medium text-brand-700 dark:text-brand-400 truncate bg-brand-50/50 dark:bg-brand-900/10">
+            + {incomingTitle || 'This article'}
+          </li>
+        </ul>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          <strong>Replace</strong> bumps every already-scheduled article forward — each one slides into
+          the next article's slot, keeping the same cadence.{' '}
+          <strong>Post {total}</strong> leaves the queue alone and publishes all {total} on {dayLabel}.
+        </p>
+        <div className="flex flex-col-reverse sm:flex-row gap-2 pt-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={cascading}
+            className="h-10 px-4 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <div className="flex-1" />
+          <button
+            type="button"
+            onClick={onDoublePost}
+            disabled={cascading}
+            className="h-10 px-4 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+          >
+            Post {total}
+          </button>
+          <button
+            type="button"
+            onClick={onReplace}
+            disabled={cascading}
+            className="h-10 px-4 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:opacity-50 inline-flex items-center gap-2"
+          >
+            {cascading && <Loader2 className="w-4 h-4 animate-spin" />}
+            Replace
+          </button>
+        </div>
       </div>
     </Modal>
   )

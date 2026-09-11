@@ -147,6 +147,98 @@ export function readableDay(key: string): string {
     .toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
+/** Whole days between two civil day keys (`toKey - fromKey`), UTC-normalised. */
+function daysBetweenKeys(fromKey: string, toKey: string): number {
+  const from = partsOfKey(fromKey)
+  const to = partsOfKey(toKey)
+  const fromUtc = Date.UTC(from.year, from.month - 1, from.day)
+  const toUtc = Date.UTC(to.year, to.month - 1, to.day)
+  return Math.round((toUtc - fromUtc) / (24 * 60 * 60 * 1000))
+}
+
+/** A day key `days` days after `key`, wrapping months and years correctly. */
+function addDaysToKey(key: string, days: number): string {
+  const p = partsOfKey(key)
+  const d = new Date(Date.UTC(p.year, p.month - 1, p.day + days))
+  return civilKey(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate())
+}
+
+/**
+ * The moves needed to "insert here and bump the rest" when a new article
+ * lands on `newSlotDay` and the queue already has articles on that day or
+ * later.
+ *
+ * Each affected article slides forward into the next article's original
+ * slot, keeping its own time-of-day intact. The tail article — the one
+ * that has no next article to inherit from — is extended by the same gap
+ * that separated it from the article before it, so a queue with an even
+ * cadence keeps that cadence after the bump.
+ *
+ * Returns the moves in reverse chronological order (tail article first),
+ * so applying them one-by-one over PATCH cannot briefly land two articles
+ * on the same slot mid-cascade.
+ */
+export function computeInsertCascade(
+  articles: Article[],
+  excludeId: string | null,
+  newSlotDay: string,
+): { article: Article; newIso: string; newDayKey: string }[] {
+  const affected = articles
+    .filter((a) => a.id !== excludeId)
+    .filter((a) => a.status !== 'published' && !!a.scheduled_at)
+    .filter((a) => {
+      const k = dayKey(a)
+      return !!k && k >= newSlotDay
+    })
+    .sort((a, b) => (a.scheduled_at || '').localeCompare(b.scheduled_at || ''))
+
+  if (!affected.length) return []
+
+  const moves: { article: Article; newIso: string; newDayKey: string }[] = []
+
+  for (let i = 0; i < affected.length; i++) {
+    const article = affected[i]
+    let targetKey: string
+
+    if (i < affected.length - 1) {
+      // Slide into the next article's day.
+      const nextKey = dayKey(affected[i + 1])
+      if (!nextKey) continue
+      targetKey = nextKey
+    } else {
+      // Tail article: extend by the previous gap so the cadence continues.
+      const currKey = dayKey(article)
+      if (!currKey) continue
+      let gapDays = 1
+      if (i > 0) {
+        const prevKey = dayKey(affected[i - 1])
+        if (prevKey) gapDays = Math.max(1, daysBetweenKeys(prevKey, currKey))
+      }
+      targetKey = addDaysToKey(currKey, gapDays)
+    }
+
+    const newIso = movedToDay(article, targetKey)
+    if (newIso) moves.push({ article, newIso, newDayKey: targetKey })
+  }
+
+  return moves.reverse()
+}
+
+/** Titles of the queued articles already on `dayKeyTarget`, excluding one. */
+export function collidingArticles(
+  articles: Article[],
+  excludeId: string | null,
+  dayKeyTarget: string,
+): Article[] {
+  return articles.filter(
+    (a) =>
+      a.id !== excludeId &&
+      a.status !== 'published' &&
+      !!a.scheduled_at &&
+      dayKey(a) === dayKeyTarget,
+  )
+}
+
 /**
  * Moving an article to another day, and holding or releasing a whole day —
  * the two things a calendar can do to a schedule rather than just show it.

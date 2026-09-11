@@ -916,6 +916,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
       currentTz={scheduledTz}
       saving={saving}
       saveLabel="Schedule"
+      excludeArticleId={boundId}
       onSave={async (iso, tzId) => {
         // Picking the time IS the commit. Parking it in local state and asking
         // for a second click on Schedule below is how an article gets closed
