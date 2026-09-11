@@ -84,6 +84,14 @@ interface Props {
    */
   defaultModel?: string
   /**
+   * Controlled model value. When provided, the parent owns the pick — used by
+   * the model-combos feature to snap all four steps at once. Absent for
+   * callers that only need the internal picker + defaultModel behaviour.
+   */
+  model?: string
+  /** Fires on every model change so the parent can persist/mirror the pick. */
+  onModelChange?: (model: string) => void
+  /**
    * The article's city — auto-fills the location filter so the featured
    * image matches wherever the article is anchored. User can still
    * override in the Filters modal; the next city change re-syncs.
@@ -126,6 +134,8 @@ export default function ImageGenerator({
   siteId,
   defaultPrompt = '',
   defaultModel,
+  model: controlledModel,
+  onModelChange,
   city,
   initialImageUrl = '',
   initialPrompt = '',
@@ -134,9 +144,16 @@ export default function ImageGenerator({
   heading = 'Featured Image',
 }: Props) {
   const [prompt, setPrompt] = useState(initialPrompt || defaultPrompt)
-  // Start empty so the first client render matches the server HTML — reading
-  // localStorage during render makes hydration fail once a model has been saved
-  const [model, setModel] = useState('')
+  // Controlled-with-fallback: when the parent supplies `model`, it drives the
+  // pick (used by the model-combos loader in ArticleForm). Otherwise the
+  // internal model state + defaultModel/localStorage seeding still runs.
+  const isControlled = controlledModel !== undefined
+  const [internalModel, setInternalModel] = useState('')
+  const model = isControlled ? controlledModel : internalModel
+  const setModel = (m: string) => {
+    if (!isControlled) setInternalModel(m)
+    onModelChange?.(m)
+  }
   const [size, setSize] = useState('1024x1024')
   const [imageUrl, setImageUrl] = useState(initialImageUrl)
   const [altText, setAltText] = useState(initialAlt)
@@ -194,20 +211,30 @@ export default function ImageGenerator({
   // Most-used wins over localStorage last-used; the localStorage read is the
   // fallback for users with no image-generation history yet. Hydration-safe:
   // localStorage is not read during render, so the first client HTML matches
-  // the server.
+  // the server. Skipped entirely in controlled mode — the parent has already
+  // set the model and running this effect would clobber a combo load.
   useEffect(() => {
+    if (isControlled) return
     if (defaultModel) {
-      setModel(defaultModel)
+      setInternalModel(defaultModel)
       setSize(getDefaultSize(defaultModel))
       return
     }
     let saved = ''
     try { saved = localStorage.getItem(LAST_IMG_MODEL_KEY) || '' } catch {}
     if (saved) {
-      setModel(saved)
+      setInternalModel(saved)
       setSize(getDefaultSize(saved))
     }
-  }, [defaultModel])
+  }, [defaultModel, isControlled])
+
+  // In controlled mode the parent can swap the model out from under us (combo
+  // load). Sync the size to the new model so its default resolution stays in
+  // step with the picker instead of holding the previous model's dimensions.
+  useEffect(() => {
+    if (!isControlled || !controlledModel) return
+    setSize(getDefaultSize(controlledModel))
+  }, [isControlled, controlledModel])
 
   // Update prompt when articleTitle changes and prompt is still default/empty
   useEffect(() => {

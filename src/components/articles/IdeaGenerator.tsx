@@ -41,6 +41,14 @@ interface Props {
    * so the picker opens on the habit rather than the last one-off.
    */
   defaultModel?: string
+  /**
+   * Controlled model value. When provided, the parent owns the pick — used by
+   * the model-combos feature to load all four steps' models at once. Absent
+   * for callers that only need the internal picker + defaultModel behaviour.
+   */
+  model?: string
+  /** Fires on every model change so the parent can persist/mirror the pick. */
+  onModelChange?: (model: string) => void
   /** True when the parent has already asked "generate for X?" this session. */
   siteConfirmed?: boolean
   /** Told when the user confirms in this generator so siblings can skip it. */
@@ -60,17 +68,26 @@ interface Props {
  */
 export default function IdeaGenerator({
   siteId, siteName, onAccept, onChangeSite, defaultModel,
+  model: controlledModel, onModelChange,
   siteConfirmed = false, onSiteConfirmed,
   city = '', cityFocus = null, onCityChange, onCityFocusChange,
 }: Props) {
-  const [model, setModel] = useState('')
+  // Controlled-with-fallback: when the parent hands a `model` prop, it owns
+  // the pick (that path is used by the model-combos loader). Otherwise the
+  // component keeps its own state, seeded from defaultModel like before.
+  const isControlled = controlledModel !== undefined
+  const [internalModel, setInternalModel] = useState('')
+  const model = isControlled ? controlledModel : internalModel
 
-  // Most-used wins over localStorage last-used. Fires once when the parent
-  // hands us the preferred model — the picker still updates freely after
-  // that, since setModel from the picker will overwrite this.
   useEffect(() => {
-    if (defaultModel) setModel(defaultModel)
-  }, [defaultModel])
+    if (isControlled) return
+    if (defaultModel) setInternalModel(defaultModel)
+  }, [defaultModel, isControlled])
+
+  function setModel(next: string) {
+    if (!isControlled) setInternalModel(next)
+    onModelChange?.(next)
+  }
   // The site is named back before anything is generated for it — see
   // ConfirmSiteModal. Only the first ask: turning down an idea and asking for
   // another is already inside a confirmed run.

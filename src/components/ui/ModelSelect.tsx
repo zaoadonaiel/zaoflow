@@ -33,7 +33,7 @@ interface Props {
   action?: React.ReactNode
 }
 
-interface PricingSnapshot {
+export interface PricingSnapshot {
   pricing: Record<string, ModelPricing>
   discontinued: Set<string>
 }
@@ -48,7 +48,7 @@ function snapshot(): PricingSnapshot {
   return { pricing: pricingCache, discontinued: discontinuedCache }
 }
 
-function loadPricing(customId?: string, force = false): Promise<PricingSnapshot> {
+export function loadPricing(customId?: string, force = false): Promise<PricingSnapshot> {
   const needsCustom = Boolean(customId) && !(customId! in pricingCache)
   const key = needsCustom ? customId! : '__catalogue__'
 

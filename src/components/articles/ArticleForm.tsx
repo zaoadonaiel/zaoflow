@@ -23,6 +23,7 @@ import { useUnsavedWarning } from '@/lib/use-unsaved-warning'
 import InstructionSets from '@/components/articles/InstructionSets'
 import SiteKnowledgeBase from '@/components/articles/SiteKnowledgeBase'
 import CostReceipt from '@/components/articles/CostReceipt'
+import ModelCombos, { type ModelCombo } from '@/components/articles/ModelCombos'
 import CityFocusInput, { type CityFocus } from '@/components/articles/CityFocusInput'
 import type { UsageRecord } from '@/lib/ai-cost'
 import type { Article, Site, ArticleInstruction } from '@/types'
@@ -116,6 +117,11 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   const [keywords, setKeywords] = useState<string[]>([])
   const [model, setModel] = useState('')
   const [seoModel, setSeoModel] = useState('')
+  // Idea and image models are picked inside their child components; lifted here
+  // so the model-combos feature can read all four current picks in one place
+  // and snap them at once when a saved combo is loaded.
+  const [ideaModel, setIdeaModel] = useState('')
+  const [imageModel, setImageModel] = useState('')
 
   // The model each picker opens on. Most-used wins — the model the user has
   // run the most times for that step — with localStorage last-used as an
@@ -142,6 +148,8 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
         setPreferredModels(m)
         if (m.article) setModel(m.article)
         if (m.seo) setSeoModel(m.seo)
+        if (m.idea) setIdeaModel(m.idea)
+        if (m.image) setImageModel(m.image)
       })
       .catch(() => {})
   }, [editId])
@@ -1201,6 +1209,8 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
             onAccept={applyIdea}
             onChangeSite={() => setShowSitePicker(true)}
             defaultModel={preferredModels.idea}
+            model={ideaModel}
+            onModelChange={setIdeaModel}
             siteConfirmed={siteConfirmedFor === siteId}
             onSiteConfirmed={() => setSiteConfirmedFor(siteId)}
             city={city}
@@ -1485,6 +1495,8 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
             initialAlt={featuredImageAlt}
             defaultPrompt={title ? `Professional blog featured image for: ${title}` : ''}
             defaultModel={preferredModels.image}
+            model={imageModel}
+            onModelChange={setImageModel}
             city={city.trim() || undefined}
             onImageGenerated={(url, prompt, altText, ids, records) => {
               setFeaturedImageUrl(url)
@@ -1534,6 +1546,24 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
           )}
 
           <CostReceipt records={receipt} />
+
+          <ModelCombos
+            currentModels={{ idea: ideaModel, article: model, seo: seoModel, image: imageModel }}
+            lastGenerationCost={
+              receipt.length
+                ? receipt.reduce((n, r) => n + (r.cost_usd ?? 0), 0)
+                : null
+            }
+            onLoad={(combo: ModelCombo) => {
+              // A loaded combo snaps all four steps at once — empty slots in
+              // the combo leave the current pick alone rather than blanking it.
+              if (combo.idea_model) setIdeaModel(combo.idea_model)
+              if (combo.article_model) setModel(combo.article_model)
+              if (combo.seo_model) setSeoModel(combo.seo_model)
+              if (combo.image_model) setImageModel(combo.image_model)
+              toast.success(`Loaded "${combo.name}"`)
+            }}
+          />
         </div>
       </div>
 
