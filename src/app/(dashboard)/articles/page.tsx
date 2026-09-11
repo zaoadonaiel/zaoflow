@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
-import { FileText, Plus, Search, Trash2, ExternalLink, Globe, Pencil, Eye } from 'lucide-react'
+import { FileText, Plus, Search, Trash2, ExternalLink, Globe, Pencil, Eye, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import Badge, { statusToBadgeVariant } from '@/components/ui/Badge'
 import type { Article, Site } from '@/types'
@@ -11,6 +11,25 @@ import toast from 'react-hot-toast'
 
 const STATUS_FILTERS = ['all', 'draft', 'scheduled', 'published', 'failed'] as const
 type StatusFilter = typeof STATUS_FILTERS[number]
+
+type SortKey = 'title' | 'site' | 'status' | 'date'
+type SortDir = 'asc' | 'desc'
+
+/**
+ * The date the list treats as an article's own — the scheduled slot when it
+ * has one, otherwise the created timestamp. Matches what the row itself
+ * shows, so sorting by Date and reading down the column agree.
+ */
+function dateForSort(a: Article): number {
+  const iso = a.status === 'scheduled' && a.scheduled_at ? a.scheduled_at : a.created_at
+  const t = new Date(iso).getTime()
+  return Number.isFinite(t) ? t : 0
+}
+
+function siteName(a: Article): string {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ((a as any).sites?.name || '').toLowerCase()
+}
 
 export default function ArticlesPage() {
   const [articles, setArticles] = useState<Article[]>([])
@@ -21,6 +40,42 @@ export default function ArticlesPage() {
   const [sites, setSites] = useState<Site[]>([])
   const [siteFilter, setSiteFilter] = useState('all')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  // Sort state — Date descending by default so the newest work is at the top.
+  const [sortKey, setSortKey] = useState<SortKey>('date')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+
+  /**
+   * Click on a column header: first click sorts by that column with a
+   * sensible default direction (title/site/status ascending, date
+   * descending — the newest is what the list is nearly always for);
+   * clicking the active column flips the direction.
+   */
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir(key === 'date' ? 'desc' : 'asc')
+    }
+  }
+
+  const sortedArticles = useMemo(() => {
+    const list = [...articles]
+    const mul = sortDir === 'asc' ? 1 : -1
+    list.sort((a, b) => {
+      switch (sortKey) {
+        case 'title':
+          return a.title.localeCompare(b.title) * mul
+        case 'site':
+          return siteName(a).localeCompare(siteName(b)) * mul
+        case 'status':
+          return a.status.localeCompare(b.status) * mul
+        case 'date':
+          return (dateForSort(a) - dateForSort(b)) * mul
+      }
+    })
+    return list
+  }, [articles, sortKey, sortDir])
 
   const fetchArticles = useCallback(async () => {
     setLoading(true)
@@ -169,10 +224,10 @@ export default function ArticlesPage() {
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
         <div className="hidden md:block px-6 py-4 border-b border-gray-100 dark:border-gray-700">
           <div className="grid grid-cols-12 gap-4 text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">
-            <div className="col-span-4">Title</div>
-            <div className="col-span-2">Site</div>
-            <div className="col-span-2">Status</div>
-            <div className="col-span-2">Date</div>
+            <SortHeader label="Title" col="title" span={4} sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+            <SortHeader label="Site" col="site" span={2} sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+            <SortHeader label="Status" col="status" span={2} sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+            <SortHeader label="Date" col="date" span={2} sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
             <div className="col-span-2"></div>
           </div>
         </div>
@@ -217,7 +272,7 @@ export default function ArticlesPage() {
           </div>
         ) : (
           <div>
-            {articles.map((article) => {
+            {sortedArticles.map((article) => {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const siteName = (article as any).sites?.name || '—'
               const dateLabel = format(
@@ -374,5 +429,42 @@ export default function ArticlesPage() {
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * One clickable column heading. Shows a subtle neutral arrow when this
+ * column is not the current sort, and a solid up/down arrow in brand
+ * purple when it is — so the sorted column stands out from the four
+ * dormant ones without shouting.
+ */
+function SortHeader({
+  label, col, span, sortKey, sortDir, onClick,
+}: {
+  label: string
+  col: SortKey
+  span: number
+  sortKey: SortKey
+  sortDir: SortDir
+  onClick: (key: SortKey) => void
+}) {
+  const active = sortKey === col
+  const Icon = active ? (sortDir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(col)}
+      aria-label={`Sort by ${label}${
+        active ? `, currently ${sortDir === 'asc' ? 'ascending' : 'descending'}` : ''
+      }`}
+      className={`col-span-${span} flex items-center gap-1.5 text-left transition-colors ${
+        active
+          ? 'text-brand-600 dark:text-brand-400'
+          : 'text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+      }`}
+    >
+      <span>{label}</span>
+      <Icon className={`w-3 h-3 ${active ? '' : 'opacity-50'}`} strokeWidth={active ? 2.5 : 2} />
+    </button>
   )
 }
