@@ -7,12 +7,15 @@ import {
   Grid3x3,
   List,
   Loader2,
+  MapPin,
   Search,
+  Sparkles,
   X,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import Header from '@/components/layout/Header'
+import ModelSelect from '@/components/ui/ModelSelect'
 import type { Site } from '@/types'
 
 interface WPPage {
@@ -28,6 +31,35 @@ type ViewMode = 'grid' | 'list'
 const LAST_SITE_KEY = 'zaoflo_city_buttons_last_site_id'
 const LAST_VIEW_KEY = 'zaoflo_city_buttons_view_mode'
 const LAST_EXCLUDED_KEY = 'zaoflo_city_buttons_excluded_words'
+const LAST_MODEL_KEY = 'zaoflo_city_buttons_last_model'
+
+// Matches the server cap in /api/city-buttons/classify. The client walks
+// the unclassified pages in slices of this size so a 700-page site shows
+// incremental progress instead of a single 60-second stall.
+const CLASSIFY_BATCH_SIZE = 50
+
+interface CountyAssignment {
+  county: string | null
+  state: string | null
+}
+
+const UNCLASSIFIED_KEY = '__unclassified__'
+const UNKNOWN_KEY = '__unknown__'
+
+/** Stable key used for grouping and dropdown values — collapses null/empty
+ *  states so "unknown" is a single bucket the user can filter to. */
+function countyKey(a: CountyAssignment | undefined): string {
+  if (!a) return UNCLASSIFIED_KEY
+  if (!a.county) return UNKNOWN_KEY
+  return `${a.county}||${a.state || ''}`
+}
+
+function countyLabel(key: string, a?: CountyAssignment): string {
+  if (key === UNCLASSIFIED_KEY) return 'Unclassified'
+  if (key === UNKNOWN_KEY) return 'Unknown / ambiguous'
+  if (!a?.county) return 'Unknown / ambiguous'
+  return a.state ? `${a.county}, ${a.state}` : a.county
+}
 
 /**
  * Strip each excluded token from a title, matching whole words case-insensitively.
@@ -71,6 +103,21 @@ export default function CityButtons() {
 
   const [copied, setCopied] = useState(false)
 
+  // Cached county assignments for the current site — keyed by wp page id.
+  // Loaded from Supabase alongside the pages fetch; mutated in-place by the
+  // classifier so progress lands live in the UI.
+  const [counties, setCounties] = useState<Map<number, CountyAssignment>>(new Map())
+  const [countiesLoading, setCountiesLoading] = useState(false)
+
+  const [organizeOpen, setOrganizeOpen] = useState(false)
+  const [model, setModel] = useState('')
+  const [classifying, setClassifying] = useState(false)
+  const [classifyDone, setClassifyDone] = useState(0)
+  const [classifyTotal, setClassifyTotal] = useState(0)
+  const [classifyError, setClassifyError] = useState<string | null>(null)
+
+  const [countyFilter, setCountyFilter] = useState<string>('')
+
   useEffect(() => {
     setSitesLoading(true)
     fetch('/api/sites')
@@ -96,7 +143,14 @@ export default function CityButtons() {
     if (savedView === 'grid' || savedView === 'list') setViewMode(savedView)
     const savedExcluded = window.localStorage.getItem(LAST_EXCLUDED_KEY)
     if (savedExcluded) setExcludedInput(savedExcluded)
+    const savedModel = window.localStorage.getItem(LAST_MODEL_KEY)
+    if (savedModel) setModel(savedModel)
   }, [])
+
+  useEffect(() => {
+    if (!model || typeof window === 'undefined') return
+    window.localStorage.setItem(LAST_MODEL_KEY, model)
+  }, [model])
 
   useEffect(() => {
     if (!siteId || typeof window === 'undefined') return
@@ -116,13 +170,21 @@ export default function CityButtons() {
   useEffect(() => {
     if (!siteId) {
       setPages([])
+      setCounties(new Map())
       return
     }
     let cancelled = false
     setLoading(true)
+    setCountiesLoading(true)
     setError(null)
     setSelectedIds([])
-    fetch(`/api/city-buttons/pages?site_id=${siteId}`)
+    setCountyFilter('')
+    setCounties(new Map())
+
+    // Kick off both fetches in parallel — county lookups are per-site and
+    // small (a few KB even for 700 pages), so waiting on the WP fetch
+    // before starting the Supabase read would just add latency.
+    const pagesFetch = fetch(`/api/city-buttons/pages?site_id=${siteId}`)
       .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         if (cancelled) return
@@ -137,17 +199,76 @@ export default function CityButtons() {
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
-    return () => { cancelled = true }
+
+    const countiesFetch = fetch(`/api/city-buttons/counties?site_id=${siteId}`)
+      .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        if (cancelled) return
+        if (!ok) return
+        const next = new Map<number, CountyAssignment>()
+        for (const row of (d.counties || []) as Array<{ wp_page_id: number; county: string | null; state: string | null }>) {
+          next.set(row.wp_page_id, { county: row.county, state: row.state })
+        }
+        setCounties(next)
+      })
+      .catch(() => {
+        // Non-fatal — the picker still works without cached counties.
+      })
+      .finally(() => {
+        if (!cancelled) setCountiesLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+      void pagesFetch
+      void countiesFetch
+    }
   }, [siteId])
 
   const filteredPages = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return pages
-    return pages.filter((p) =>
-      (p.title || '').toLowerCase().includes(q) ||
-      (p.slug || '').toLowerCase().includes(q),
-    )
-  }, [pages, query])
+    return pages.filter((p) => {
+      if (countyFilter) {
+        const key = countyKey(counties.get(p.id))
+        if (key !== countyFilter) return false
+      }
+      if (!q) return true
+      return (
+        (p.title || '').toLowerCase().includes(q) ||
+        (p.slug || '').toLowerCase().includes(q)
+      )
+    })
+  }, [pages, query, countyFilter, counties])
+
+  // Grouped counts for the filter dropdown. Sorted by size desc so the
+  // biggest bucket ("Los Angeles County, 55") floats to the top and the
+  // long tail of one-off assignments falls to the bottom, but with
+  // "Unclassified" always pinned last so it doesn't drown the useful entries.
+  const countyOptions = useMemo(() => {
+    const counts = new Map<string, { count: number; sample: CountyAssignment | undefined }>()
+    for (const p of pages) {
+      const a = counties.get(p.id)
+      const key = countyKey(a)
+      const prev = counts.get(key)
+      if (prev) prev.count += 1
+      else counts.set(key, { count: 1, sample: a })
+    }
+    return Array.from(counts.entries())
+      .map(([key, { count, sample }]) => ({ key, count, label: countyLabel(key, sample) }))
+      .sort((a, b) => {
+        if (a.key === UNCLASSIFIED_KEY) return 1
+        if (b.key === UNCLASSIFIED_KEY) return -1
+        if (a.key === UNKNOWN_KEY) return 1
+        if (b.key === UNKNOWN_KEY) return -1
+        if (b.count !== a.count) return b.count - a.count
+        return a.label.localeCompare(b.label)
+      })
+  }, [pages, counties])
+
+  const unclassifiedCount = useMemo(
+    () => pages.reduce((n, p) => (counties.has(p.id) ? n : n + 1), 0),
+    [pages, counties],
+  )
 
   const pageById = useMemo(() => {
     const m = new Map<number, WPPage>()
@@ -199,6 +320,73 @@ export default function CityButtons() {
       const next = [...prev]
       for (const p of filteredPages) {
         if (!seen.has(p.id)) {
+          next.push(p.id)
+          seen.add(p.id)
+        }
+      }
+      return next
+    })
+  }
+
+  /**
+   * Walk every unclassified page for the current site in batches of
+   * CLASSIFY_BATCH_SIZE, calling /api/city-buttons/classify sequentially so
+   * progress lands live and a mid-run failure can be resumed by just
+   * clicking Run again (already-classified pages are skipped).
+   */
+  async function runClassifier() {
+    if (!siteId || !model || classifying) return
+    const targets = pages.filter((p) => !counties.has(p.id))
+    if (targets.length === 0) {
+      toast.success('All pages already classified')
+      return
+    }
+
+    setClassifying(true)
+    setClassifyError(null)
+    setClassifyDone(0)
+    setClassifyTotal(targets.length)
+
+    try {
+      for (let i = 0; i < targets.length; i += CLASSIFY_BATCH_SIZE) {
+        const slice = targets.slice(i, i + CLASSIFY_BATCH_SIZE)
+        const res = await fetch('/api/city-buttons/classify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            site_id: siteId,
+            model,
+            pages: slice.map((p) => ({ id: p.id, title: p.title, slug: p.slug })),
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data?.error || `Classifier failed at batch ${Math.floor(i / CLASSIFY_BATCH_SIZE) + 1}`)
+
+        const results = (data.results || []) as Array<{ id: number; county: string | null; state: string | null }>
+        setCounties((prev) => {
+          const next = new Map(prev)
+          for (const r of results) next.set(r.id, { county: r.county, state: r.state })
+          return next
+        })
+        setClassifyDone((n) => n + slice.length)
+      }
+      toast.success(`Classified ${targets.length} page${targets.length === 1 ? '' : 's'}`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setClassifyError(msg)
+      toast.error(msg)
+    } finally {
+      setClassifying(false)
+    }
+  }
+
+  function selectAllInCountyFilter() {
+    if (!countyFilter) return
+    setSelectedIds((prev) => {
+      const seen = new Set(prev)
+      const next = [...prev]
+      for (const p of pages) {
+        if (countyKey(counties.get(p.id)) === countyFilter && !seen.has(p.id)) {
           next.push(p.id)
           seen.add(p.id)
         }
@@ -279,30 +467,124 @@ export default function CityButtons() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-              Search pages
-            </label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Title or slug…"
-                className="w-full pl-9 pr-8 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-              {query && (
-                <button
-                  type="button"
-                  aria-label="Clear search"
-                  onClick={() => setQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                Search pages
+              </label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Title or slug…"
+                  className="w-full pl-9 pr-8 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => setQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                Filter by county
+              </label>
+              <div className="flex gap-2">
+                <select
+                  value={countyFilter}
+                  onChange={(e) => setCountyFilter(e.target.value)}
+                  disabled={pages.length === 0}
+                  className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                >
+                  <option value="">
+                    {countiesLoading ? 'Loading counties…' : `All counties (${pages.length})`}
+                  </option>
+                  {countyOptions.map((opt) => (
+                    <option key={opt.key} value={opt.key}>
+                      {opt.label} ({opt.count})
+                    </option>
+                  ))}
+                </select>
+                {countyFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setCountyFilter('')}
+                    className="px-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                    title="Clear county filter"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
+            <button
+              type="button"
+              onClick={() => setOrganizeOpen((v) => !v)}
+              disabled={pages.length === 0}
+              className="inline-flex items-center gap-2 text-sm font-medium text-brand-700 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <MapPin className="w-4 h-4" />
+              {organizeOpen ? 'Hide' : 'Organize'} by county
+              {counties.size > 0 && (
+                <span className="text-[11px] font-normal text-gray-500 dark:text-gray-400">
+                  · {counties.size} of {pages.length} classified
+                </span>
+              )}
+            </button>
+
+            {organizeOpen && (
+              <div className="mt-3 space-y-3 rounded-lg border border-gray-100 dark:border-gray-700 p-3 bg-gray-50/60 dark:bg-gray-900/30">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Ask an AI to bucket each page by US county from its title. Cached per page — re-runs only touch new pages.
+                </p>
+                <ModelSelect
+                  value={model}
+                  onChange={setModel}
+                  lastModelKey={LAST_MODEL_KEY}
+                  variant="compact"
+                  action={
+                    <button
+                      type="button"
+                      onClick={runClassifier}
+                      disabled={!model || classifying || unclassifiedCount === 0}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {classifying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                      {classifying
+                        ? `Classifying… ${classifyDone}/${classifyTotal}`
+                        : unclassifiedCount === 0
+                          ? 'All classified'
+                          : `Classify ${unclassifiedCount}`}
+                    </button>
+                  }
+                />
+                {classifying && (
+                  <div className="h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                    <div
+                      className="h-full bg-brand-600 transition-all"
+                      style={{
+                        width: `${classifyTotal > 0 ? Math.round((classifyDone / classifyTotal) * 100) : 0}%`,
+                      }}
+                    />
+                  </div>
+                )}
+                {classifyError && (
+                  <p className="text-xs text-red-600 dark:text-red-400">{classifyError}</p>
+                )}
+              </div>
+            )}
           </div>
         </section>
 
@@ -328,7 +610,16 @@ export default function CityButtons() {
               )}
             </div>
             <div className="flex items-center gap-3">
-              {filteredPages.length > 0 && (
+              {countyFilter && (
+                <button
+                  type="button"
+                  onClick={selectAllInCountyFilter}
+                  className="text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline"
+                >
+                  Select all in {countyOptions.find((o) => o.key === countyFilter)?.label || 'county'}
+                </button>
+              )}
+              {!countyFilter && filteredPages.length > 0 && (
                 <button
                   type="button"
                   onClick={selectAllFiltered}
@@ -362,6 +653,7 @@ export default function CityButtons() {
             <div className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {filteredPages.map((p) => {
                 const checked = selectedIds.includes(p.id)
+                const assign = counties.get(p.id)
                 return (
                   <button
                     key={p.id}
@@ -383,11 +675,19 @@ export default function CityButtons() {
                     >
                       {checked && <Check className="w-3.5 h-3.5" />}
                     </div>
-                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100 pr-6 line-clamp-3">
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100 pr-6 line-clamp-2">
                       {p.title || p.slug}
                     </div>
-                    <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
-                      {p.slug}
+                    <div className="space-y-0.5">
+                      {assign?.county && (
+                        <div className="inline-flex items-center gap-1 text-[10px] font-medium text-brand-700 dark:text-brand-400 bg-brand-100 dark:bg-brand-900/40 px-1.5 py-0.5 rounded max-w-full">
+                          <MapPin className="w-2.5 h-2.5 shrink-0" />
+                          <span className="truncate">{countyLabel(countyKey(assign), assign)}</span>
+                        </div>
+                      )}
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                        {p.slug}
+                      </div>
                     </div>
                   </button>
                 )
@@ -397,6 +697,7 @@ export default function CityButtons() {
             <ul className="divide-y divide-gray-100 dark:divide-gray-700">
               {filteredPages.map((p) => {
                 const checked = selectedIds.includes(p.id)
+                const assign = counties.get(p.id)
                 return (
                   <li key={p.id}>
                     <label className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/40">
@@ -410,10 +711,16 @@ export default function CityButtons() {
                         <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                           {p.title || p.slug}
                         </div>
-                        <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
-                          {p.link || `/${p.slug}`}
+                        <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate flex items-center gap-2">
+                          <span className="truncate">{p.link || `/${p.slug}`}</span>
                         </div>
                       </div>
+                      {assign?.county && (
+                        <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium text-brand-700 dark:text-brand-400 bg-brand-100 dark:bg-brand-900/40 px-2 py-0.5 rounded shrink-0 max-w-[220px]">
+                          <MapPin className="w-3 h-3 shrink-0" />
+                          <span className="truncate">{countyLabel(countyKey(assign), assign)}</span>
+                        </span>
+                      )}
                       <span className="text-[11px] text-gray-400 shrink-0">#{p.id}</span>
                     </label>
                   </li>
