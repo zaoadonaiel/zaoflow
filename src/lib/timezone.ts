@@ -9,6 +9,7 @@
 export const SCHEDULE_ZONES = [
   { id: 'HST', label: 'HST', tz: 'Pacific/Honolulu' },
   { id: 'PST', label: 'PST', tz: 'America/Los_Angeles' },
+  { id: 'MT',  label: 'Mountain', tz: 'America/Denver' },
   { id: 'CT',  label: 'Central', tz: 'America/Chicago' },
   { id: 'EST', label: 'EST', tz: 'America/New_York' },
 ] as const

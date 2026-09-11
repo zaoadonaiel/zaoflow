@@ -28,6 +28,8 @@ export interface Site {
   ga4_property_id?: string
   ga4_measurement_id?: string
   gsc_site_url?: string
+  /** Default scheduling zone for this site — HST/PST/MT/CT/EST. */
+  default_tz?: string
   created_at: string
   updated_at: string
 }

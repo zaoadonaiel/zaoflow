@@ -173,11 +173,13 @@ export default function ScheduleCalendarModal({
   // Roll a fresh random morning slot for the picked day, unless the user has
   // committed a time themselves (or is editing an existing slot). Skipped when
   // today is already past the window — the modal's own past-time guard will
-  // then prompt the user to pick their own.
+  // then prompt the user to pick their own. Rolls in whichever zone the modal
+  // is currently set to, so a site pinned to HST gets a 7–11 AM HST slot
+  // rather than a slot picked in PST and then relabelled.
   useEffect(() => {
     if (currentIso || timeTouched) return
-    const pstZone = zoneById('PST')
-    const nowParts = getZonedParts(new Date(), pstZone)
+    const zone = zoneById(tzId)
+    const nowParts = getZonedParts(new Date(), zone)
     const isToday =
       selected.year === nowParts.year &&
       selected.month === nowParts.month &&
@@ -189,8 +191,7 @@ export default function ScheduleCalendarModal({
     setHour12(hour24 % 12 === 0 ? 12 : hour24 % 12)
     setMinute(min)
     setMeridiem(hour24 >= 12 ? 'PM' : 'AM')
-    setTzId('PST')
-  }, [selected, currentIso, timeTouched])
+  }, [selected, currentIso, timeTouched, tzId])
   // The same room, showing either the months or the queue as a list you drag
   // into order. Two panels rather than two modals: rearranging the queue and
   // picking a day out of it are the same decision seen from two sides.
@@ -634,14 +635,14 @@ function ClockModal({
 
       {/* The zone, under the face. It is part of the time — 9 AM is not a slot
           until it says 9 AM where. */}
-      <div className="grid grid-cols-4 gap-1.5 mt-6">
+      <div className="grid grid-cols-5 gap-1.5 mt-6">
         {SCHEDULE_ZONES.map((z) => (
           <button
             key={z.id}
             type="button"
             onClick={() => setTzId(z.id)}
             aria-pressed={tzId === z.id}
-            className={`h-10 rounded-xl text-xs font-medium border transition-colors ${
+            className={`h-10 rounded-xl text-[11px] font-medium border transition-colors px-1 ${
               tzId === z.id
                 ? 'bg-brand-600 border-brand-600 text-white'
                 : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-brand-400'

@@ -75,11 +75,18 @@ export async function PATCH(
 
   if (!site) return NextResponse.json({ error: 'Site not found' }, { status: 404 })
 
-  const allowed = ['name', 'url', 'wp_username', 'wp_app_password', 'node_api_url'] as const
+  const allowed = ['name', 'url', 'wp_username', 'wp_app_password', 'node_api_url', 'default_tz'] as const
   const updates: Record<string, unknown> = {}
   for (const key of allowed) {
     if (key in body && body[key] !== undefined) {
       updates[key] = typeof body[key] === 'string' ? body[key].trim() : body[key]
+    }
+  }
+
+  if (typeof updates.default_tz === 'string') {
+    const allowedZones = ['HST', 'PST', 'MT', 'CT', 'EST']
+    if (!allowedZones.includes(updates.default_tz as string)) {
+      return NextResponse.json({ error: 'Invalid timezone' }, { status: 400 })
     }
   }
 

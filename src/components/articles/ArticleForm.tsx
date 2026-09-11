@@ -18,7 +18,7 @@ import ImageGenerator from '@/components/articles/ImageGenerator'
 import CollabPanel from '@/components/collab/CollabPanel'
 import IdeaGenerator from '@/components/articles/IdeaGenerator'
 import ScheduleCalendarModal from '@/components/ui/ScheduleCalendarModal'
-import { formatInZone } from '@/lib/timezone'
+import { formatInZone, SCHEDULE_ZONES } from '@/lib/timezone'
 import { useUnsavedWarning } from '@/lib/use-unsaved-warning'
 import InstructionSets from '@/components/articles/InstructionSets'
 import SiteKnowledgeBase from '@/components/articles/SiteKnowledgeBase'
@@ -276,6 +276,41 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   // The site the article is being written for — its knowledge base is what the
   // AI reads before writing anything for it.
   const selectedSite = sites.find((s) => s.id === siteId) || null
+  // The site's default scheduling zone. Falls back to PST for legacy rows
+  // that never had the column set.
+  const siteDefaultTz = selectedSite?.default_tz || 'PST'
+  // Any article without a committed slot should follow the site's own zone
+  // rather than the app-wide PST default — including a draft opened for
+  // editing, so opening the scheduler on Maui Cruisers lands on HST.
+  useEffect(() => {
+    if (committedSlot) return
+    if (!selectedSite) return
+    setScheduledTz(siteDefaultTz)
+  }, [selectedSite?.id, siteDefaultTz, committedSlot])
+
+  const [savingSiteTz, setSavingSiteTz] = useState(false)
+  async function handleSiteTzChange(newTz: string) {
+    if (!selectedSite || newTz === selectedSite.default_tz) return
+    setSavingSiteTz(true)
+    try {
+      const res = await fetch(`/api/sites/${selectedSite.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ default_tz: newTz }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not save timezone')
+      setSites((prev) =>
+        prev.map((s) => (s.id === selectedSite.id ? { ...s, default_tz: newTz } : s))
+      )
+      if (!committedSlot) setScheduledTz(newTz)
+      toast.success(`Default timezone set to ${SCHEDULE_ZONES.find((z) => z.id === newTz)?.label ?? newTz}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save timezone')
+    } finally {
+      setSavingSiteTz(false)
+    }
+  }
   // Node.js sites have no WordPress-style category taxonomy, and no native
   // future-post scheduling — they only ever publish immediately.
   const isNodeSite = selectedSite?.site_type === 'nodejs'
@@ -949,6 +984,32 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
             Site: {selectedSite?.name || (sites.length === 0 ? 'None' : 'Choose')}
             <ChevronDown className="w-3 h-3 opacity-60" />
           </button>
+
+          {selectedSite && (
+            <label
+              className={`${PILL_BASE} ${PILL_PURPLE} cursor-pointer`}
+              title={`Default timezone for ${selectedSite.name} — applies to every new article until changed`}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Zone:</span>
+              <select
+                value={siteDefaultTz}
+                onChange={(e) => handleSiteTzChange(e.target.value)}
+                disabled={savingSiteTz}
+                className="bg-transparent border-0 outline-none text-xs font-medium focus:ring-0 -mx-1 pr-4 appearance-none cursor-pointer"
+                aria-label="Site default timezone"
+              >
+                {SCHEDULE_ZONES.map((z) => (
+                  <option key={z.id} value={z.id} className="text-gray-900 dark:text-white bg-white dark:bg-gray-800">
+                    {z.label}
+                  </option>
+                ))}
+              </select>
+              {savingSiteTz
+                ? <Loader2 className="w-3 h-3 animate-spin opacity-60 -ml-3" />
+                : <ChevronDown className="w-3 h-3 opacity-60 -ml-3" />}
+            </label>
+          )}
 
           {!isNodeSite && (
             <button
