@@ -71,6 +71,8 @@ export interface Article {
   featured_image_prompt?: string
   /** What WordPress publishes as the image's alt text. Migration 020. */
   featured_image_alt?: string
+  /** Long random token for the public preview link (/a/<token>). Migration 037. */
+  preview_token?: string
   created_at: string
   updated_at: string
   sites?: Site

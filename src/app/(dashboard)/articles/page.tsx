@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { FileText, Plus, Search, Trash2, ExternalLink, Globe, Pencil } from 'lucide-react'
+import { FileText, Plus, Search, Trash2, ExternalLink, Globe, Pencil, Eye } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import Badge, { statusToBadgeVariant } from '@/components/ui/Badge'
 import type { Article, Site } from '@/types'
@@ -46,6 +46,27 @@ export default function ArticlesPage() {
       .then((d) => setSites(d.sites || []))
       .catch(() => {})
   }, [])
+
+  /**
+   * Copies the article's public preview link and opens it in a new tab. The
+   * copy is best-effort: browsers without navigator.clipboard (older Safari
+   * on http) still get the tab, they just don't get the URL on the
+   * clipboard, which the toast surfaces.
+   */
+  async function copyPreviewLink(article: Article) {
+    if (!article.preview_token) {
+      toast.error('This article has no preview link yet — save it once and try again.')
+      return
+    }
+    const url = `${window.location.origin}/a/${article.preview_token}`
+    try {
+      await navigator.clipboard.writeText(url)
+      toast.success('Preview link copied')
+    } catch {
+      toast('Preview link opened — copy from the address bar', { icon: 'ℹ️' })
+    }
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
 
   async function deleteArticle(article: Article) {
     const hasWp = !!article.wp_post_id
@@ -252,6 +273,14 @@ export default function ArticlesPage() {
                         <Pencil className="w-3.5 h-3.5" />
                         Edit
                       </Link>
+                      <button
+                        onClick={() => copyPreviewLink(article)}
+                        className="inline-flex items-center gap-1.5 px-2 py-1.5 text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                        title="Copy shareable preview link"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        Preview
+                      </button>
                       {liveUrl && (
                         <a
                           href={liveUrl}
@@ -311,6 +340,13 @@ export default function ArticlesPage() {
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </Link>
+                      <button
+                        onClick={() => copyPreviewLink(article)}
+                        className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                        title="Copy shareable preview link"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
                       {liveUrl && (
                         <a
                           href={liveUrl}
