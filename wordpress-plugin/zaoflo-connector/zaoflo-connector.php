@@ -3,7 +3,7 @@
  * Plugin Name: Zaoflo Connector
  * Plugin URI: https://zaoflo.com
  * Description: Connect your WordPress site to Zaoflo — AI-powered SEO content publishing on autopilot.
- * Version: 1.1.0
+ * Version: 1.2.0
  * Author: Zaoflo
  * Author URI: https://zaoflo.com
  * License: GPL v2 or later
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'ZAOFLO_VERSION', '1.1.0' );
+define( 'ZAOFLO_VERSION', '1.2.0' );
 define( 'ZAOFLO_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZAOFLO_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'ZAOFLO_OPTION_SECRET', 'zaoflo_secret_token' );

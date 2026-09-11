@@ -39,12 +39,17 @@ const DEFAULT_BG = '#16a34a'
 const DEFAULT_COLOR = '#ffffff'
 const DEFAULT_OUTLINE = ''
 const DEFAULT_SIZE = 14
+const DEFAULT_OUTLINE_SIZE = 1
+
+const MIN_OUTLINE_SIZE = 1
+const MAX_OUTLINE_SIZE = 5
 
 interface ButtonStyle {
   bg: string
   color: string
   outline: string
   size: number
+  outlineSize: number
 }
 
 /** Accepts "#abc", "#aabbcc", or bare hex (with or without leading #). Empty
@@ -206,6 +211,7 @@ export default function CityButtons() {
   const [fontColor, setFontColor] = useState<string>(DEFAULT_COLOR)
   const [outlineColor, setOutlineColor] = useState<string>(DEFAULT_OUTLINE)
   const [fontSize, setFontSize] = useState<number>(DEFAULT_SIZE)
+  const [outlineSize, setOutlineSize] = useState<number>(DEFAULT_OUTLINE_SIZE)
 
   useEffect(() => {
     setSitesLoading(true)
@@ -244,6 +250,9 @@ export default function CityButtons() {
         if (typeof parsed.color === 'string' && isValidHex(parsed.color)) setFontColor(parsed.color)
         if (typeof parsed.outline === 'string' && isValidHex(parsed.outline)) setOutlineColor(parsed.outline)
         if (typeof parsed.size === 'number' && parsed.size > 0) setFontSize(parsed.size)
+        if (typeof parsed.outlineSize === 'number' && parsed.outlineSize >= MIN_OUTLINE_SIZE && parsed.outlineSize <= MAX_OUTLINE_SIZE) {
+          setOutlineSize(parsed.outlineSize)
+        }
       } catch {
         // Ignore malformed cache — user just gets defaults.
       }
@@ -282,9 +291,10 @@ export default function CityButtons() {
       color: fontColor,
       outline: outlineColor,
       size: fontSize,
+      outlineSize,
     }
     window.localStorage.setItem(LAST_STYLE_KEY, JSON.stringify(payload))
-  }, [bgColor, fontColor, outlineColor, fontSize])
+  }, [bgColor, fontColor, outlineColor, fontSize, outlineSize])
 
   useEffect(() => {
     if (!siteId) {
@@ -432,10 +442,13 @@ export default function CityButtons() {
     const parts = [`ids="${ids}"`, `labels="${labels}"`]
     if (bgColor) parts.push(`bg="${normalizeHex(bgColor)}"`)
     if (fontColor) parts.push(`color="${normalizeHex(fontColor)}"`)
-    if (outlineColor) parts.push(`outline="${normalizeHex(outlineColor)}"`)
+    if (outlineColor) {
+      parts.push(`outline="${normalizeHex(outlineColor)}"`)
+      parts.push(`outline_size="${outlineSize}"`)
+    }
     if (fontSize) parts.push(`size="${fontSize}"`)
     return `[zaoflow_page_buttons ${parts.join(' ')}]`
-  }, [labelRows, bgColor, fontColor, outlineColor, fontSize])
+  }, [labelRows, bgColor, fontColor, outlineColor, fontSize, outlineSize])
 
   function toggleOne(id: number) {
     setSelectedIds((prev) =>
@@ -958,6 +971,7 @@ export default function CityButtons() {
                     setFontColor(DEFAULT_COLOR)
                     setOutlineColor(DEFAULT_OUTLINE)
                     setFontSize(DEFAULT_SIZE)
+                    setOutlineSize(DEFAULT_OUTLINE_SIZE)
                   }}
                   className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                 >
@@ -986,6 +1000,28 @@ export default function CityButtons() {
                   clearable
                   hint="Leave blank for no outline."
                 />
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Outline size (px)
+                  </label>
+                  <input
+                    type="number"
+                    min={MIN_OUTLINE_SIZE}
+                    max={MAX_OUTLINE_SIZE}
+                    value={outlineSize}
+                    disabled={!outlineColor}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10)
+                      if (Number.isNaN(n)) return
+                      const clamped = Math.min(MAX_OUTLINE_SIZE, Math.max(MIN_OUTLINE_SIZE, n))
+                      setOutlineSize(clamped)
+                    }}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    {outlineColor ? `${MIN_OUTLINE_SIZE}–${MAX_OUTLINE_SIZE} px` : 'Pick an outline color first.'}
+                  </p>
+                </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                     Font size (px)
@@ -1041,7 +1077,7 @@ export default function CityButtons() {
                       style={{
                         backgroundColor: bgColor || undefined,
                         color: fontColor || undefined,
-                        border: outlineColor ? `1px solid ${outlineColor}` : undefined,
+                        border: outlineColor ? `${outlineSize}px solid ${outlineColor}` : undefined,
                         fontSize: `${fontSize}px`,
                       }}
                     >

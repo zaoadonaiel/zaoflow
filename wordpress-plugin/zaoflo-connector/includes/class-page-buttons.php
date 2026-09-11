@@ -18,12 +18,13 @@ class Zaoflo_Page_Buttons {
 
     public static function render( $atts ) {
         $atts = shortcode_atts( array(
-            'ids'     => '',
-            'labels'  => '',
-            'bg'      => '',
-            'color'   => '',
-            'outline' => '',
-            'size'    => '',
+            'ids'          => '',
+            'labels'       => '',
+            'bg'           => '',
+            'color'        => '',
+            'outline'      => '',
+            'outline_size' => '',
+            'size'         => '',
         ), $atts, 'zaoflow_page_buttons' );
 
         $ids = array_values( array_filter( array_map( 'intval', explode( ',', (string) $atts['ids'] ) ) ) );
@@ -32,15 +33,16 @@ class Zaoflo_Page_Buttons {
         }
         $labels = array_map( 'trim', explode( '|', (string) $atts['labels'] ) );
 
-        $bg      = self::normalize_hex( $atts['bg'] );
-        $color   = self::normalize_hex( $atts['color'] );
-        $outline = self::normalize_hex( $atts['outline'] );
-        $size    = self::normalize_size( $atts['size'] );
+        $bg           = self::normalize_hex( $atts['bg'] );
+        $color        = self::normalize_hex( $atts['color'] );
+        $outline      = self::normalize_hex( $atts['outline'] );
+        $outline_size = self::normalize_outline_size( $atts['outline_size'] );
+        $size         = self::normalize_size( $atts['size'] );
 
         $style_parts = array();
         if ( $bg !== '' )      { $style_parts[] = 'background-color:' . $bg; }
         if ( $color !== '' )   { $style_parts[] = 'color:' . $color; }
-        if ( $outline !== '' ) { $style_parts[] = 'border:1px solid ' . $outline; }
+        if ( $outline !== '' ) { $style_parts[] = 'border:' . $outline_size . 'px solid ' . $outline; }
         if ( $size !== '' )    { $style_parts[] = 'font-size:' . $size; }
         $style_attr = ! empty( $style_parts )
             ? ' style="' . esc_attr( implode( ';', $style_parts ) ) . '"'
@@ -79,6 +81,20 @@ class Zaoflo_Page_Buttons {
             return '';
         }
         return strtolower( $value );
+    }
+
+    /**
+     * Clamp the outline width the dashboard sends to the same 1–5 range the UI
+     * exposes. Bare integers only — a rogue value from a hand-edited shortcode
+     * silently falls back to 1px so a stray "outline_size=999" can't blow the
+     * layout out sideways.
+     */
+    private static function normalize_outline_size( $value ) {
+        $n = (int) $value;
+        if ( $n < 1 || $n > 5 ) {
+            return 1;
+        }
+        return $n;
     }
 
     private static function normalize_size( $value ) {
