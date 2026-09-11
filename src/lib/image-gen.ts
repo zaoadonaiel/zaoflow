@@ -50,6 +50,9 @@ export interface ImageResult {
   url?: string   // HTTP URL — present when OpenRouter returns a URL
   b64?: string   // raw base64 string — present when OpenRouter returns b64_json
   usage: UsageInfo
+  /** OpenRouter generation id — lets a caller fetch the actual billed cost
+   *  via /api/v1/generation when the response body did not carry it. */
+  generationId?: string
 }
 
 // The default look for every image the app generates. Kept as a single string
@@ -117,6 +120,10 @@ export async function generateImage({
       prompt: applyNaturalPhotoStyle(prompt),
       size,
       n: 1,
+      // Ask OpenRouter to echo the actual billed cost back in the usage block.
+      // Without this the library has to derive dollars from catalogue rates,
+      // which drifts from what the OpenRouter dashboard shows.
+      usage: { include: true },
       // Don't force response_format — let each model return what it natively supports
     }),
     signal: AbortSignal.timeout(90000),
@@ -154,8 +161,9 @@ export async function generateImage({
   if (!item) throw new Error('Image generation returned an empty response')
 
   const usage = readImageUsage(data, model, 1)
-  if (item.url) return { url: item.url, usage }
-  if (item.b64_json) return { b64: item.b64_json, usage }
+  const generationId = typeof data?.id === 'string' ? data.id : undefined
+  if (item.url) return { url: item.url, usage, generationId }
+  if (item.b64_json) return { b64: item.b64_json, usage, generationId }
 
   throw new Error('Unexpected image response format — no URL or base64 data found')
 }

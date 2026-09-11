@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { generateImage, getDefaultSize } from '@/lib/image-gen'
-import { recordUsage, type UsageRecord } from '@/lib/ai-cost'
+import { fetchGenerationCost, recordUsage, type UsageRecord } from '@/lib/ai-cost'
 
 export const maxDuration = 120
 
@@ -29,12 +29,22 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { url: imageSource, b64, usage } = await generateImage({
+    const { url: imageSource, b64, usage, generationId } = await generateImage({
       apiKey: settings.openrouter_api_key,
       prompt,
       model,
       size,
     })
+
+    // Prefer the cost OR itself reports over anything derived from catalogue
+    // rates — that's the number the user sees in the OpenRouter dashboard, and
+    // this is the whole reason /images used to say "not priced". The response
+    // body carries it directly when the model supports `usage: {include: true}`;
+    // otherwise fall back to the /generation endpoint keyed by response id.
+    if (usage.cost === undefined && generationId) {
+      const reported = await fetchGenerationCost(generationId, settings.openrouter_api_key)
+      if (reported !== null) usage.cost = reported
+    }
 
     // Get raw bytes — handle both a URL response and a base64 response
     let imageBytes: Buffer
@@ -77,6 +87,18 @@ export async function POST(req: NextRequest) {
       }).eq('id', articleId).eq('user_id', user.id)
     }
 
+    // Price the call first so the library row carries the same cost figure as
+    // the ai_usage receipt — one number, one source of truth, straight from
+    // OpenRouter when available.
+    const receipt: UsageRecord[] = []
+    const rec = await recordUsage({
+      supabase, userId: user.id, step: 'image',
+      usage,
+      articleId: articleId || null,
+      seoPageId: seoPageId || null,
+    })
+    if (rec) receipt.push(rec)
+
     // Recorded so the Image Library can find every generation. The file is
     // already in the bucket either way — a failed insert is worth a warning
     // in the logs but must not fail the whole request, since the caller
@@ -92,6 +114,10 @@ export async function POST(req: NextRequest) {
         url: publicUrl,
         storage_path: storagePath,
         bytes: imageBytes.length,
+        prompt_tokens: usage.promptTokens || null,
+        completion_tokens: usage.completionTokens || null,
+        total_tokens: usage.totalTokens || null,
+        cost_usd: rec?.cost_usd ?? null,
       })
       .select('id')
       .single()
@@ -99,15 +125,6 @@ export async function POST(req: NextRequest) {
     if (libError) {
       console.warn('generated_images insert failed:', libError.message)
     }
-
-    const receipt: UsageRecord[] = []
-    const rec = await recordUsage({
-      supabase, userId: user.id, step: 'image',
-      usage,
-      articleId: articleId || null,
-      seoPageId: seoPageId || null,
-    })
-    if (rec) receipt.push(rec)
 
     return NextResponse.json({
       imageUrl: publicUrl,

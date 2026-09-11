@@ -46,6 +46,9 @@ export interface UsageInfo {
   totalTokens: number
   /** How many images this call produced. Zero for text generations. */
   images?: number
+  /** Actual USD cost as reported by OpenRouter. When present it beats the
+   *  local catalogue calc — this is the number the OR dashboard shows. */
+  cost?: number
 }
 
 /** Reads the usage block off an OpenRouter response, tolerating its absence. */
@@ -59,6 +62,7 @@ export function readUsage(data: unknown, fallbackModel: string): UsageInfo {
     promptTokens: prompt,
     completionTokens: completion,
     totalTokens: u.total_tokens ?? prompt + completion,
+    cost: typeof u.cost === 'number' ? u.cost : undefined,
   }
 }
 
@@ -78,17 +82,27 @@ export function readImageUsage(data: unknown, fallbackModel: string, images: num
     completionTokens: completion,
     totalTokens: u.total_tokens ?? prompt + completion,
     images,
+    cost: typeof u.cost === 'number' ? u.cost : undefined,
   }
 }
 
 /** Sums several calls — retries and multi-step routes bill for every attempt. */
 export function sumUsage(parts: UsageInfo[], fallbackModel: string): UsageInfo {
+  // A reported cost is only meaningful once every part has one — mixing a
+  // reported dollar figure with an unknown from another call would understate
+  // the total. When any part is missing its cost, drop the aggregate cost and
+  // let costOf() fall back to the token/image math.
+  const anyMissingCost = parts.some((p) => p.cost === undefined)
+  const summedCost = anyMissingCost
+    ? undefined
+    : parts.reduce((n, p) => n + (p.cost ?? 0), 0)
   return {
     model: parts[0]?.model || fallbackModel,
     promptTokens: parts.reduce((n, p) => n + p.promptTokens, 0),
     completionTokens: parts.reduce((n, p) => n + p.completionTokens, 0),
     totalTokens: parts.reduce((n, p) => n + p.totalTokens, 0),
     images: parts.reduce((n, p) => n + (p.images ?? 0), 0),
+    cost: summedCost,
   }
 }
 
@@ -133,8 +147,15 @@ export async function fetchRates(): Promise<Record<string, Rate>> {
  * Dollars for one call, or null when it genuinely cannot be known — a model
  * absent from the catalogue, or one not priced per token at all. Null is
  * displayed as unknown rather than as free.
+ *
+ * When the caller has an authoritative cost from OpenRouter itself (either the
+ * response's `usage.cost` or a follow-up /generation lookup), it is trusted
+ * over the catalogue math: catalogue prices lag and can miss per-tier or
+ * per-resolution variance that shows up in the OR dashboard.
  */
 export function costOf(usage: UsageInfo, rates: Record<string, Rate>): number | null {
+  if (typeof usage.cost === 'number') return usage.cost
+
   const rate = rates[usage.model]
   if (!rate) return null
 
@@ -150,6 +171,34 @@ export function costOf(usage: UsageInfo, rates: Record<string, Rate>): number | 
   if (images > 0 && rate.perImage) return images * rate.perImage
 
   return null
+}
+
+/**
+ * The authoritative billed amount for one generation, straight from the same
+ * source the OpenRouter dashboard reads.
+ *
+ * Used when the image endpoint response did not echo `usage.cost` — OR records
+ * the actual dollar cost on its /generation endpoint keyed by the response id.
+ * Best-effort: a network failure or a missing generation returns null so the
+ * caller can fall back to the local catalogue calc.
+ */
+export async function fetchGenerationCost(id: string, apiKey: string): Promise<number | null> {
+  try {
+    const res = await fetch(`https://openrouter.ai/api/v1/generation?id=${encodeURIComponent(id)}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    const d = (json?.data || {}) as Record<string, unknown>
+    // OpenRouter names the field `total_cost` on this endpoint; `cost` shows up
+    // on some legacy responses, so both are checked before giving up.
+    const raw = (typeof d.total_cost === 'number' ? d.total_cost : undefined)
+      ?? (typeof d.cost === 'number' ? d.cost : undefined)
+    return typeof raw === 'number' ? raw : null
+  } catch {
+    return null
+  }
 }
 
 export interface UsageRecord {
