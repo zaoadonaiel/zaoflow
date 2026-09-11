@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Sparkles, Save, Send, Calendar, Loader2, Globe, Search, FolderOpen,
@@ -848,6 +848,20 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
     .split(/\s+/)
     .filter(Boolean).length
 
+  // What the collapsed editor shows — the first two sentences of the body as
+  // plain text. Enough to confirm the article opened on-topic; skips having to
+  // scroll a scrollable pane just to peek at the intro.
+  const contentPreview = useMemo(() => {
+    if (!content) return ''
+    const text = content
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    const sentences = text.match(/[^.!?]+[.!?]+/g)
+    return (sentences ? sentences.slice(0, 2).join(' ') : text.slice(0, 240)).trim()
+  }, [content])
+
   // The three things an article needs before it is worth publishing. Shown as
   // ticks at the top of the page so "did I do the SEO?" is answered at a
   // glance instead of by scrolling down to check.
@@ -1206,6 +1220,22 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
               <Zap className="w-4 h-4 text-brand-500" />
               Generate Article
             </h3>
+            <div className="mb-3">
+              <label
+                htmlFor="article-title"
+                className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5"
+              >
+                Article Title
+              </label>
+              <input
+                id="article-title"
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Article title..."
+                className="w-full px-3 py-2 text-base font-semibold text-gray-900 dark:text-white placeholder-gray-300 dark:placeholder-gray-600 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+              />
+            </div>
             <CityFocusInput
               city={city}
               cityFocus={cityFocus}
@@ -1296,38 +1326,25 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
             />
           </div>
 
+          {/* Collapsed body reads as the first two sentences of the intro —
+              enough to check the article opened on-topic without giving the
+              editor most of the screen. Expanding swaps in the real editor. */}
           <div className="lg:col-span-2 lg:order-3">
-            <label
-              htmlFor="article-title"
-              className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5"
-            >
-              Article Title
-            </label>
-            <input
-              id="article-title"
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Article title..."
-              className="w-full px-4 py-3 text-lg font-semibold text-gray-900 dark:text-white placeholder-gray-300 dark:placeholder-gray-600 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-            />
-          </div>
-
-          {/* Collapsed, the body is a fixed pane that scrolls on its own, so
-              the SEO fields below stay one flick away instead of a whole
-              article away. It stays editable either way — clamping the height
-              rather than hiding the overflow keeps the caret visible. */}
-          <div className="lg:col-span-2 lg:order-4">
-            <ArticleEditor
-              value={content}
-              onChange={setContent}
-              placeholder="Start writing, or click Generate with AI above..."
-              bodyHeightClass={
-                contentExpanded || !contentWords
-                  ? 'min-h-[400px]'
-                  : 'h-[340px] overflow-y-auto'
-              }
-            />
+            {contentWords > 0 && !contentExpanded ? (
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                  {contentPreview}
+                  {contentPreview && <span className="text-gray-400"> …</span>}
+                </p>
+              </div>
+            ) : (
+              <ArticleEditor
+                value={content}
+                onChange={setContent}
+                placeholder="Start writing, or click Generate with AI above..."
+                bodyHeightClass="min-h-[400px]"
+              />
+            )}
 
             {contentWords > 0 && (
               <button
