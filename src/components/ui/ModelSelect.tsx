@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Star, ChevronDown, ExternalLink, Pencil, X } from 'lucide-react'
+import { Star, ChevronDown, ExternalLink, Pencil, X, RefreshCw } from 'lucide-react'
 import { AVAILABLE_MODELS } from '@/lib/openrouter'
 import Modal from '@/components/ui/Modal'
 
@@ -33,30 +33,57 @@ interface Props {
   action?: React.ReactNode
 }
 
+interface PricingSnapshot {
+  pricing: Record<string, ModelPricing>
+  discontinued: Set<string>
+}
+
 // Shared across instances so the pickers on a page make one request between
 // them, and reopening is instant.
 let pricingCache: Record<string, ModelPricing> = {}
-const inFlight = new Map<string, Promise<Record<string, ModelPricing>>>()
+let discontinuedCache: Set<string> = new Set()
+const inFlight = new Map<string, Promise<PricingSnapshot>>()
 
-function loadPricing(customId?: string): Promise<Record<string, ModelPricing>> {
+function snapshot(): PricingSnapshot {
+  return { pricing: pricingCache, discontinued: discontinuedCache }
+}
+
+function loadPricing(customId?: string, force = false): Promise<PricingSnapshot> {
   const needsCustom = Boolean(customId) && !(customId! in pricingCache)
   const key = needsCustom ? customId! : '__catalogue__'
 
-  if (!needsCustom && Object.keys(pricingCache).length > 0) {
-    return Promise.resolve(pricingCache)
+  if (force) {
+    // Wipe the cache so a stale empty response cannot mask a refresh.
+    pricingCache = {}
+    discontinuedCache = new Set()
+    inFlight.delete(key)
+  }
+
+  if (!force && !needsCustom && Object.keys(pricingCache).length > 0) {
+    return Promise.resolve(snapshot())
   }
 
   const existing = inFlight.get(key)
   if (existing) return existing
 
-  const qs = needsCustom ? `?ids=${encodeURIComponent(customId!)}` : ''
+  const params = new URLSearchParams()
+  if (needsCustom) params.set('ids', customId!)
+  if (force) params.set('nocache', '1')
+  const qs = params.toString() ? `?${params.toString()}` : ''
+
   const request = fetch(`/api/models${qs}`)
     .then((r) => r.json())
     .then((d) => {
       pricingCache = { ...pricingCache, ...(d.pricing || {}) }
-      return pricingCache
+      // Only trust the discontinued list from a catalogue-wide fetch. A
+      // custom-id lookup only asks about one id, so its `discontinued` set
+      // shouldn't wipe what we know about the full catalogue.
+      if (!needsCustom && Array.isArray(d.discontinued)) {
+        discontinuedCache = new Set(d.discontinued)
+      }
+      return snapshot()
     })
-    .catch(() => pricingCache)
+    .catch(() => snapshot())
     .finally(() => {
       inFlight.delete(key)
     })
@@ -84,7 +111,9 @@ export default function ModelSelect({
   const [hidden, setHidden] = useState<string[]>([])
   const [customHistory, setCustomHistory] = useState<TextModel[]>([])
   const [pricing, setPricing] = useState<Record<string, ModelPricing>>({})
+  const [discontinued, setDiscontinued] = useState<Set<string>>(new Set())
   const [pricingLoading, setPricingLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [customDraft, setCustomDraft] = useState('')
 
   const known = AVAILABLE_MODELS.find((m) => m.id === value)
@@ -119,15 +148,30 @@ export default function ModelSelect({
   useEffect(() => {
     let active = true
     const isCustom = Boolean(value) && !AVAILABLE_MODELS.some((m) => m.id === value)
-    loadPricing(isCustom ? value : undefined).then((p) => {
+    loadPricing(isCustom ? value : undefined).then(({ pricing: p, discontinued: d }) => {
       if (!active) return
       setPricing({ ...p })
+      setDiscontinued(new Set(d))
       setPricingLoading(false)
     })
     return () => {
       active = false
     }
   }, [value])
+
+  async function refreshPricing() {
+    if (refreshing) return
+    setRefreshing(true)
+    setPricingLoading(true)
+    try {
+      const { pricing: p, discontinued: d } = await loadPricing(undefined, true)
+      setPricing({ ...p })
+      setDiscontinued(new Set(d))
+    } finally {
+      setPricingLoading(false)
+      setRefreshing(false)
+    }
+  }
 
   // Seed the modal's custom field with the current custom model
   useEffect(() => {
@@ -208,6 +252,7 @@ export default function ModelSelect({
           model={m}
           price={pricing[m.id]}
           priceLoading={pricingLoading}
+          discontinued={discontinued.has(m.id)}
           selected={value === m.id}
           isFav={favorites.includes(m.id)}
           onSelect={() => selectModel(m.id)}
@@ -274,10 +319,23 @@ export default function ModelSelect({
         maxWidth="max-w-2xl"
       >
         <div className="space-y-5">
-          <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1">
-            Prices are per million tokens, live from OpenRouter. Input is what you send
-            (title, keywords, instructions); output is the generated article.
-          </p>
+          <div className="flex items-start gap-2 -mt-1">
+            <p className="text-xs text-gray-500 dark:text-gray-400 flex-1">
+              Prices are per million tokens, live from OpenRouter. Input is what you send
+              (title, keywords, instructions); output is the generated article.
+            </p>
+            <button
+              type="button"
+              onClick={refreshPricing}
+              disabled={refreshing}
+              aria-label="Refresh prices"
+              title="Refresh prices from OpenRouter"
+              className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-400 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{refreshing ? 'Refreshing…' : 'Refresh'}</span>
+            </button>
+          </div>
 
           {favoriteModels.length > 0 && (
             <div className="space-y-2">
@@ -358,6 +416,7 @@ function ModelCard({
   model,
   price,
   priceLoading,
+  discontinued,
   isFav,
   selected,
   onSelect,
@@ -367,6 +426,7 @@ function ModelCard({
   model: { id: string; name: string; badge: string }
   price?: ModelPricing
   priceLoading: boolean
+  discontinued: boolean
   isFav: boolean
   selected: boolean
   onSelect: () => void
@@ -380,8 +440,13 @@ function ModelCard({
       <button
         type="button"
         onClick={onSelect}
+        disabled={discontinued}
+        aria-disabled={discontinued}
+        title={discontinued ? `${model.name} is no longer available on OpenRouter` : undefined}
         className={`w-full text-left rounded-xl border p-3 transition-colors ${
-          selected
+          discontinued
+            ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 opacity-60 cursor-not-allowed'
+            : selected
             ? 'border-brand-400 dark:border-brand-700 bg-brand-50 dark:bg-brand-900/20'
             : 'border-gray-200 dark:border-gray-700 hover:border-brand-300 dark:hover:border-brand-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'
         }`}
@@ -389,14 +454,20 @@ function ModelCard({
         <div className="flex items-start gap-2 pr-14">
           <span
             className={`text-sm font-medium truncate ${
-              selected
+              discontinued
+                ? 'text-gray-400 dark:text-gray-500 line-through'
+                : selected
                 ? 'text-brand-700 dark:text-brand-400'
                 : 'text-gray-900 dark:text-gray-100'
             }`}
           >
             {model.name}
           </span>
-          {model.badge && (
+          {discontinued ? (
+            <span className="shrink-0 text-[10px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 px-1.5 py-0.5 rounded font-medium uppercase tracking-wide">
+              Discontinued
+            </span>
+          ) : model.badge && (
             <span className="shrink-0 text-[10px] text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded font-medium">
               {model.badge}
             </span>
@@ -404,8 +475,8 @@ function ModelCard({
         </div>
 
         <div className="grid grid-cols-2 gap-2 mt-2.5">
-          <PriceCell label="Input" value={price?.inputPerM} loading={priceLoading} />
-          <PriceCell label="Output" value={price?.outputPerM} loading={priceLoading} />
+          <PriceCell label="Input" value={price?.inputPerM} loading={priceLoading} discontinued={discontinued} />
+          <PriceCell label="Output" value={price?.outputPerM} loading={priceLoading} discontinued={discontinued} />
         </div>
       </button>
 
@@ -439,18 +510,22 @@ function PriceCell({
   label,
   value,
   loading,
+  discontinued = false,
 }: {
   label: string
   value?: number
   loading: boolean
+  discontinued?: boolean
 }) {
   return (
     <div className="rounded-lg bg-white dark:bg-gray-900/40 border border-gray-100 dark:border-transparent px-2 py-1.5">
       <div className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">
         {label}
       </div>
-      <div className="text-xs font-semibold text-gray-700 dark:text-gray-200 font-mono">
-        {value === undefined ? (
+      <div className={`text-xs font-semibold font-mono ${discontinued ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-200'}`}>
+        {discontinued ? (
+          <span className="text-gray-300 dark:text-gray-600">—</span>
+        ) : value === undefined ? (
           <span className="text-gray-300 dark:text-gray-600">{loading ? '···' : '—'}</span>
         ) : (
           <>

@@ -34,20 +34,28 @@ export async function GET(req: NextRequest) {
     .map((s) => s.trim())
     .filter(Boolean)
     .slice(0, MAX_EXTRA_IDS)
+  // `nocache=1` skips the hourly revalidate window — used by the picker's
+  // manual refresh button so the user can force a fresh read of OpenRouter's
+  // catalogue when a price looks stale or a model has been retired upstream.
+  const nocache = req.nextUrl.searchParams.get('nocache') === '1'
 
   try {
     const res = await fetch(OPENROUTER_MODELS_URL, {
-      next: { revalidate: CATALOGUE_TTL },
+      ...(nocache
+        ? { cache: 'no-store' as const }
+        : { next: { revalidate: CATALOGUE_TTL } }),
       signal: AbortSignal.timeout(10000),
     })
-    if (!res.ok) return NextResponse.json({ pricing: {} })
+    if (!res.ok) return NextResponse.json({ pricing: {}, discontinued: [], ok: false })
 
     const json = await res.json()
     const wanted = new Set([...AVAILABLE_MODELS.map((m) => m.id), ...extraIds])
     const pricing: Record<string, ModelPricing> = {}
+    const seen = new Set<string>()
 
     for (const model of (json.data || []) as OpenRouterModel[]) {
       if (!wanted.has(model.id)) continue
+      seen.add(model.id)
 
       const prompt = Number(model.pricing?.prompt)
       const completion = Number(model.pricing?.completion)
@@ -67,9 +75,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ pricing })
+    // A model we asked about but OpenRouter didn't list is one they've
+    // retired — the picker greys these out so the user cannot pick a model
+    // that would 404 the moment they try to generate with it.
+    const discontinued = [...wanted].filter((id) => !seen.has(id))
+
+    return NextResponse.json({ pricing, discontinued, ok: true })
   } catch {
     // Pricing is decoration — never let it break the picker
-    return NextResponse.json({ pricing: {} })
+    return NextResponse.json({ pricing: {}, discontinued: [], ok: false })
   }
 }
