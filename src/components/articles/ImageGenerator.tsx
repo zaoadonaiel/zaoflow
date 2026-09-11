@@ -247,7 +247,6 @@ export default function ImageGenerator({
     if (filters.setting) parts.push(filters.setting === 'Indoor' ? 'Indoor scene' : 'Outdoor scene')
 
     if (!allowPeople) parts.push('No people, no human figures, no faces')
-    if (!allowWords) parts.push('No text, no letters, no words, no writing')
     // Style toggles: only add a constraint when exactly one is off. Both off
     // is contradictory in principle and gets treated the same as both on.
     if (allowRealistic && !allowIllustration) {
@@ -255,6 +254,34 @@ export default function ImageGenerator({
     } else if (!allowRealistic && allowIllustration) {
       parts.push('Digital illustration or drawing, 100% illustrated. No photograph, no photorealistic imagery')
     }
+
+    // No-words enforcement, front- AND back-loaded.
+    //
+    // A single trailing "no text" phrase reads as decoration to most image
+    // models — the earlier subject wording ("a car rental storefront") wins
+    // and the sign in the scene still comes back with lettering on it. The
+    // fix is to make the rule impossible to miss: hoisted to the front so
+    // it weighs on the token budget the way the subject does, spelled out
+    // for every surface that could carry lettering, and echoed at the end
+    // so it survives whatever styling comes in between.
+    if (!allowWords) {
+      parts.unshift(
+        'STRICT RULE (top priority, overrides everything else): the image ' +
+        'must contain absolutely no text, no letters, no words, no numbers, ' +
+        'no writing, no captions, no watermarks, no logos, no brand marks, ' +
+        'no signage, no signs, no billboards, no posters, no menus, no ' +
+        'shop names, no license plates, no book covers, no screen text, ' +
+        'no subtitles, no readable typography of any kind anywhere. Any ' +
+        'sign, poster, billboard, screen, book, storefront or vehicle in ' +
+        'the scene must be completely blank. Do not render written ' +
+        'characters in any language or script',
+      )
+      parts.push(
+        'Reminder — absolutely no text, letters, words, numbers, signs, ' +
+        'logos or writing anywhere in the final image. All surfaces blank',
+      )
+    }
+
     return parts.join('. ')
   }
 
