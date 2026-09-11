@@ -1195,8 +1195,12 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
             onCityFocusChange={setCityFocus}
           />
 
-          {/* Matching the SEO / Yoast card treatment so this reads as the
-              distinct "write the article" step rather than a lone tile. */}
+          {/* Generate Article + SEO / Yoast share the top row on desktop
+              (50/50) so the writer sets both up before scrolling. Mobile keeps
+              the original stack — Generate, Title, Editor, Yoast — via `order`
+              classes rather than reordering the JSX, so tab order still flows
+              from Generate directly into the Yoast fields beside it. */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:items-start">
           <div>
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-2">
               <Zap className="w-4 h-4 text-brand-500" />
@@ -1292,7 +1296,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
             />
           </div>
 
-          <div>
+          <div className="lg:col-span-2 lg:order-3">
             <label
               htmlFor="article-title"
               className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5"
@@ -1313,7 +1317,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
               the SEO fields below stay one flick away instead of a whole
               article away. It stays editable either way — clamping the height
               rather than hiding the overflow keeps the caret visible. */}
-          <div>
+          <div className="lg:col-span-2 lg:order-4">
             <ArticleEditor
               value={content}
               onChange={setContent}
@@ -1347,7 +1351,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
           </div>
 
           {/* SEO Fields — shown after generation or always editable */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 space-y-3">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 space-y-3 lg:col-span-1 lg:order-2">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
               <Search className="w-4 h-4 text-gray-400" />
               SEO / Yoast Fields
@@ -1444,6 +1448,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
                 className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-mono text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
+          </div>
           </div>
         </div>
 
