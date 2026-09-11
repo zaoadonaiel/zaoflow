@@ -32,6 +32,32 @@ const LAST_SITE_KEY = 'zaoflo_city_buttons_last_site_id'
 const LAST_VIEW_KEY = 'zaoflo_city_buttons_view_mode'
 const LAST_EXCLUDED_KEY = 'zaoflo_city_buttons_excluded_words'
 const LAST_MODEL_KEY = 'zaoflo_city_buttons_last_model'
+const LAST_STYLE_KEY = 'zaoflo_city_buttons_style'
+
+const DEFAULT_BG = '#16a34a'
+const DEFAULT_COLOR = '#ffffff'
+const DEFAULT_OUTLINE = ''
+const DEFAULT_SIZE = 14
+
+interface ButtonStyle {
+  bg: string
+  color: string
+  outline: string
+  size: number
+}
+
+/** Accepts "#abc", "#aabbcc", or bare hex (with or without leading #). Empty
+ *  string is a valid value for `outline` — it means "no outline". */
+function isValidHex(value: string): boolean {
+  if (value === '') return true
+  return /^#?([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value)
+}
+
+function normalizeHex(value: string): string {
+  const v = value.trim()
+  if (v === '') return ''
+  return v.startsWith('#') ? v.toLowerCase() : `#${v.toLowerCase()}`
+}
 
 // Matches the server cap in /api/city-buttons/classify. The client walks
 // the unclassified pages in slices of this size so a 700-page site shows
@@ -85,6 +111,62 @@ function splitExcluded(input: string): string[] {
     .filter(Boolean)
 }
 
+/**
+ * Native color wheel paired with a hex text input. The wheel always holds a
+ * concrete color even when `value` is empty (outline defaults to black in that
+ * case) so the picker stays usable — the text input is the source of truth for
+ * whether the caller sees a value at all.
+ */
+function ColorField({
+  label,
+  value,
+  onChange,
+  clearable = false,
+  hint,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  clearable?: boolean
+  hint?: string
+}) {
+  const wheelValue = value && isValidHex(value) ? normalizeHex(value) : '#000000'
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+        {label}
+      </label>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={wheelValue}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-9 w-11 rounded border border-gray-200 dark:border-gray-600 bg-transparent cursor-pointer"
+          aria-label={`${label} picker`}
+        />
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={clearable ? '(none)' : '#RRGGBB'}
+          className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-mono text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+        />
+        {clearable && value && (
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-1"
+            title="Clear"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+      {hint && <p className="text-[11px] text-gray-400 mt-1">{hint}</p>}
+    </div>
+  )
+}
+
 export default function CityButtons() {
   const [sites, setSites] = useState<Site[]>([])
   const [sitesLoading, setSitesLoading] = useState(true)
@@ -118,6 +200,11 @@ export default function CityButtons() {
 
   const [countyFilter, setCountyFilter] = useState<string>('')
 
+  const [bgColor, setBgColor] = useState<string>(DEFAULT_BG)
+  const [fontColor, setFontColor] = useState<string>(DEFAULT_COLOR)
+  const [outlineColor, setOutlineColor] = useState<string>(DEFAULT_OUTLINE)
+  const [fontSize, setFontSize] = useState<number>(DEFAULT_SIZE)
+
   useEffect(() => {
     setSitesLoading(true)
     fetch('/api/sites')
@@ -145,6 +232,18 @@ export default function CityButtons() {
     if (savedExcluded) setExcludedInput(savedExcluded)
     const savedModel = window.localStorage.getItem(LAST_MODEL_KEY)
     if (savedModel) setModel(savedModel)
+    const savedStyle = window.localStorage.getItem(LAST_STYLE_KEY)
+    if (savedStyle) {
+      try {
+        const parsed = JSON.parse(savedStyle) as Partial<ButtonStyle>
+        if (typeof parsed.bg === 'string' && isValidHex(parsed.bg)) setBgColor(parsed.bg)
+        if (typeof parsed.color === 'string' && isValidHex(parsed.color)) setFontColor(parsed.color)
+        if (typeof parsed.outline === 'string' && isValidHex(parsed.outline)) setOutlineColor(parsed.outline)
+        if (typeof parsed.size === 'number' && parsed.size > 0) setFontSize(parsed.size)
+      } catch {
+        // Ignore malformed cache — user just gets defaults.
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -166,6 +265,17 @@ export default function CityButtons() {
     if (typeof window === 'undefined') return
     window.localStorage.setItem(LAST_EXCLUDED_KEY, excludedInput)
   }, [excludedInput])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const payload: ButtonStyle = {
+      bg: bgColor,
+      color: fontColor,
+      outline: outlineColor,
+      size: fontSize,
+    }
+    window.localStorage.setItem(LAST_STYLE_KEY, JSON.stringify(payload))
+  }, [bgColor, fontColor, outlineColor, fontSize])
 
   useEffect(() => {
     if (!siteId) {
@@ -301,8 +411,13 @@ export default function CityButtons() {
     if (labelRows.length === 0) return ''
     const ids = labelRows.map((r) => r.id).join(',')
     const labels = labelRows.map((r) => r.cleaned || r.original).join('|')
-    return `[zao_page_buttons ids="${ids}" labels="${labels}"]`
-  }, [labelRows])
+    const parts = [`ids="${ids}"`, `labels="${labels}"`]
+    if (bgColor) parts.push(`bg="${normalizeHex(bgColor)}"`)
+    if (fontColor) parts.push(`color="${normalizeHex(fontColor)}"`)
+    if (outlineColor) parts.push(`outline="${normalizeHex(outlineColor)}"`)
+    if (fontSize) parts.push(`size="${fontSize}"`)
+    return `[zaoflow_page_buttons ${parts.join(' ')}]`
+  }, [labelRows, bgColor, fontColor, outlineColor, fontSize])
 
   function toggleOne(id: number) {
     setSelectedIds((prev) =>
@@ -776,6 +891,63 @@ export default function CityButtons() {
               )}
             </section>
 
+            <section className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-700 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-medium text-gray-900 dark:text-gray-100">Button styling</h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBgColor(DEFAULT_BG)
+                    setFontColor(DEFAULT_COLOR)
+                    setOutlineColor(DEFAULT_OUTLINE)
+                    setFontSize(DEFAULT_SIZE)
+                  }}
+                  className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                >
+                  Reset
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-400">
+                Font family always inherits the theme's paragraph text.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <ColorField
+                  label="Button color"
+                  value={bgColor}
+                  onChange={setBgColor}
+                />
+                <ColorField
+                  label="Font color"
+                  value={fontColor}
+                  onChange={setFontColor}
+                />
+                <ColorField
+                  label="Outline color"
+                  value={outlineColor}
+                  onChange={setOutlineColor}
+                  clearable
+                  hint="Leave blank for no outline."
+                />
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Font size (px)
+                  </label>
+                  <input
+                    type="number"
+                    min={8}
+                    max={64}
+                    value={fontSize}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10)
+                      if (!Number.isNaN(n)) setFontSize(n)
+                    }}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+              </div>
+            </section>
+
             <section className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-700 space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-medium text-gray-900 dark:text-gray-100">Shortcode</h2>
@@ -797,7 +969,7 @@ export default function CityButtons() {
             <section className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-700 space-y-3">
               <h2 className="text-sm font-medium text-gray-900 dark:text-gray-100">Preview</h2>
               <p className="text-[11px] text-gray-400">
-                Approximate rendering — actual styling depends on the theme's <code className="text-[11px]">zao_page_buttons</code> shortcode.
+                On the live site, buttons render via the Zaoflo Connector plugin (v1.1+) and inherit the theme's paragraph font.
               </p>
               <div className="flex flex-wrap gap-2">
                 {labelRows.map((row) => {
@@ -808,7 +980,13 @@ export default function CityButtons() {
                       href={page?.link || '#'}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center px-4 py-2 rounded-full bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors"
+                      className="inline-flex items-center px-4 py-2 rounded-full font-medium transition-opacity hover:opacity-85"
+                      style={{
+                        backgroundColor: bgColor || undefined,
+                        color: fontColor || undefined,
+                        border: outlineColor ? `1px solid ${outlineColor}` : undefined,
+                        fontSize: `${fontSize}px`,
+                      }}
                     >
                       {row.cleaned || row.original}
                     </a>

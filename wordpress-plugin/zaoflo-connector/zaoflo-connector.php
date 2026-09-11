@@ -3,7 +3,7 @@
  * Plugin Name: Zaoflo Connector
  * Plugin URI: https://zaoflo.com
  * Description: Connect your WordPress site to Zaoflo — AI-powered SEO content publishing on autopilot.
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: Zaoflo
  * Author URI: https://zaoflo.com
  * License: GPL v2 or later
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'ZAOFLO_VERSION', '1.0.0' );
+define( 'ZAOFLO_VERSION', '1.1.0' );
 define( 'ZAOFLO_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZAOFLO_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'ZAOFLO_OPTION_SECRET', 'zaoflo_secret_token' );
@@ -25,6 +25,7 @@ define( 'ZAOFLO_OPTION_DASHBOARD_URL', 'zaoflo_dashboard_url' );
 // ============================================================
 require_once ZAOFLO_PLUGIN_DIR . 'includes/class-api-handler.php';
 require_once ZAOFLO_PLUGIN_DIR . 'includes/class-scheduler.php';
+require_once ZAOFLO_PLUGIN_DIR . 'includes/class-page-buttons.php';
 require_once ZAOFLO_PLUGIN_DIR . 'admin/admin-page.php';
 
 // ============================================================
@@ -49,6 +50,9 @@ function zaoflo_init() {
 
     // Schedule events
     add_action( 'zaoflo_process_scheduled', array( 'Zaoflo_Scheduler', 'process_scheduled_posts' ) );
+
+    // Front-end shortcodes
+    Zaoflo_Page_Buttons::register();
 }
 add_action( 'plugins_loaded', 'zaoflo_init' );
 
