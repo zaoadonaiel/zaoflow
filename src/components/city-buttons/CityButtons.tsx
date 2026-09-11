@@ -33,6 +33,7 @@ const LAST_VIEW_KEY = 'zaoflo_city_buttons_view_mode'
 const LAST_EXCLUDED_KEY = 'zaoflo_city_buttons_excluded_words'
 const LAST_MODEL_KEY = 'zaoflo_city_buttons_last_model'
 const LAST_STYLE_KEY = 'zaoflo_city_buttons_style'
+const LAST_COUNTY_KEYWORDS_KEY = 'zaoflo_city_buttons_county_keywords'
 
 const DEFAULT_BG = '#16a34a'
 const DEFAULT_COLOR = '#ffffff'
@@ -199,6 +200,7 @@ export default function CityButtons() {
   const [classifyError, setClassifyError] = useState<string | null>(null)
 
   const [countyFilter, setCountyFilter] = useState<string>('')
+  const [countyKeywords, setCountyKeywords] = useState<string>('')
 
   const [bgColor, setBgColor] = useState<string>(DEFAULT_BG)
   const [fontColor, setFontColor] = useState<string>(DEFAULT_COLOR)
@@ -232,6 +234,8 @@ export default function CityButtons() {
     if (savedExcluded) setExcludedInput(savedExcluded)
     const savedModel = window.localStorage.getItem(LAST_MODEL_KEY)
     if (savedModel) setModel(savedModel)
+    const savedKw = window.localStorage.getItem(LAST_COUNTY_KEYWORDS_KEY)
+    if (savedKw) setCountyKeywords(savedKw)
     const savedStyle = window.localStorage.getItem(LAST_STYLE_KEY)
     if (savedStyle) {
       try {
@@ -265,6 +269,11 @@ export default function CityButtons() {
     if (typeof window === 'undefined') return
     window.localStorage.setItem(LAST_EXCLUDED_KEY, excludedInput)
   }, [excludedInput])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(LAST_COUNTY_KEYWORDS_KEY, countyKeywords)
+  }, [countyKeywords])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -337,10 +346,19 @@ export default function CityButtons() {
 
   const filteredPages = useMemo(() => {
     const q = query.trim().toLowerCase()
+    // Keyword filter only kicks in when a county is picked — it's designed as a
+    // narrower-within-scope tool, not a global search (the top box already fills
+    // that role).
+    const kw = countyFilter ? countyKeywords.trim().toLowerCase() : ''
     return pages.filter((p) => {
       if (countyFilter) {
         const key = countyKey(counties.get(p.id))
         if (key !== countyFilter) return false
+      }
+      if (kw) {
+        const t = (p.title || '').toLowerCase()
+        const s = (p.slug || '').toLowerCase()
+        if (!t.includes(kw) && !s.includes(kw)) return false
       }
       if (!q) return true
       return (
@@ -348,7 +366,7 @@ export default function CityButtons() {
         (p.slug || '').toLowerCase().includes(q)
       )
     })
-  }, [pages, query, countyFilter, counties])
+  }, [pages, query, countyFilter, countyKeywords, counties])
 
   // Grouped counts for the filter dropdown. Sorted by size desc so the
   // biggest bucket ("Los Angeles County, 55") floats to the top and the
@@ -497,11 +515,18 @@ export default function CityButtons() {
 
   function selectAllInCountyFilter() {
     if (!countyFilter) return
+    const kw = countyKeywords.trim().toLowerCase()
     setSelectedIds((prev) => {
       const seen = new Set(prev)
       const next = [...prev]
       for (const p of pages) {
-        if (countyKey(counties.get(p.id)) === countyFilter && !seen.has(p.id)) {
+        if (countyKey(counties.get(p.id)) !== countyFilter) continue
+        if (kw) {
+          const t = (p.title || '').toLowerCase()
+          const s = (p.slug || '').toLowerCase()
+          if (!t.includes(kw) && !s.includes(kw)) continue
+        }
+        if (!seen.has(p.id)) {
           next.push(p.id)
           seen.add(p.id)
         }
@@ -643,6 +668,37 @@ export default function CityButtons() {
             </div>
           </div>
 
+          {countyFilter && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                Keywords in {countyOptions.find((o) => o.key === countyFilter)?.label || 'this county'}
+              </label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={countyKeywords}
+                  onChange={(e) => setCountyKeywords(e.target.value)}
+                  placeholder="web design"
+                  className="w-full pl-9 pr-8 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                {countyKeywords && (
+                  <button
+                    type="button"
+                    aria-label="Clear keywords"
+                    onClick={() => setCountyKeywords('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Narrow within the selected county — matches anywhere in the page title or slug.
+              </p>
+            </div>
+          )}
+
           <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
             <button
               type="button"
@@ -732,6 +788,7 @@ export default function CityButtons() {
                   className="text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline"
                 >
                   Select all in {countyOptions.find((o) => o.key === countyFilter)?.label || 'county'}
+                  {countyKeywords.trim() && ` matching "${countyKeywords.trim()}"`}
                 </button>
               )}
               {!countyFilter && filteredPages.length > 0 && (
