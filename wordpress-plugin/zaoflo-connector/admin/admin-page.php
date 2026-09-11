@@ -23,6 +23,11 @@ function zaoflo_admin_page() {
     if ( isset( $_POST['zaoflo_save'] ) && check_admin_referer( 'zaoflo_settings' ) ) {
         $dashboard_url = esc_url_raw( sanitize_text_field( $_POST['zaoflo_dashboard_url'] ?? '' ) );
         update_option( ZAOFLO_OPTION_DASHBOARD_URL, $dashboard_url );
+
+        $align_raw = sanitize_key( $_POST['zaoflo_buttons_align'] ?? 'left' );
+        $align     = in_array( $align_raw, array( 'left', 'center', 'right' ), true ) ? $align_raw : 'left';
+        update_option( ZAOFLO_OPTION_BUTTONS_ALIGN, $align );
+
         echo '<div class="notice notice-success"><p>' . esc_html__( 'Settings saved.', 'zaoflo-connector' ) . '</p></div>';
     }
 
@@ -32,9 +37,10 @@ function zaoflo_admin_page() {
         echo '<div class="notice notice-warning"><p>' . esc_html__( 'Token regenerated. Update it in your Zaoflo dashboard.', 'zaoflo-connector' ) . '</p></div>';
     }
 
-    $secret_token  = get_option( ZAOFLO_OPTION_SECRET, '' );
-    $dashboard_url = get_option( ZAOFLO_OPTION_DASHBOARD_URL, '' );
-    $api_base      = rest_url( 'zaoflo/v1' );
+    $secret_token   = get_option( ZAOFLO_OPTION_SECRET, '' );
+    $dashboard_url  = get_option( ZAOFLO_OPTION_DASHBOARD_URL, '' );
+    $buttons_align  = get_option( ZAOFLO_OPTION_BUTTONS_ALIGN, 'left' );
+    $api_base       = rest_url( 'zaoflo/v1' );
     ?>
     <div class="wrap zaoflo-admin">
         <div class="zaoflo-header">
@@ -86,6 +92,17 @@ function zaoflo_admin_page() {
                                 placeholder="https://app.zaoflo.com"
                                 class="regular-text" />
                             <p class="description">Used to send publish status callbacks back to your dashboard.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="zaoflo_buttons_align">City Buttons alignment</label></th>
+                        <td>
+                            <select id="zaoflo_buttons_align" name="zaoflo_buttons_align">
+                                <option value="left"   <?php selected( $buttons_align, 'left' ); ?>>Left</option>
+                                <option value="center" <?php selected( $buttons_align, 'center' ); ?>>Center</option>
+                                <option value="right"  <?php selected( $buttons_align, 'right' ); ?>>Right</option>
+                            </select>
+                            <p class="description">Applies to every <code>[zaoflow_page_buttons]</code> shortcode on this site.</p>
                         </td>
                     </tr>
                 </table>

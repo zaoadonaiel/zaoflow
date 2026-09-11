@@ -49,7 +49,20 @@ class Zaoflo_Page_Buttons {
             : '';
 
         $out = self::maybe_print_base_styles();
-        $out .= '<div class="zaoflow-page-buttons">';
+
+        // Container alignment is a site-wide setting (WP Admin → Zaoflo Connector),
+        // not a shortcode attribute — that way changing it once cascades to every
+        // page without touching a single [zaoflow_page_buttons] block.
+        $align_map = array(
+            'left'   => 'flex-start',
+            'center' => 'center',
+            'right'  => 'flex-end',
+        );
+        $align_pref = get_option( ZAOFLO_OPTION_BUTTONS_ALIGN, 'left' );
+        $justify    = isset( $align_map[ $align_pref ] ) ? $align_map[ $align_pref ] : 'flex-start';
+        $container_style = ' style="justify-content:' . esc_attr( $justify ) . ';"';
+
+        $out .= '<div class="zaoflow-page-buttons"' . $container_style . '>';
         foreach ( $ids as $i => $id ) {
             $permalink = get_permalink( $id );
             if ( ! $permalink ) {
