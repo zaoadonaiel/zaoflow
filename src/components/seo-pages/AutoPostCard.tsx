@@ -505,6 +505,7 @@ export default function AutoPostCard() {
                   <InstructionSets
                     selectedId={instructionId}
                     onSelect={(set: ArticleInstruction) => setInstructionId(set.id)}
+                    onDeselect={() => setInstructionId(null)}
                     autoSelectDefault
                   />
                 </>

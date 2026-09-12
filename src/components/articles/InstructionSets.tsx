@@ -13,6 +13,12 @@ interface InstructionSetsProps {
   /** fired when a card body is clicked — parent applies set.instructions */
   onSelect: (set: ArticleInstruction) => void
   /**
+   * When provided, clicking the currently-active card clears the selection
+   * instead of re-selecting it. Opt-in per callsite because the Articles page
+   * requires a set to be picked, while SEO pages allow "no instructions".
+   */
+  onDeselect?: () => void
+  /**
    * When true and nothing is selected yet, pick the first available set once
    * the list loads. Meant for the new-article page so the first save has a
    * concrete instruction set attached rather than shipping with none.
@@ -20,7 +26,7 @@ interface InstructionSetsProps {
   autoSelectDefault?: boolean
 }
 
-export default function InstructionSets({ selectedId, onSelect, autoSelectDefault = false }: InstructionSetsProps) {
+export default function InstructionSets({ selectedId, onSelect, onDeselect, autoSelectDefault = false }: InstructionSetsProps) {
   const [sets, setSets] = useState<ArticleInstruction[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -228,8 +234,11 @@ export default function InstructionSets({ selectedId, onSelect, autoSelectDefaul
               >
                 <button
                   type="button"
-                  onClick={() => onSelect(set)}
-                  title={set.instructions}
+                  onClick={() => {
+                    if (active && onDeselect) onDeselect()
+                    else onSelect(set)
+                  }}
+                  title={active && onDeselect ? 'Click to deselect — run without a saved instruction set' : set.instructions}
                   className={`pl-2.5 pr-1 py-1 rounded-l-lg text-xs font-medium transition-colors max-w-[14rem] truncate ${
                     active
                       ? 'text-brand-700 dark:text-brand-400'
@@ -280,7 +289,7 @@ export default function InstructionSets({ selectedId, onSelect, autoSelectDefaul
         onClose={() => !saving && setFormOpen(false)}
         title={editing ? 'Edit instruction set' : 'New instruction set'}
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               Name
@@ -442,10 +451,9 @@ function LengthInput({ label, value, onChange, placeholder }: {
     <label className="block">
       <span className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</span>
       <input
-        type="number"
+        type="text"
         inputMode="numeric"
-        min={1}
-        max={MAX_ARTICLE_WORDS}
+        pattern="[0-9]*"
         value={value}
         onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ''))}
         placeholder={placeholder}

@@ -1087,6 +1087,10 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
                 setInstructionSet(set)
                 setInstructionId(set.id)
               }}
+              onDeselect={() => {
+                setInstructionSet(null)
+                setInstructionId(null)
+              }}
               autoSelectDefault
             />
 
