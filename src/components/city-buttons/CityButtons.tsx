@@ -421,16 +421,27 @@ export default function CityButtons() {
     [selectedIds, pageById],
   )
 
+  // When a county filter is active, scope the label list (and by extension the
+  // shortcode and preview) to selections in that county. Otherwise a workflow
+  // like "filter County A, select all → filter County B, select all" produces
+  // one giant cross-county shortcode, which defeats the point of grouping.
+  // Selections from other counties are kept in state so clearing the filter
+  // brings them back — nothing is silently dropped.
+  const scopedSelectedPages = useMemo(() => {
+    if (!countyFilter) return selectedPages
+    return selectedPages.filter((p) => countyKey(counties.get(p.id)) === countyFilter)
+  }, [selectedPages, countyFilter, counties])
+
   // Any selection whose label collapsed to nothing after stripping would emit
   // an empty pipe segment — surface those so the user can adjust the words
   // rather than shipping a blank button.
   const labelRows = useMemo(
-    () => selectedPages.map((p) => ({
+    () => scopedSelectedPages.map((p) => ({
       id: p.id,
       original: p.title,
       cleaned: cleanLabel(p.title, excludedWords),
     })),
-    [selectedPages, excludedWords],
+    [scopedSelectedPages, excludedWords],
   )
 
   const hasEmptyLabels = labelRows.some((r) => !r.cleaned)
@@ -781,8 +792,13 @@ export default function CityButtons() {
                 </span>
               ) : selectedIds.length > 0 ? (
                 <>
-                  <strong>{selectedIds.length}</strong> selected
-                  <span className="text-gray-500 dark:text-gray-400"> of {pages.length}</span>
+                  <strong>{countyFilter ? scopedSelectedPages.length : selectedIds.length}</strong> selected
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {' '}of {countyFilter ? filteredPages.length : pages.length}
+                    {countyFilter && scopedSelectedPages.length !== selectedIds.length && (
+                      <> · {selectedIds.length - scopedSelectedPages.length} hidden in other counties</>
+                    )}
+                  </span>
                 </>
               ) : (
                 <>
@@ -915,7 +931,7 @@ export default function CityButtons() {
           )}
         </section>
 
-        {selectedIds.length > 0 && (
+        {scopedSelectedPages.length > 0 && (
           <>
             <section className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-700 space-y-4">
               <div>
