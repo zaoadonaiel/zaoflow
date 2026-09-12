@@ -7,12 +7,14 @@ import {
   MapPin,
   RotateCcw,
   Search,
+  Sparkles,
   Trash2,
   X,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import Header from '@/components/layout/Header'
+import ModelSelect from '@/components/ui/ModelSelect'
 import type { Site } from '@/types'
 
 interface WPItem {
@@ -36,6 +38,11 @@ interface CountyAssignment {
 
 const LAST_SITE_KEY = 'zaoflo_page_remover_last_site_id'
 const LAST_DATE_FIELD_KEY = 'zaoflo_page_remover_date_field'
+const LAST_MODEL_KEY = 'zaoflo_page_remover_last_model'
+
+// Matches the server cap in /api/city-buttons/classify. Batching keeps a
+// 500-page site from stalling on one 60-second AI call.
+const CLASSIFY_BATCH_SIZE = 50
 
 // Shared with City Buttons — the same `page_counties` table drives both, so
 // filtering here uses whatever the user has already classified over there
@@ -102,6 +109,17 @@ export default function PageRemover() {
   const [counties, setCounties] = useState<Map<number, CountyAssignment>>(new Map())
   const [countiesLoading, setCountiesLoading] = useState(false)
   const [countyFilter, setCountyFilter] = useState('')
+
+  // wp_page_id → target_city, sourced from `seo_pages`. A city page is one
+  // that Auto Post published, so we can classify it by its clean target
+  // city instead of the (marketing-heavy) WP title.
+  const [cityByWpId, setCityByWpId] = useState<Map<number, string>>(new Map())
+
+  const [classifyModel, setClassifyModel] = useState('')
+  const [classifying, setClassifying] = useState(false)
+  const [classifyDone, setClassifyDone] = useState(0)
+  const [classifyTotal, setClassifyTotal] = useState(0)
+  const [classifyError, setClassifyError] = useState<string | null>(null)
 
   const [busyId, setBusyId] = useState<number | null>(null)
   const [selected, setSelected] = useState<Set<number>>(new Set())
@@ -176,16 +194,32 @@ export default function PageRemover() {
     return () => { cancelled = true }
   }, [siteId, kind, view, dateFrom, dateTo, dateField])
 
-  // County lookups are per-site (not per-kind) — WP post IDs are unique
-  // across pages/posts on a given site, so we can key by id alone.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const saved = window.localStorage.getItem(LAST_MODEL_KEY)
+    if (saved) setClassifyModel(saved)
+  }, [])
+
+  useEffect(() => {
+    if (!classifyModel || typeof window === 'undefined') return
+    window.localStorage.setItem(LAST_MODEL_KEY, classifyModel)
+  }, [classifyModel])
+
+  // County + city-page lookups are per-site (not per-kind) — WP post IDs
+  // are unique across pages/posts on a given site, so we can key by id
+  // alone. seo_pages tells us which WP ids came from Auto Post and what
+  // city each was cloned for.
   useEffect(() => {
     if (!siteId) {
       setCounties(new Map())
+      setCityByWpId(new Map())
       return
     }
     let cancelled = false
     setCountiesLoading(true)
-    fetch(`/api/city-buttons/counties?site_id=${siteId}`)
+    setClassifyError(null)
+
+    const countiesFetch = fetch(`/api/city-buttons/counties?site_id=${siteId}`)
       .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         if (cancelled || !ok) return
@@ -196,12 +230,27 @@ export default function PageRemover() {
         setCounties(next)
       })
       .catch(() => {
-        // Non-fatal — the list still works without county data, the filter
-        // just shows "Unclassified" for everything.
+        // Non-fatal — the list still works without county data.
       })
-      .finally(() => {
-        if (!cancelled) setCountiesLoading(false)
+
+    const cityFetch = fetch(`/api/page-remover/city-pages?site_id=${siteId}`)
+      .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        if (cancelled || !ok) return
+        const next = new Map<number, string>()
+        for (const row of (d.cityPages || []) as Array<{ wp_page_id: number | null; target_city: string | null }>) {
+          if (row.wp_page_id && row.target_city) next.set(row.wp_page_id, row.target_city)
+        }
+        setCityByWpId(next)
       })
+      .catch(() => {
+        // Non-fatal — classifier will just fall back to WP titles.
+      })
+
+    Promise.allSettled([countiesFetch, cityFetch]).finally(() => {
+      if (!cancelled) setCountiesLoading(false)
+    })
+
     return () => { cancelled = true }
   }, [siteId])
 
@@ -251,6 +300,74 @@ export default function PageRemover() {
     if (!countyFilter) return
     if (!countyOptions.some((o) => o.key === countyFilter)) setCountyFilter('')
   }, [countyOptions, countyFilter])
+
+  // Items that still need a county lookup. We prefer city pages (they have
+  // a clean `target_city` from Auto Post) but fall back to any item with a
+  // title so the classifier isn't useless on non-city sites.
+  const unclassifiedItems = useMemo(
+    () => items.filter((p) => !counties.has(p.id)),
+    [items, counties],
+  )
+  const unclassifiedCityCount = useMemo(
+    () => unclassifiedItems.filter((p) => cityByWpId.has(p.id)).length,
+    [unclassifiedItems, cityByWpId],
+  )
+
+  /**
+   * Walk every unclassified item for the current view in batches, hitting
+   * the same OpenRouter-backed classifier City Buttons uses. City pages
+   * from Auto Post use their clean `target_city` as the classification
+   * input — everything else falls back to the WP title. Cached in
+   * page_counties so a re-run only pays for new pages.
+   */
+  async function runClassifier() {
+    if (!siteId || !classifyModel || classifying) return
+    if (unclassifiedItems.length === 0) {
+      toast.success('All items already classified')
+      return
+    }
+
+    setClassifying(true)
+    setClassifyError(null)
+    setClassifyDone(0)
+    setClassifyTotal(unclassifiedItems.length)
+
+    try {
+      for (let i = 0; i < unclassifiedItems.length; i += CLASSIFY_BATCH_SIZE) {
+        const slice = unclassifiedItems.slice(i, i + CLASSIFY_BATCH_SIZE)
+        const res = await fetch('/api/city-buttons/classify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            site_id: siteId,
+            model: classifyModel,
+            pages: slice.map((p) => ({
+              id: p.id,
+              title: cityByWpId.get(p.id) || p.title,
+              slug: p.slug,
+            })),
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data?.error || `Classifier failed at batch ${Math.floor(i / CLASSIFY_BATCH_SIZE) + 1}`)
+
+        const results = (data.results || []) as Array<{ id: number; county: string | null; state: string | null }>
+        setCounties((prev) => {
+          const next = new Map(prev)
+          for (const r of results) next.set(r.id, { county: r.county, state: r.state })
+          return next
+        })
+        setClassifyDone((n) => n + slice.length)
+      }
+      toast.success(`Classified ${unclassifiedItems.length} item${unclassifiedItems.length === 1 ? '' : 's'}`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setClassifyError(msg)
+      toast.error(msg)
+    } finally {
+      setClassifying(false)
+    }
+  }
 
   // Reset selection whenever the underlying data pool changes so a stale id
   // from a previous site/view can't linger and trigger a hidden bulk action.
@@ -557,9 +674,61 @@ export default function PageRemover() {
               )}
             </div>
             <p className="text-[11px] text-gray-400 mt-1">
-              Counties come from the City Buttons classifier. Pages you
-              haven&apos;t classified there show up as &quot;Unclassified&quot;.
+              {cityByWpId.size > 0
+                ? `${cityByWpId.size} of ${items.length} loaded item${items.length === 1 ? '' : 's'} came from Auto Post. Classify below to bucket them by county.`
+                : 'Nothing here is tagged as a city page yet — run Auto Post from SEO Pages first, or classify by title below.'}
             </p>
+          </div>
+
+          <div className="rounded-lg border border-gray-100 dark:border-gray-700 p-3 bg-gray-50/60 dark:bg-gray-900/30 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+              <MapPin className="w-4 h-4 text-brand-500" />
+              Classify by county
+              {counties.size > 0 && (
+                <span className="text-[11px] font-normal text-gray-500 dark:text-gray-400">
+                  · {counties.size} cached
+                  {unclassifiedCityCount > 0 && ` · ${unclassifiedCityCount} city page${unclassifiedCityCount === 1 ? '' : 's'} pending`}
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400">
+              Uses your OpenRouter key to bucket every item into a US county.
+              City pages use their Auto Post <code>target_city</code> as input; other items fall back to their WP title. Results are cached per site.
+            </p>
+            <ModelSelect
+              value={classifyModel}
+              onChange={setClassifyModel}
+              lastModelKey={LAST_MODEL_KEY}
+              variant="compact"
+              action={
+                <button
+                  type="button"
+                  onClick={runClassifier}
+                  disabled={!classifyModel || classifying || unclassifiedItems.length === 0 || items.length === 0}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {classifying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  {classifying
+                    ? `Classifying… ${classifyDone}/${classifyTotal}`
+                    : unclassifiedItems.length === 0
+                      ? 'All classified'
+                      : `Classify ${unclassifiedItems.length}`}
+                </button>
+              }
+            />
+            {classifying && (
+              <div className="h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                <div
+                  className="h-full bg-brand-600 transition-all"
+                  style={{
+                    width: `${classifyTotal > 0 ? Math.round((classifyDone / classifyTotal) * 100) : 0}%`,
+                  }}
+                />
+              </div>
+            )}
+            {classifyError && (
+              <p className="text-xs text-red-600 dark:text-red-400">{classifyError}</p>
+            )}
           </div>
 
           {(dateActive || searchActive || countyActive) && (
