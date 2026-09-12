@@ -11,9 +11,15 @@ export async function GET(req: NextRequest) {
   const status = searchParams.get('status')
   const siteId = searchParams.get('site_id')
 
+  // List view only needs a handful of columns. Selecting `*` pulled the full
+  // `content` (Fusion Builder shortcodes can be 100KB+ per row) for every SEO
+  // page and blew past the Postgres statement timeout once a site had a few
+  // hundred pages, silently returning an empty list to the UI.
   let query = supabase
     .from('seo_pages')
-    .select('*, sites(name, url)')
+    .select(
+      'id, title, slug, status, target_city, source_city, scheduled_at, wp_page_url, created_at, sites(name, url)'
+    )
     .eq('user_id', user.id)
 
   if (search) query = query.ilike('title', `%${search}%`)
