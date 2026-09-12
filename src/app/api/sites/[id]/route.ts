@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { testWordPressConnection, getAuthors } from '@/lib/wordpress'
 import { testNodeConnection } from '@/lib/nodejs-site'
+import { normalizeSiteUrl } from '@/lib/normalize-site-url'
+
+// See migration 039 — same code used by POST /api/sites.
+const PG_UNIQUE_VIOLATION = '23505'
 
 export async function DELETE(
   _req: NextRequest,
@@ -90,9 +94,13 @@ export async function PATCH(
     }
   }
 
-  if (typeof updates.url === 'string') updates.url = (updates.url as string).replace(/\/$/, '')
-  if (typeof updates.node_api_url === 'string') {
-    updates.node_api_url = (updates.node_api_url as string).replace(/\/$/, '')
+  try {
+    if (typeof updates.url === 'string') updates.url = normalizeSiteUrl(updates.url as string)
+    if (typeof updates.node_api_url === 'string') {
+      updates.node_api_url = normalizeSiteUrl(updates.node_api_url as string)
+    }
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Invalid URL' }, { status: 400 })
   }
 
   if (Object.keys(updates).length === 0) {
@@ -161,6 +169,14 @@ export async function PATCH(
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    if ((error as { code?: string }).code === PG_UNIQUE_VIOLATION) {
+      return NextResponse.json(
+        { error: 'A site with this URL already exists.' },
+        { status: 409 },
+      )
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
   return NextResponse.json({ site: updated })
 }

@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { testWordPressConnection, getAuthors } from '@/lib/wordpress'
 import { testNodeConnection } from '@/lib/nodejs-site'
+import { normalizeSiteUrl } from '@/lib/normalize-site-url'
+
+// Postgres error code for `UNIQUE` violation. Surfaces when the app tries to
+// insert a second site row with the same (user_id, url) — see migration 039.
+const PG_UNIQUE_VIOLATION = '23505'
 
 export async function GET() {
   const supabase = createClient()
@@ -29,16 +34,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Name and URL are required' }, { status: 400 })
     }
 
+    let normalizedUrl: string
+    try {
+      normalizedUrl = normalizeSiteUrl(url)
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : 'Invalid URL' }, { status: 400 })
+    }
+
     const { data: site, error } = await supabase.from('sites').insert({
       user_id: user.id,
       name,
-      url: url.replace(/\/$/, ''),
+      url: normalizedUrl,
       site_type: 'other',
       status: 'connected',
       plugin_installed: false,
     }).select().single()
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) {
+      if ((error as { code?: string }).code === PG_UNIQUE_VIOLATION) {
+        return NextResponse.json(
+          { error: 'A site with this URL already exists. Open it from the Sites list to edit it.' },
+          { status: 409 },
+        )
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
     return NextResponse.json({ site }, { status: 201 })
   }
@@ -50,17 +70,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Name and API URL are required' }, { status: 400 })
     }
 
+    let normalizedNodeUrl: string
+    try {
+      normalizedNodeUrl = normalizeSiteUrl(node_api_url)
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : 'Invalid URL' }, { status: 400 })
+    }
+
     const { data: site, error } = await supabase.from('sites').insert({
       user_id: user.id,
       name,
-      url: node_api_url.replace(/\/$/, ''),
+      url: normalizedNodeUrl,
       site_type: 'nodejs',
-      node_api_url: node_api_url.replace(/\/$/, ''),
+      node_api_url: normalizedNodeUrl,
       status: 'disconnected',
       plugin_installed: false,
     }).select().single()
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) {
+      if ((error as { code?: string }).code === PG_UNIQUE_VIOLATION) {
+        return NextResponse.json(
+          { error: 'A site with this URL already exists. Open it from the Sites list to edit it.' },
+          { status: 409 },
+        )
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
     const test = await testNodeConnection({ apiUrl: site.node_api_url, apiKey: site.secret_token })
 
@@ -82,12 +117,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'All fields are required' }, { status: 400 })
   }
 
-  const test = await testWordPressConnection({ siteUrl: url, username: wp_username, appPassword: wp_app_password })
+  let normalizedUrl: string
+  try {
+    normalizedUrl = normalizeSiteUrl(url)
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Invalid URL' }, { status: 400 })
+  }
+
+  const test = await testWordPressConnection({ siteUrl: normalizedUrl, username: wp_username, appPassword: wp_app_password })
 
   let authors: { id: number; name: string }[] = []
   let defaultAuthorId: number | null = null
   if (test.success) {
-    authors = await getAuthors({ siteUrl: url, username: wp_username, appPassword: wp_app_password })
+    authors = await getAuthors({ siteUrl: normalizedUrl, username: wp_username, appPassword: wp_app_password })
     const defaultAuthor = authors.find((a) => a.name.toLowerCase() === wp_username.toLowerCase())
     defaultAuthorId = defaultAuthor?.id ?? null
   }
@@ -95,7 +137,7 @@ export async function POST(req: NextRequest) {
   const { data: site, error } = await supabase.from('sites').insert({
     user_id: user.id,
     name,
-    url: url.replace(/\/$/, ''),
+    url: normalizedUrl,
     site_type: 'wordpress',
     wp_username,
     wp_app_password,
@@ -106,7 +148,15 @@ export async function POST(req: NextRequest) {
     plugin_installed: false,
   }).select().single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    if ((error as { code?: string }).code === PG_UNIQUE_VIOLATION) {
+      return NextResponse.json(
+        { error: 'A site with this URL already exists. Open it from the Sites list to edit it.' },
+        { status: 409 },
+      )
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 
   if (!test.success) {
     return NextResponse.json(
