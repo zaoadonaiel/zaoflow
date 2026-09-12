@@ -84,8 +84,8 @@ Rules:
 - One result per input, matched by id.
 - "county" is the full county name including the word "County" (or "Parish" for Louisiana, "Borough" for Alaska where appropriate).
 - "state" is the two-letter USPS code.
-- If the title has no identifiable US city, or the city is ambiguous across states with no disambiguation, set both county and state to null.
-- Never invent — a guess is worse than null.
+- When a city name exists in multiple states, pick the most well-known / most populous US city by that name. Examples: "Newport Beach" → Orange County, CA; "Anaheim" → Orange County, CA; "Portland" → Multnomah County, OR; "Springfield" → Sangamon County, IL; "Fullerton" → Orange County, CA. Do not null out these cases — the SEO pages this tool is built for are always for the well-known city.
+- Only set both county and state to null when the title has no identifiable US city name at all (e.g. a generic "Contact Us" or "About" page).
 - No commentary, no code fences. JSON object only.`
 
   const userPrompt = `Classify these pages:\n\n${JSON.stringify(

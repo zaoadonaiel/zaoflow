@@ -301,11 +301,14 @@ export default function PageRemover() {
     if (!countyOptions.some((o) => o.key === countyFilter)) setCountyFilter('')
   }, [countyOptions, countyFilter])
 
-  // Items that still need a county lookup. We prefer city pages (they have
-  // a clean `target_city` from Auto Post) but fall back to any item with a
-  // title so the classifier isn't useless on non-city sites.
+  // Items that still need a county lookup. "Unresolved" = no row yet OR a
+  // row with a null county (a prior "Unknown / ambiguous" answer); rescuing
+  // the latter lets a re-run recover from an over-conservative model without
+  // manual DB edits. We prefer city pages (they have a clean `target_city`
+  // from Auto Post) but fall back to any item with a title so the classifier
+  // isn't useless on non-city sites.
   const unclassifiedItems = useMemo(
-    () => items.filter((p) => !counties.has(p.id)),
+    () => items.filter((p) => !counties.get(p.id)?.county),
     [items, counties],
   )
   const unclassifiedCityCount = useMemo(

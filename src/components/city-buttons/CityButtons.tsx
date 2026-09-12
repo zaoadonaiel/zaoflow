@@ -403,8 +403,12 @@ export default function CityButtons() {
       })
   }, [pages, counties])
 
+  // Count of pages the next classifier run will actually touch — matches the
+  // filter in runClassifier(): no row yet, or a row whose county is null
+  // ("Unknown / ambiguous"). Keeping the button count in sync with that
+  // filter avoids the confusing "Classify 64" → 95 processed situation.
   const unclassifiedCount = useMemo(
-    () => pages.reduce((n, p) => (counties.has(p.id) ? n : n + 1), 0),
+    () => pages.reduce((n, p) => (counties.get(p.id)?.county ? n : n + 1), 0),
     [pages, counties],
   )
 
@@ -486,14 +490,17 @@ export default function CityButtons() {
   }
 
   /**
-   * Walk every unclassified page for the current site in batches of
+   * Walk every not-yet-resolved page for the current site in batches of
    * CLASSIFY_BATCH_SIZE, calling /api/city-buttons/classify sequentially so
    * progress lands live and a mid-run failure can be resumed by just
-   * clicking Run again (already-classified pages are skipped).
+   * clicking Run again. "Not resolved" = no row yet OR a row with a null
+   * county (a prior "Unknown / ambiguous" answer). Rescuing null rows lets
+   * the user recover from an over-conservative model without touching the
+   * DB by hand.
    */
   async function runClassifier() {
     if (!siteId || !model || classifying) return
-    const targets = pages.filter((p) => !counties.has(p.id))
+    const targets = pages.filter((p) => !counties.get(p.id)?.county)
     if (targets.length === 0) {
       toast.success('All pages already classified')
       return
@@ -742,7 +749,7 @@ export default function CityButtons() {
             {organizeOpen && (
               <div className="mt-3 space-y-3 rounded-lg border border-gray-100 dark:border-gray-700 p-3 bg-gray-50/60 dark:bg-gray-900/30">
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Ask an AI to bucket each page by US county from its title. Cached per page — re-runs only touch new pages.
+                  Ask an AI to bucket each page by US county from its title. Cached per page — re-runs touch new pages plus any the previous model marked "Unknown / ambiguous".
                 </p>
                 <ModelSelect
                   value={model}
