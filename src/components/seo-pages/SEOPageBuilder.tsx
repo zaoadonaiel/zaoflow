@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ArrowLeft, Check, Copy, Loader2, Lock, LockOpen, MapPin, Plus, Rocket, Save, Sparkles, Star, Wand2, Calendar as CalendarIcon,
+  ArrowLeft, Check, Copy, Loader2, Lock, LockOpen, MapPin, Plus, Rocket, Save, Search, Sparkles, Star, Wand2, Calendar as CalendarIcon,
   ExternalLink, RefreshCw, ChevronDown, ChevronUp, Tag, Receipt,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -40,12 +40,37 @@ const SKIP_REPUBLISH_CONFIRM_KEY = 'zaoflo_seo_skip_republish_confirm'
  *  next fresh draft so switching sites once persists across sessions. */
 const LAST_SEO_SITE_KEY = 'zaoflo_seo_last_site_id'
 
-/** Per-site "starred" source page. Star the source you clone from most
- *  often on a given site and it becomes the default selection on every
- *  fresh SEO page for that site. Key format: `${prefix}${site_id}`. */
+/** Per-site "starred" source pages. Star sources you clone from often on a
+ *  given site — starred pages float to the top of the picker, and the first
+ *  available starred page is auto-selected on every fresh SEO page. Stored
+ *  as a JSON array of ids; a bare number is honored for back-compat with the
+ *  earlier single-star format. Key format: `${prefix}${site_id}`. */
 const STAR_KEY_PREFIX = 'zaoflo_seo_starred_page_'
 function starKeyFor(siteId: string): string {
   return `${STAR_KEY_PREFIX}${siteId}`
+}
+function readStarredIds(siteId: string): number[] {
+  if (typeof window === 'undefined') return []
+  const raw = window.localStorage.getItem(starKeyFor(siteId))
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) {
+      return parsed.map(Number).filter((n) => Number.isFinite(n))
+    }
+  } catch {
+    // fall through to legacy single-id format
+  }
+  const n = Number(raw)
+  return Number.isFinite(n) ? [n] : []
+}
+function writeStarredIds(siteId: string, ids: number[]): void {
+  if (typeof window === 'undefined') return
+  if (ids.length === 0) {
+    window.localStorage.removeItem(starKeyFor(siteId))
+  } else {
+    window.localStorage.setItem(starKeyFor(siteId), JSON.stringify(ids))
+  }
 }
 
 /** Per-site source-city lock. When set, the stored city is auto-populated
@@ -79,10 +104,17 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
   // no risk to layout). Clicking runs the swap AND toggles state.
   const [cityOnlyMode, setCityOnlyMode] = useState(true)
 
-  // The starred source page for the currently-selected site (if any).
-  // Read from localStorage on every site switch, updated when the user
-  // clicks the star button next to the source-page dropdown.
-  const [starredPageId, setStarredPageId] = useState<number | null>(null)
+  // Starred source pages for the currently-selected site. Read from
+  // localStorage on every site switch, updated when the user toggles a
+  // page's star in the source-page picker. Starred pages float to the top
+  // of the picker and the first available one is auto-selected on a fresh
+  // SEO page.
+  const [starredPageIds, setStarredPageIds] = useState<number[]>([])
+
+  // Free-text filter for the source-page picker. Matches on title or slug,
+  // case-insensitive. Cleared on site/kind switch (see effect below) so
+  // stale queries don't hide the just-loaded list.
+  const [pageSearch, setPageSearch] = useState('')
 
   // Per-site source-city lock. When on, the current value in the Source
   // city field is stored under the site's lock key and auto-restored on
@@ -226,15 +258,20 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
     window.localStorage.setItem(LAST_SEO_SITE_KEY, siteId)
   }, [siteId])
 
-  // Refresh the "starred page" indicator whenever the current site changes.
+  // Refresh the starred set whenever the current site changes.
   useEffect(() => {
-    if (!siteId || typeof window === 'undefined') {
-      setStarredPageId(null)
+    if (!siteId) {
+      setStarredPageIds([])
       return
     }
-    const stored = window.localStorage.getItem(starKeyFor(siteId))
-    setStarredPageId(stored ? Number(stored) : null)
+    setStarredPageIds(readStarredIds(siteId))
   }, [siteId])
+
+  // Reset the search filter when the underlying list changes (new site
+  // or source kind), otherwise a stale query hides the just-loaded pages.
+  useEffect(() => {
+    setPageSearch('')
+  }, [siteId, sourceKind])
 
   // Restore the locked source city whenever the site changes. Only fills
   // when the field is empty (a user who typed a fresh city gets to keep
@@ -274,17 +311,15 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
       .then((pages) => {
         if (cancelled) return
         setWpPages(pages || [])
-        // Auto-pick the starred source for this site. Only kicks in on a
+        // Auto-pick a starred source for this site. Only kicks in on a
         // fresh draft (no existing sourcePageId — set on the /[id] route
-        // from the saved value) and only when the starred id is present in
-        // the just-fetched list, so a starred page that was later deleted
-        // fails safe.
-        if (!sourcePageId && !initial && typeof window !== 'undefined') {
-          const starred = window.localStorage.getItem(starKeyFor(siteId))
-          const starredId = starred ? Number(starred) : null
-          if (starredId && (pages || []).some((p) => p.id === starredId)) {
-            setSourcePageId(starredId)
-          }
+        // from the saved value). Picks the first starred id that's still
+        // present in the just-fetched list, so a starred page that was
+        // later deleted fails safe.
+        if (!sourcePageId && !initial) {
+          const ids = readStarredIds(siteId)
+          const firstAvailable = ids.find((id) => (pages || []).some((p) => p.id === id))
+          if (firstAvailable) setSourcePageId(firstAvailable)
         }
       })
       .catch((err) => {
@@ -588,16 +623,40 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
   }
 
   const wpPageLookup = useMemo(() => new Map(wpPages.map((p) => [p.id, p])), [wpPages])
-  // Same list, starred page floated to the top. WP's own most-recent-first
-  // sort is preserved for everything else; the star is a soft pin, not a
-  // full re-sort.
+  // Same list, starred pages floated to the top (preserving the order the
+  // user starred them in). WP's own most-recent-first sort is preserved for
+  // everything else; stars are a soft pin, not a full re-sort.
   const sortedWpPages = useMemo(() => {
-    if (!starredPageId) return wpPages
-    const pinned = wpPages.find((p) => p.id === starredPageId)
-    if (!pinned) return wpPages
-    return [pinned, ...wpPages.filter((p) => p.id !== starredPageId)]
-  }, [wpPages, starredPageId])
+    if (starredPageIds.length === 0) return wpPages
+    const starredSet = new Set(starredPageIds)
+    const pinned: WPPageOption[] = []
+    for (const id of starredPageIds) {
+      const p = wpPages.find((x) => x.id === id)
+      if (p) pinned.push(p)
+    }
+    return [...pinned, ...wpPages.filter((p) => !starredSet.has(p.id))]
+  }, [wpPages, starredPageIds])
+  const visibleWpPages = useMemo(() => {
+    const q = pageSearch.trim().toLowerCase()
+    if (!q) return sortedWpPages
+    return sortedWpPages.filter(
+      (p) => p.title.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q),
+    )
+  }, [sortedWpPages, pageSearch])
   const selectedWpPage = sourcePageId ? wpPageLookup.get(sourcePageId) : null
+
+  function toggleStar(pageId: number) {
+    if (!siteId) return
+    const next = starredPageIds.includes(pageId)
+      ? starredPageIds.filter((id) => id !== pageId)
+      : [...starredPageIds, pageId]
+    setStarredPageIds(next)
+    writeStarredIds(siteId, next)
+    const page = wpPageLookup.get(pageId)
+    const label = page ? `“${page.title}”` : `this ${sourceKind}`
+    if (next.includes(pageId)) toast.success(`Starred ${label}`)
+    else toast(`Unstarred ${label}`, { icon: '☆' })
+  }
 
   return (
     <div>
@@ -735,67 +794,89 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
                   Source {sourceKind}
                   {wpPagesLoading && <Loader2 className="inline-block w-3 h-3 animate-spin ml-2" />}
                 </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!siteId || !sourcePageId || typeof window === 'undefined') return
-                    const key = starKeyFor(siteId)
-                    const current = window.localStorage.getItem(key)
-                    if (current === String(sourcePageId)) {
-                      window.localStorage.removeItem(key)
-                      setStarredPageId(null)
-                      toast(`Removed default ${sourceKind} for this site`, { icon: '☆' })
-                    } else {
-                      window.localStorage.setItem(key, String(sourcePageId))
-                      setStarredPageId(sourcePageId)
-                      toast.success(`Pinned — this ${sourceKind} is now the default for this site`)
-                    }
-                  }}
-                  disabled={!sourcePageId}
-                  className={`inline-flex items-center gap-1 text-[11px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                    starredPageId && sourcePageId === starredPageId
-                      ? 'text-yellow-500 dark:text-yellow-400'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-yellow-500 dark:hover:text-yellow-400'
-                  }`}
-                  title={
-                    !sourcePageId
-                      ? `Pick a ${sourceKind} to star it`
-                      : starredPageId === sourcePageId
-                        ? `Unstar — remove as the default for this site`
-                        : `Star as the default ${sourceKind} for this site`
-                  }
-                >
-                  <Star
-                    className={`w-3.5 h-3.5 ${
-                      starredPageId === sourcePageId
-                        ? 'fill-yellow-400 text-yellow-400'
-                        : ''
-                    }`}
-                  />
-                  {starredPageId === sourcePageId ? 'Starred' : 'Star this'}
-                </button>
+                {starredPageIds.length > 0 && (
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                    {starredPageIds.length} starred
+                  </span>
+                )}
               </div>
-              <select
-                value={sourcePageId ?? ''}
-                onChange={(e) => setSourcePageId(e.target.value ? Number(e.target.value) : null)}
-                disabled={!siteId || wpPagesLoading}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-              >
-                <option value="">
-                  {!siteId
-                    ? 'Pick a site first'
-                    : wpPagesLoading
-                      ? `Loading ${sourceKind}s…`
-                      : wpPages.length === 0
-                        ? `No ${sourceKind}s found`
-                        : `Pick a ${sourceKind} to clone`}
-                </option>
-                {sortedWpPages.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.id === starredPageId ? '⭐ ' : ''}{p.title}  ·  /{p.slug}
-                  </option>
-                ))}
-              </select>
+              <div className="relative mb-2">
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={pageSearch}
+                  onChange={(e) => setPageSearch(e.target.value)}
+                  disabled={!siteId || wpPagesLoading}
+                  placeholder={
+                    !siteId
+                      ? 'Pick a site first'
+                      : wpPagesLoading
+                        ? `Loading ${sourceKind}s…`
+                        : `Search ${sourceKind}s by name or slug…`
+                  }
+                  className="w-full pl-8 pr-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                />
+              </div>
+              <div className="border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/50 max-h-64 overflow-y-auto">
+                {!siteId ? (
+                  <p className="px-3 py-4 text-xs text-gray-500 dark:text-gray-400 text-center">
+                    Pick a site first
+                  </p>
+                ) : wpPagesLoading ? (
+                  <p className="px-3 py-4 text-xs text-gray-500 dark:text-gray-400 text-center">
+                    Loading {sourceKind}s…
+                  </p>
+                ) : wpPages.length === 0 ? (
+                  <p className="px-3 py-4 text-xs text-gray-500 dark:text-gray-400 text-center">
+                    No {sourceKind}s found
+                  </p>
+                ) : visibleWpPages.length === 0 ? (
+                  <p className="px-3 py-4 text-xs text-gray-500 dark:text-gray-400 text-center">
+                    No {sourceKind}s match “{pageSearch}”
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-gray-200 dark:divide-gray-600">
+                    {visibleWpPages.map((p) => {
+                      const isStarred = starredPageIds.includes(p.id)
+                      const isSelected = sourcePageId === p.id
+                      return (
+                        <li key={p.id} className="flex items-stretch">
+                          <button
+                            type="button"
+                            onClick={() => toggleStar(p.id)}
+                            className={`flex items-center justify-center w-9 flex-shrink-0 transition-colors ${
+                              isStarred
+                                ? 'text-yellow-500 dark:text-yellow-400 hover:text-yellow-600 dark:hover:text-yellow-300'
+                                : 'text-gray-300 dark:text-gray-500 hover:text-yellow-500 dark:hover:text-yellow-400'
+                            }`}
+                            title={isStarred ? 'Unstar — no longer floats to the top' : 'Star — floats to the top for this site'}
+                            aria-label={isStarred ? `Unstar ${p.title}` : `Star ${p.title}`}
+                          >
+                            <Star className={`w-4 h-4 ${isStarred ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSourcePageId(p.id)}
+                            className={`flex-1 text-left px-2 py-2 text-sm transition-colors min-w-0 ${
+                              isSelected
+                                ? 'bg-brand-50 dark:bg-brand-900/30 text-brand-900 dark:text-brand-100'
+                                : 'text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              {isSelected && <Check className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400 flex-shrink-0" />}
+                              <span className="truncate font-medium">{p.title}</span>
+                            </div>
+                            <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                              /{p.slug}
+                            </div>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
               {wpPagesError && (
                 <p className="text-xs text-red-600 dark:text-red-400 mt-1.5">{wpPagesError}</p>
               )}
