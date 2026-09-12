@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ExternalLink,
   Loader2,
+  MapPin,
   RotateCcw,
   Search,
   Trash2,
@@ -28,8 +29,32 @@ type View = 'active' | 'trash'
 type Kind = 'post' | 'page'
 type DateField = 'published' | 'modified'
 
+interface CountyAssignment {
+  county: string | null
+  state: string | null
+}
+
 const LAST_SITE_KEY = 'zaoflo_page_remover_last_site_id'
 const LAST_DATE_FIELD_KEY = 'zaoflo_page_remover_date_field'
+
+// Shared with City Buttons — the same `page_counties` table drives both, so
+// filtering here uses whatever the user has already classified over there
+// instead of paying to re-run the model.
+const UNCLASSIFIED_KEY = '__unclassified__'
+const UNKNOWN_KEY = '__unknown__'
+
+function countyKey(a: CountyAssignment | undefined): string {
+  if (!a) return UNCLASSIFIED_KEY
+  if (!a.county) return UNKNOWN_KEY
+  return `${a.county}||${a.state || ''}`
+}
+
+function countyLabel(key: string, a?: CountyAssignment): string {
+  if (key === UNCLASSIFIED_KEY) return 'Unclassified'
+  if (key === UNKNOWN_KEY) return 'Unknown / ambiguous'
+  if (!a?.county) return 'Unknown / ambiguous'
+  return a.state ? `${a.county}, ${a.state}` : a.county
+}
 
 function formatDate(iso?: string): string {
   if (!iso) return '—'
@@ -70,6 +95,13 @@ export default function PageRemover() {
   const [query, setQuery] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+
+  // Cached county assignments for the current site — sourced from the same
+  // `page_counties` table City Buttons writes to. Empty when no one has run
+  // the classifier for this site yet.
+  const [counties, setCounties] = useState<Map<number, CountyAssignment>>(new Map())
+  const [countiesLoading, setCountiesLoading] = useState(false)
+  const [countyFilter, setCountyFilter] = useState('')
 
   const [busyId, setBusyId] = useState<number | null>(null)
   const [selected, setSelected] = useState<Set<number>>(new Set())
@@ -144,16 +176,81 @@ export default function PageRemover() {
     return () => { cancelled = true }
   }, [siteId, kind, view, dateFrom, dateTo, dateField])
 
+  // County lookups are per-site (not per-kind) — WP post IDs are unique
+  // across pages/posts on a given site, so we can key by id alone.
+  useEffect(() => {
+    if (!siteId) {
+      setCounties(new Map())
+      return
+    }
+    let cancelled = false
+    setCountiesLoading(true)
+    fetch(`/api/city-buttons/counties?site_id=${siteId}`)
+      .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        if (cancelled || !ok) return
+        const next = new Map<number, CountyAssignment>()
+        for (const row of (d.counties || []) as Array<{ wp_page_id: number; county: string | null; state: string | null }>) {
+          next.set(row.wp_page_id, { county: row.county, state: row.state })
+        }
+        setCounties(next)
+      })
+      .catch(() => {
+        // Non-fatal — the list still works without county data, the filter
+        // just shows "Unclassified" for everything.
+      })
+      .finally(() => {
+        if (!cancelled) setCountiesLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [siteId])
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return items
     return items.filter((p) => {
+      if (countyFilter) {
+        const key = countyKey(counties.get(p.id))
+        if (key !== countyFilter) return false
+      }
+      if (!q) return true
       const title = (p.title || '').toLowerCase()
       const slug = (p.slug || '').toLowerCase()
       const link = (p.link || '').toLowerCase()
       return title.includes(q) || slug.includes(q) || link.includes(q)
     })
-  }, [items, query])
+  }, [items, query, countyFilter, counties])
+
+  // Build the dropdown from the currently-loaded items so counts always
+  // reflect what's on screen. Sorted by size desc with "Unknown" and
+  // "Unclassified" pinned last so real counties don't get pushed off.
+  const countyOptions = useMemo(() => {
+    const counts = new Map<string, { count: number; sample: CountyAssignment | undefined }>()
+    for (const p of items) {
+      const a = counties.get(p.id)
+      const key = countyKey(a)
+      const prev = counts.get(key)
+      if (prev) prev.count += 1
+      else counts.set(key, { count: 1, sample: a })
+    }
+    return Array.from(counts.entries())
+      .map(([key, { count, sample }]) => ({ key, count, label: countyLabel(key, sample) }))
+      .sort((a, b) => {
+        if (a.key === UNCLASSIFIED_KEY) return 1
+        if (b.key === UNCLASSIFIED_KEY) return -1
+        if (a.key === UNKNOWN_KEY) return 1
+        if (b.key === UNKNOWN_KEY) return -1
+        if (b.count !== a.count) return b.count - a.count
+        return a.label.localeCompare(b.label)
+      })
+  }, [items, counties])
+
+  // Drop the county filter if the current pool no longer contains it —
+  // e.g. flipping from pages to posts where nothing is classified would
+  // otherwise leave a filter that hides everything.
+  useEffect(() => {
+    if (!countyFilter) return
+    if (!countyOptions.some((o) => o.key === countyFilter)) setCountyFilter('')
+  }, [countyOptions, countyFilter])
 
   // Reset selection whenever the underlying data pool changes so a stale id
   // from a previous site/view can't linger and trigger a hidden bulk action.
@@ -275,6 +372,10 @@ export default function PageRemover() {
 
   const dateActive = Boolean(dateFrom || dateTo)
   const searchActive = query.trim().length > 0
+  const countyActive = countyFilter.length > 0
+  const activeCountyLabel = countyActive
+    ? countyOptions.find((o) => o.key === countyFilter)?.label
+    : undefined
 
   return (
     <div>
@@ -422,14 +523,56 @@ export default function PageRemover() {
             </p>
           </div>
 
-          {(dateActive || searchActive) && (
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+              Filter by county
+            </label>
+            <div className="flex gap-2 max-w-md">
+              <select
+                value={countyFilter}
+                onChange={(e) => setCountyFilter(e.target.value)}
+                disabled={items.length === 0}
+                className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+              >
+                <option value="">
+                  {countiesLoading
+                    ? 'Loading counties…'
+                    : `All counties (${items.length})`}
+                </option>
+                {countyOptions.map((opt) => (
+                  <option key={opt.key} value={opt.key}>
+                    {opt.label} ({opt.count})
+                  </option>
+                ))}
+              </select>
+              {countyFilter && (
+                <button
+                  type="button"
+                  onClick={() => setCountyFilter('')}
+                  className="px-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                  title="Clear county filter"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1">
+              Counties come from the City Buttons classifier. Pages you
+              haven&apos;t classified there show up as &quot;Unclassified&quot;.
+            </p>
+          </div>
+
+          {(dateActive || searchActive || countyActive) && (
             <div className="flex items-center gap-3 text-xs">
               <span className="text-gray-500 dark:text-gray-400">
-                {searchActive && dateActive
-                  ? 'Filtering by search and date'
-                  : searchActive
-                    ? 'Filtering by search'
-                    : 'Filtering by date'}
+                Filtering by{' '}
+                {[
+                  searchActive && 'search',
+                  dateActive && 'date',
+                  countyActive && (activeCountyLabel || 'county'),
+                ]
+                  .filter(Boolean)
+                  .join(', ')}
               </span>
               <button
                 type="button"
@@ -437,6 +580,7 @@ export default function PageRemover() {
                   setQuery('')
                   setDateFrom('')
                   setDateTo('')
+                  setCountyFilter('')
                 }}
                 className="text-brand-600 dark:text-brand-400 hover:underline"
               >
@@ -543,6 +687,8 @@ export default function PageRemover() {
               {filtered.map((item) => {
                 const busy = busyId === item.id
                 const checked = selected.has(item.id)
+                const assignment = counties.get(item.id)
+                const hasCounty = Boolean(assignment?.county)
                 return (
                   <li key={item.id} className="px-4 py-3 flex flex-wrap items-center gap-3">
                     <input
@@ -566,6 +712,12 @@ export default function PageRemover() {
                           Modified {formatDate(item.modifiedGmt)}
                         </span>
                         <span className="shrink-0 uppercase tracking-wide">{item.status}</span>
+                        {hasCounty && (
+                          <span className="shrink-0 inline-flex items-center gap-1 text-brand-700 dark:text-brand-400">
+                            <MapPin className="w-3 h-3" />
+                            {countyLabel(countyKey(assignment), assignment)}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
