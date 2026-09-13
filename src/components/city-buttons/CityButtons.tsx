@@ -360,7 +360,7 @@ export default function CityButtons() {
     // narrower-within-scope tool, not a global search (the top box already fills
     // that role).
     const kw = countyFilter ? countyKeywords.trim().toLowerCase() : ''
-    return pages.filter((p) => {
+    const filtered = pages.filter((p) => {
       if (countyFilter) {
         const key = countyKey(counties.get(p.id))
         if (key !== countyFilter) return false
@@ -376,6 +376,9 @@ export default function CityButtons() {
         (p.slug || '').toLowerCase().includes(q)
       )
     })
+    return filtered.sort((a, b) =>
+      (a.title || a.slug || '').localeCompare(b.title || b.slug || '', undefined, { sensitivity: 'base' }),
+    )
   }, [pages, query, countyFilter, countyKeywords, counties])
 
   // Grouped counts for the filter dropdown. Sorted by size desc so the
