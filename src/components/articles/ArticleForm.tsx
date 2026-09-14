@@ -18,6 +18,7 @@ import ImageGenerator from '@/components/articles/ImageGenerator'
 import CollabPanel from '@/components/collab/CollabPanel'
 import IdeaGenerator from '@/components/articles/IdeaGenerator'
 import ScheduleCalendarModal from '@/components/ui/ScheduleCalendarModal'
+import { useSiteCalendar, dayKey, readableDay } from '@/lib/schedule-calendar'
 import { formatInZone, SCHEDULE_ZONES } from '@/lib/timezone'
 import { useUnsavedWarning } from '@/lib/use-unsaved-warning'
 import InstructionSets from '@/components/articles/InstructionSets'
@@ -180,6 +181,10 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   // converted to ISO when handed to the API.
   const [showBackdate, setShowBackdate] = useState(false)
   const [backdateAt, setBackdateAt] = useState('')
+  // When the chosen backdate lands on a day the site already has articles for,
+  // hold the publish until the user says post-anyway. Null means no collision
+  // to confirm (either not checked yet, or the day is clear).
+  const [backdateCollisions, setBackdateCollisions] = useState<Article[] | null>(null)
   // A generated article is thousands of words tall, which buried the SEO fields
   // under it. The body opens on demand instead of by default.
   const [contentExpanded, setContentExpanded] = useState(false)
@@ -295,6 +300,10 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
     if (!selectedSite) return
     setScheduledTz(siteDefaultTz)
   }, [selectedSite?.id, siteDefaultTz, committedSlot])
+
+  // Loaded only while the backdate modal is open, so the picker can warn
+  // before landing a second article on a day the site already has one on.
+  const { articles: siteCalendarArticles } = useSiteCalendar(siteId, showBackdate && !!siteId)
 
   const [savingSiteTz, setSavingSiteTz] = useState(false)
   async function handleSiteTzChange(newTz: string) {
@@ -1620,46 +1629,96 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
 
       <Modal
         open={showBackdate}
-        onClose={() => setShowBackdate(false)}
+        onClose={() => { setShowBackdate(false); setBackdateCollisions(null) }}
         title="Publish with a chosen date"
         maxWidth="max-w-md"
       >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Publishes immediately, but WordPress will show this date on the post.
-            Uses your browser&apos;s local time.
-          </p>
-          <input
-            type="datetime-local"
-            value={backdateAt}
-            onChange={(e) => setBackdateAt(e.target.value)}
-            className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-          />
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setShowBackdate(false)}
-              className={`${PILL_BASE} ${PILL_ACTION}`}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                if (!backdateAt) { toast.error('Pick a date and time'); return }
-                const iso = new Date(backdateAt).toISOString()
-                setPublishMode('now')
-                const ok = await handleSave('now', undefined, iso)
-                if (ok) setShowBackdate(false)
-              }}
-              disabled={saving || generating || !backdateAt}
-              className={`${PILL_BASE} ${PILL_PRIMARY}`}
-            >
-              <Send className="w-3.5 h-3.5" />
-              Publish with this date
-            </button>
+        {backdateCollisions ? (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              You already have {backdateCollisions.length === 1 ? 'an article' : `${backdateCollisions.length} articles`}
+              {' '}on {readableDay(backdateAt.split('T')[0])}:
+            </p>
+            <ul className="rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
+              {backdateCollisions.map((a) => (
+                <li key={a.id} className="px-3 py-2 text-sm text-gray-800 dark:text-gray-100 truncate">
+                  {a.title || 'Untitled'}
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Post anyway lands this on the same day as the ones above — nothing existing is touched.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setBackdateCollisions(null)}
+                className={`${PILL_BASE} ${PILL_ACTION}`}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const iso = new Date(backdateAt).toISOString()
+                  setPublishMode('now')
+                  const ok = await handleSave('now', undefined, iso)
+                  if (ok) { setShowBackdate(false); setBackdateCollisions(null) }
+                }}
+                disabled={saving || generating}
+                className={`${PILL_BASE} ${PILL_PRIMARY}`}
+              >
+                <Send className="w-3.5 h-3.5" />
+                Post anyway
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Publishes immediately, but WordPress will show this date on the post.
+              Uses your browser&apos;s local time.
+            </p>
+            <input
+              type="datetime-local"
+              value={backdateAt}
+              onChange={(e) => setBackdateAt(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowBackdate(false)}
+                className={`${PILL_BASE} ${PILL_ACTION}`}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!backdateAt) { toast.error('Pick a date and time'); return }
+                  const targetDay = backdateAt.split('T')[0]
+                  const collisions = siteCalendarArticles.filter(
+                    (a) => a.id !== boundId && dayKey(a) === targetDay,
+                  )
+                  if (collisions.length > 0) {
+                    setBackdateCollisions(collisions)
+                    return
+                  }
+                  const iso = new Date(backdateAt).toISOString()
+                  setPublishMode('now')
+                  const ok = await handleSave('now', undefined, iso)
+                  if (ok) setShowBackdate(false)
+                }}
+                disabled={saving || generating || !backdateAt}
+                className={`${PILL_BASE} ${PILL_PRIMARY}`}
+              >
+                <Send className="w-3.5 h-3.5" />
+                Publish with this date
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <Modal
