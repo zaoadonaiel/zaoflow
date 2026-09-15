@@ -509,6 +509,19 @@ export default function ImageGenerator({
           </button>
           <button
             type="button"
+            onClick={() => setAllowPeople((v) => !v)}
+            aria-pressed={allowPeople}
+            className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border text-xs font-medium transition-colors ${
+              allowPeople
+                ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
+                : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            People {allowPeople ? 'on' : 'off'}
+          </button>
+          <button
+            type="button"
             onClick={() => setShowFilters(true)}
             aria-label="Image filters"
             className="relative flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
