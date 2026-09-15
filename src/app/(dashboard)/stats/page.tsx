@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Raw = {
-  step: 'idea' | 'article' | 'seo' | 'image'
+  step: 'idea' | 'article' | 'seo' | 'image' | 'rewrite'
   model: string
   cost_usd: number | null
   article_id: string | null

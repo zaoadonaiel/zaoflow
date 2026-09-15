@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { BarChart3, Sparkles, DollarSign, FileText, Filter, X } from 'lucide-react'
 import { money } from '@/lib/format'
 
-export type Step = 'idea' | 'article' | 'seo' | 'image'
+export type Step = 'idea' | 'article' | 'seo' | 'image' | 'rewrite'
 
 export interface UsageRow {
   step: Step
@@ -15,12 +15,13 @@ export interface UsageRow {
   site_name: string | null
 }
 
-const STEPS: Step[] = ['idea', 'article', 'seo', 'image']
+const STEPS: Step[] = ['idea', 'article', 'seo', 'image', 'rewrite']
 const STEP_LABELS: Record<Step, string> = {
   idea: 'Idea',
   article: 'Article',
   seo: 'SEO',
   image: 'Image',
+  rewrite: 'Rewrite',
 }
 const COMBO_STEPS: Step[] = ['idea', 'article', 'image']
 
@@ -101,7 +102,7 @@ export default function StatsClient({ rows }: Props) {
   type StepModelAgg = { model: string; uses: number; cost: number }
   const byStepModel = useMemo(() => {
     const out: Record<Step, Map<string, StepModelAgg>> = {
-      idea: new Map(), article: new Map(), seo: new Map(), image: new Map(),
+      idea: new Map(), article: new Map(), seo: new Map(), image: new Map(), rewrite: new Map(),
     }
     for (const r of filtered) {
       const bucket = out[r.step]
@@ -131,6 +132,7 @@ export default function StatsClient({ rows }: Props) {
       article: { uses: 0, cost: 0 },
       seo: { uses: 0, cost: 0 },
       image: { uses: 0, cost: 0 },
+      rewrite: { uses: 0, cost: 0 },
     }
     for (const r of filtered) {
       m[r.step].uses += 1
@@ -159,7 +161,7 @@ export default function StatsClient({ rows }: Props) {
           uses: 0,
           cost: 0,
           topByStep: {},
-          counts: { idea: new Map(), article: new Map(), seo: new Map(), image: new Map() },
+          counts: { idea: new Map(), article: new Map(), seo: new Map(), image: new Map(), rewrite: new Map() },
         }
         siteMap.set(siteName, agg)
       }
@@ -400,7 +402,7 @@ export default function StatsClient({ rows }: Props) {
               <h2 className="font-semibold text-gray-900 dark:text-white">Spend by task type</h2>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Where the money is going, split across the pipeline stages.</p>
             </div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 divide-gray-100 dark:divide-gray-700">
+            <div className="grid grid-cols-2 lg:grid-cols-5 divide-x divide-y lg:divide-y-0 divide-gray-100 dark:divide-gray-700">
               {STEPS.map((step) => {
                 const s = spendByStep[step]
                 const share = totalCost > 0 ? (s.cost / totalCost) * 100 : 0
