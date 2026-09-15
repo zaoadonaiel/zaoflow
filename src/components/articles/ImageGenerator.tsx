@@ -496,52 +496,54 @@ export default function ImageGenerator({
           allowIllustration={allowIllustration}
         />
 
-        <div className="flex gap-2">
+        <div className="space-y-2">
           <button
             type="button"
             onClick={() => generate()}
             disabled={generating}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-brand-600 text-white text-xs font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-brand-600 text-white text-xs font-medium hover:bg-brand-700 transition-colors disabled:opacity-50"
           >
             {generating
               ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Generating…</>
               : <><Wand2 className="w-3.5 h-3.5" />{imageUrl ? 'Regenerate' : 'Generate'}</>}
           </button>
-          <button
-            type="button"
-            onClick={() => setAllowPeople((v) => !v)}
-            aria-pressed={allowPeople}
-            className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border text-xs font-medium transition-colors ${
-              allowPeople
-                ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
-                : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            People {allowPeople ? 'on' : 'off'}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowFilters(true)}
-            aria-label="Image filters"
-            className="relative flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            Filters
-            {activeFilterCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[1.15rem] h-[1.15rem] px-1 flex items-center justify-center rounded-full bg-brand-600 text-white text-[10px] font-semibold">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowModal(true)}
-            className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          >
-            <Wand2 className="w-3.5 h-3.5" />
-            More
-          </button>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => setAllowPeople((v) => !v)}
+              aria-pressed={allowPeople}
+              className={`flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                allowPeople
+                  ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-400'
+                  : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              People {allowPeople ? 'on' : 'off'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowFilters(true)}
+              aria-label="Image filters"
+              className="relative flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg border border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[1.15rem] h-[1.15rem] px-1 flex items-center justify-center rounded-full bg-brand-600 text-white text-[10px] font-semibold">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowModal(true)}
+              className="flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg border border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            >
+              <Wand2 className="w-3.5 h-3.5" />
+              More
+            </button>
+          </div>
         </div>
       </div>
 
