@@ -107,24 +107,24 @@ export default function AddSiteModal({ open, onClose, onAdded }: AddSiteModalPro
     <Modal open={open} onClose={handleClose} title="Connect WordPress Site">
       {step === 'testing' && (
         <div className="flex flex-col items-center gap-4 py-8">
-          <div className="w-12 h-12 bg-brand-50 rounded-full flex items-center justify-center">
+          <div className="w-12 h-12 bg-brand-50 dark:bg-brand-500/10 rounded-full flex items-center justify-center">
             <Loader2 className="w-6 h-6 text-brand-600 animate-spin" />
           </div>
           <div className="text-center">
-            <p className="font-medium text-gray-900">Testing connection...</p>
-            <p className="text-sm text-gray-500 mt-1">Verifying your WordPress credentials</p>
+            <p className="font-medium text-gray-900 dark:text-white">Testing connection...</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Verifying your WordPress credentials</p>
           </div>
         </div>
       )}
 
       {step === 'success' && (
         <div className="flex flex-col items-center gap-4 py-8">
-          <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center">
+          <div className="w-12 h-12 bg-green-50 dark:bg-green-500/10 rounded-full flex items-center justify-center">
             <CheckCircle2 className="w-6 h-6 text-green-600" />
           </div>
           <div className="text-center">
-            <p className="font-semibold text-gray-900">Site connected!</p>
-            <p className="text-sm text-gray-500 mt-1">{name} is ready for publishing.</p>
+            <p className="font-semibold text-gray-900 dark:text-white">Site connected!</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{name} is ready for publishing.</p>
           </div>
           <button
             onClick={handleClose}
@@ -138,7 +138,7 @@ export default function AddSiteModal({ open, onClose, onAdded }: AddSiteModalPro
       {step === 'form' && (
         <div className="space-y-4">
           {testError && (
-            <div className="flex items-start gap-2.5 p-3.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+            <div className="flex items-start gap-2.5 p-3.5 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl text-sm text-red-700 dark:text-red-400">
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               {testError}
             </div>
@@ -146,18 +146,18 @@ export default function AddSiteModal({ open, onClose, onAdded }: AddSiteModalPro
 
           {/* Common fields */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Site name</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Site name</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="My Blog"
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+              className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               <Globe className="w-4 h-4 inline-block mr-1 text-gray-400" />
               WordPress URL
             </label>
@@ -166,7 +166,7 @@ export default function AddSiteModal({ open, onClose, onAdded }: AddSiteModalPro
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://yoursite.com"
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+              className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
           </div>
 
@@ -183,26 +183,26 @@ export default function AddSiteModal({ open, onClose, onAdded }: AddSiteModalPro
                 <ExternalLink className="w-3.5 h-3.5 opacity-70" />
               </button>
 
-              <div className="p-3.5 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-700 space-y-1.5">
-                <p className="font-medium text-blue-800">How it works</p>
+              <div className="p-3.5 bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 rounded-xl text-xs text-blue-700 dark:text-blue-300 space-y-1.5">
+                <p className="font-medium text-blue-800 dark:text-blue-200">How it works</p>
                 <ol className="list-decimal list-inside space-y-0.5 ml-1">
                   <li>You&apos;ll be taken to your WordPress admin to log in</li>
                   <li>WordPress asks you to approve Zao Flo access</li>
                   <li>Click <strong>Yes, Grant Access</strong> — you&apos;re done!</li>
                 </ol>
-                <p className="text-blue-600 mt-1">No copy-pasting required. Works on any WordPress 5.6+ site.</p>
+                <p className="text-blue-600 dark:text-blue-400 mt-1">No copy-pasting required. Works on any WordPress 5.6+ site.</p>
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-gray-200" />
-                <span className="text-xs text-gray-400">or</span>
-                <div className="flex-1 h-px bg-gray-200" />
+                <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+                <span className="text-xs text-gray-400 dark:text-gray-500">or</span>
+                <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
               </div>
 
               <button
                 type="button"
                 onClick={() => setMethod('manual')}
-                className="w-full flex items-center justify-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors py-1"
+                className="w-full flex items-center justify-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors py-1"
               >
                 Enter credentials manually
                 <ChevronDown className="w-3.5 h-3.5" />
@@ -216,14 +216,14 @@ export default function AddSiteModal({ open, onClose, onAdded }: AddSiteModalPro
               <button
                 type="button"
                 onClick={() => setMethod('auto')}
-                className="flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-700 font-medium transition-colors"
+                className="flex items-center gap-1.5 text-xs text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 font-medium transition-colors"
               >
                 <ChevronUp className="w-3.5 h-3.5" />
                 Use automatic connection instead
               </button>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   <User className="w-4 h-4 inline-block mr-1 text-gray-400" />
                   WordPress username
                 </label>
@@ -233,13 +233,13 @@ export default function AddSiteModal({ open, onClose, onAdded }: AddSiteModalPro
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="admin"
                   required
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                  className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 />
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
                     <Key className="w-4 h-4 text-gray-400" />
                     Application Password
                   </label>
@@ -250,7 +250,7 @@ export default function AddSiteModal({ open, onClose, onAdded }: AddSiteModalPro
                       if (!clean) { toast.error('Enter your WordPress URL first'); return }
                       window.open(`${clean}/wp-admin/profile.php#application-passwords-section`, '_blank')
                     }}
-                    className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium hover:underline transition-colors"
+                    className="flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 font-medium hover:underline transition-colors"
                   >
                     Generate in WordPress
                     <ExternalLink className="w-3 h-3" />
@@ -262,7 +262,7 @@ export default function AddSiteModal({ open, onClose, onAdded }: AddSiteModalPro
                   onChange={(e) => setAppPassword(e.target.value)}
                   placeholder="xxxx xxxx xxxx xxxx xxxx xxxx"
                   required
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent font-mono"
+                  className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent font-mono"
                 />
               </div>
 
@@ -270,7 +270,7 @@ export default function AddSiteModal({ open, onClose, onAdded }: AddSiteModalPro
                 <button
                   type="button"
                   onClick={handleClose}
-                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 >
                   Cancel
                 </button>
@@ -290,7 +290,7 @@ export default function AddSiteModal({ open, onClose, onAdded }: AddSiteModalPro
               <button
                 type="button"
                 onClick={handleClose}
-                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
                 Cancel
               </button>

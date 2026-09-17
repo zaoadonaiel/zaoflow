@@ -122,25 +122,25 @@ export default function AddNodeSiteModal({ open, onClose, onAdded }: AddNodeSite
       {step === 'form' && (
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
-            <div className="flex items-start gap-2.5 p-3.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+            <div className="flex items-start gap-2.5 p-3.5 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl text-sm text-red-700 dark:text-red-400">
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               {formError}
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Site name</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Site name</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="My Node.js Blog"
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+              className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               <Globe className="w-4 h-4 inline-block mr-1 text-gray-400" />
               Node.js site URL
             </label>
@@ -149,12 +149,12 @@ export default function AddNodeSiteModal({ open, onClose, onAdded }: AddNodeSite
               value={apiUrl}
               onChange={(e) => setApiUrl(e.target.value)}
               placeholder="https://yoursite.com"
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+              className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
           </div>
 
-          <div className="p-3.5 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-700 space-y-1.5">
-            <p className="font-medium text-blue-800">How it works</p>
+          <div className="p-3.5 bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 rounded-xl text-xs text-blue-700 dark:text-blue-300 space-y-1.5">
+            <p className="font-medium text-blue-800 dark:text-blue-200">How it works</p>
             <ol className="list-decimal list-inside space-y-0.5 ml-1">
               <li>Zao Flo creates the site and gives you an API key</li>
               <li>Add the key to your Node.js site&apos;s environment and deploy the <code className="font-mono">/api/zaoflo/*</code> routes</li>
@@ -166,7 +166,7 @@ export default function AddNodeSiteModal({ open, onClose, onAdded }: AddNodeSite
             <button
               type="button"
               onClick={handleClose}
-              className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             >
               Cancel
             </button>
@@ -184,43 +184,43 @@ export default function AddNodeSiteModal({ open, onClose, onAdded }: AddNodeSite
       {step === 'created' && site && (
         <div className="space-y-4">
           {testError && (
-            <div className="flex items-start gap-2.5 p-3.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+            <div className="flex items-start gap-2.5 p-3.5 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl text-sm text-red-700 dark:text-red-400">
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               {testError}
             </div>
           )}
 
           <div className="flex flex-col items-center gap-3 py-2 text-center">
-            <div className="w-12 h-12 bg-brand-50 rounded-full flex items-center justify-center">
+            <div className="w-12 h-12 bg-brand-50 dark:bg-brand-500/10 rounded-full flex items-center justify-center">
               <Server className="w-6 h-6 text-brand-600" />
             </div>
             <div>
-              <p className="font-semibold text-gray-900">{site.name} created</p>
-              <p className="text-sm text-gray-500 mt-1">Add the API key below to your site, then test the connection.</p>
+              <p className="font-semibold text-gray-900 dark:text-white">{site.name} created</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Add the API key below to your site, then test the connection.</p>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               <Key className="w-4 h-4 inline-block mr-1 text-gray-400" />
               API key
             </label>
             <div className="flex items-center gap-2">
-              <code className="flex-1 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 break-all">
+              <code className="flex-1 px-3 py-2.5 bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-mono text-gray-800 dark:text-gray-200 break-all">
                 {site.secret_token}
               </code>
               <button
                 type="button"
                 onClick={copySecret}
                 title="Copy"
-                className="flex-shrink-0 w-10 h-10 flex items-center justify-center border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+                className="flex-shrink-0 w-10 h-10 flex items-center justify-center border border-gray-200 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
                 {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
               </button>
             </div>
           </div>
 
-          <div className="p-3.5 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-700">
+          <div className="p-3.5 bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 rounded-xl text-xs text-blue-700 dark:text-blue-300">
             Add this as <code className="font-mono font-semibold">ZAOFLO_API_KEY</code> in your Node.js site&apos;s
             environment variables, deploy your <code className="font-mono">/api/zaoflo/*</code> routes, then click
             Test connection below.
@@ -230,7 +230,7 @@ export default function AddNodeSiteModal({ open, onClose, onAdded }: AddNodeSite
             <button
               type="button"
               onClick={handleClose}
-              className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             >
               Do this later
             </button>
@@ -247,24 +247,24 @@ export default function AddNodeSiteModal({ open, onClose, onAdded }: AddNodeSite
 
       {step === 'testing' && (
         <div className="flex flex-col items-center gap-4 py-8">
-          <div className="w-12 h-12 bg-brand-50 rounded-full flex items-center justify-center">
+          <div className="w-12 h-12 bg-brand-50 dark:bg-brand-500/10 rounded-full flex items-center justify-center">
             <Loader2 className="w-6 h-6 text-brand-600 animate-spin" />
           </div>
           <div className="text-center">
-            <p className="font-medium text-gray-900">Testing connection...</p>
-            <p className="text-sm text-gray-500 mt-1">Calling your site&apos;s health endpoint</p>
+            <p className="font-medium text-gray-900 dark:text-white">Testing connection...</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Calling your site&apos;s health endpoint</p>
           </div>
         </div>
       )}
 
       {step === 'success' && (
         <div className="flex flex-col items-center gap-4 py-8">
-          <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center">
+          <div className="w-12 h-12 bg-green-50 dark:bg-green-500/10 rounded-full flex items-center justify-center">
             <CheckCircle2 className="w-6 h-6 text-green-600" />
           </div>
           <div className="text-center">
-            <p className="font-semibold text-gray-900">Site connected!</p>
-            <p className="text-sm text-gray-500 mt-1">{name} is ready for publishing.</p>
+            <p className="font-semibold text-gray-900 dark:text-white">Site connected!</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{name} is ready for publishing.</p>
           </div>
           <button
             onClick={handleClose}
