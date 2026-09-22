@@ -1,6 +1,7 @@
 'use client'
 
-import { Receipt } from 'lucide-react'
+import { useState } from 'react'
+import { Receipt, ChevronDown } from 'lucide-react'
 import { money, tokens } from '@/lib/format'
 import type { UsageRecord } from '@/lib/ai-cost'
 
@@ -26,6 +27,8 @@ interface Props {
  * silently register as free.
  */
 export default function CostReceipt({ records }: Props) {
+  const [expanded, setExpanded] = useState(false)
+
   if (records.length === 0) return null
 
   const priced = records.filter((r) => r.cost_usd !== null && r.cost_usd !== undefined)
@@ -34,12 +37,24 @@ export default function CostReceipt({ records }: Props) {
 
   return (
     <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 p-4">
-      <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-3">
-        <Receipt className="w-4 h-4 text-gray-500" />
-        Cost receipt
-      </h3>
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between text-left"
+        aria-expanded={expanded}
+      >
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+          <Receipt className="w-4 h-4 text-gray-500" />
+          Flow
+        </h3>
+        <ChevronDown
+          className={`w-4 h-4 text-gray-500 transition-transform ${expanded ? 'rotate-180' : ''}`}
+        />
+      </button>
 
-      <ul className="space-y-1.5">
+      {expanded && (
+      <>
+      <ul className="space-y-1.5 mt-3">
         {records.map((r) => (
           <li key={r.id} className="grid grid-cols-[auto,1fr,auto] gap-x-3 items-baseline text-xs">
             <span className="font-medium text-gray-700 dark:text-gray-300 min-w-[6rem]">
@@ -75,6 +90,8 @@ export default function CostReceipt({ records }: Props) {
         <p className="mt-2 text-[11px] text-gray-400">
           {missingPrice} {missingPrice === 1 ? 'call has' : 'calls have'} no catalogue price — not counted in the total.
         </p>
+      )}
+      </>
       )}
     </div>
   )
