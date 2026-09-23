@@ -11,7 +11,7 @@ export interface Site {
   user_id: string
   name: string
   url: string
-  site_type: 'wordpress' | 'nodejs' | 'other'
+  site_type: 'wordpress' | 'nodejs' | 'other' | 'static'
   wp_username?: string
   wp_app_password?: string
   /** WordPress users available to attribute posts to, cached from the site's user list. */
@@ -19,6 +19,16 @@ export interface Site {
   /** Author every publish uses, independent of which WP account authorized the connection. */
   wp_default_author_id?: number | null
   node_api_url?: string
+  /** Static site: "owner/repo" that receives commits to the articles JSON. */
+  github_repo?: string
+  /** Branch the deploy pipeline watches — usually 'main'. */
+  github_branch?: string
+  /** Fine-grained PAT with contents:write on the repo. Server-side only. */
+  github_token?: string
+  /** Path inside the repo to the articles JSON file. */
+  github_content_path?: string
+  /** Language bucket ('en'/'es'/…) that new articles land in by default. */
+  github_default_language?: string
   secret_token: string
   status: 'connected' | 'disconnected' | 'error'
   plugin_installed: boolean
@@ -57,6 +67,8 @@ export interface Article {
   wp_post_url?: string
   node_post_id?: string
   node_post_url?: string
+  static_post_slug?: string
+  static_post_url?: string
   ai_model?: string
   word_count?: number
   wp_category_id?: number
@@ -196,6 +208,8 @@ export interface PublishLog {
   wp_post_url?: string
   node_post_id?: string
   node_post_url?: string
+  static_post_slug?: string
+  static_post_url?: string
   created_at: string
   articles?: Article
   sites?: Site

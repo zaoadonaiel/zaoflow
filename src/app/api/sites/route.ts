@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { testWordPressConnection, getAuthors } from '@/lib/wordpress'
 import { testNodeConnection } from '@/lib/nodejs-site'
+import { testStaticConnection } from '@/lib/static-site'
 import { normalizeSiteUrl } from '@/lib/normalize-site-url'
 
 // Postgres error code for `UNIQUE` violation. Surfaces when the app tries to
@@ -109,6 +110,85 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ site, testError: test.success ? undefined : test.error }, { status: 201 })
+  }
+
+  if (body.site_type === 'static') {
+    const {
+      name,
+      url,
+      github_repo,
+      github_token,
+      github_branch,
+      github_content_path,
+      github_default_language,
+    } = body
+
+    if (!name || !url || !github_repo || !github_token) {
+      return NextResponse.json(
+        { error: 'Name, site URL, GitHub repo, and token are required' },
+        { status: 400 },
+      )
+    }
+
+    // Cheap shape check — a real "owner/repo" always contains one slash
+    // and no scheme; catches the common paste-the-whole-URL mistake
+    // before the GitHub API returns a cryptic 404.
+    if (!/^[\w.-]+\/[\w.-]+$/.test(github_repo)) {
+      return NextResponse.json(
+        { error: 'GitHub repo must look like "owner/repo".' },
+        { status: 400 },
+      )
+    }
+
+    let normalizedUrl: string
+    try {
+      normalizedUrl = normalizeSiteUrl(url)
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : 'Invalid URL' }, { status: 400 })
+    }
+
+    // Verify the token can read the repo before persisting it — a bad
+    // token here would otherwise silently fail on the first publish.
+    const test = await testStaticConnection({
+      repo: github_repo,
+      token: github_token,
+      branch: github_branch || 'main',
+      contentPath: github_content_path || 'content/articles.json',
+    })
+
+    const { data: site, error } = await supabase.from('sites').insert({
+      user_id: user.id,
+      name,
+      url: normalizedUrl,
+      site_type: 'static',
+      github_repo,
+      github_token,
+      github_branch: github_branch || 'main',
+      github_content_path: github_content_path || 'content/articles.json',
+      github_default_language: github_default_language || 'en',
+      status: test.success ? 'connected' : 'error',
+      last_sync: test.success ? new Date().toISOString() : null,
+      plugin_installed: false,
+    }).select().single()
+
+    if (error) {
+      if ((error as { code?: string }).code === PG_UNIQUE_VIOLATION) {
+        return NextResponse.json(
+          { error: 'A site with this URL already exists. Open it from the Sites list to edit it.' },
+          { status: 409 },
+        )
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    if (!test.success) {
+      return NextResponse.json(
+        { error: test.error || 'Could not reach the GitHub repo', site },
+        { status: 422 },
+      )
+    }
+
+    return NextResponse.json({ site, fileExists: test.fileExists }, { status: 201 })
   }
 
   const { name, url, wp_username, wp_app_password } = body

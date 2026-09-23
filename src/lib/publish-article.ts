@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { publishPost, uploadMedia, extensionForImageUrl } from './wordpress'
 import { publishPost as publishNodePost } from './nodejs-site'
+import { publishStaticPost } from './static-site'
 import { compressImageFromUrl, type ServerCompressionResult } from './image-compression-server'
 import { storeCompressedToStorage } from './image-compression-storage'
 
@@ -18,6 +19,8 @@ export interface PublishOutcome {
   wpPostUrl?: string
   nodePostId?: string
   nodePostUrl?: string
+  staticPostSlug?: string
+  staticPostUrl?: string
   /** The post went up, but its featured image did not. */
   imageWarning?: string
   /** The post went up, but not in the category asked for. */
@@ -55,10 +58,12 @@ export async function publishArticle({
   if (!article) return { success: false, error: 'Article not found' }
 
   const site = (article as Record<string, unknown>).sites as {
-    site_type?: 'wordpress' | 'nodejs' | 'other'
+    site_type?: 'wordpress' | 'nodejs' | 'other' | 'static'
     url: string; wp_username: string; wp_app_password: string
     wp_default_author_id?: number | null
     node_api_url?: string; secret_token?: string
+    github_repo?: string; github_branch?: string; github_token?: string
+    github_content_path?: string; github_default_language?: string
   } | null
   if (!site) return { success: false, error: 'Site not found' }
 
@@ -148,6 +153,73 @@ export async function publishArticle({
         nodePostId: nodeResult.id,
         nodePostUrl: nodeResult.url,
         imageWarning: nodeImageWarning,
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Publish failed'
+
+      if (logEntry) {
+        await supabase.from('publish_logs').update({
+          status: 'failed',
+          error_message: message,
+        }).eq('id', logEntry.id)
+      }
+
+      return { success: false, error: message }
+    }
+  }
+
+  // Static sites: Zao Flo commits into the repo's articles.json and
+  // the host's CI (Cloudflare Pages / Netlify / Vercel) picks up the
+  // push and rebuilds. No image compression pass here — the featured
+  // image URL is written as-is and served from wherever it already
+  // lives; the static generator can fetch or reference it.
+  if (site.site_type === 'static') {
+    if (!article.slug) {
+      return { success: false, error: 'Static publish needs a slug on the article.' }
+    }
+
+    try {
+      const language = site.github_default_language || 'en'
+      const staticResult = await publishStaticPost({
+        repo: site.github_repo!,
+        token: site.github_token!,
+        branch: site.github_branch || 'main',
+        contentPath: site.github_content_path || 'content/articles.json',
+        language,
+        siteUrl: site.url,
+        entry: {
+          title: article.title,
+          excerpt: article.excerpt || article.meta_description || '',
+          slug: article.slug,
+          published_date: new Date().toISOString(),
+          // Zao Flo stores content as whatever the model produced
+          // (typically HTML for WordPress targets). It is passed
+          // through verbatim; the Python generator on the static
+          // side is what decides how to render it.
+          body: article.content,
+        },
+      })
+
+      await supabase.from('articles').update({
+        status: 'published',
+        published_at: new Date().toISOString(),
+        static_post_slug: staticResult.id,
+        static_post_url: staticResult.url,
+        updated_at: new Date().toISOString(),
+      }).eq('id', articleId)
+
+      if (logEntry) {
+        await supabase.from('publish_logs').update({
+          status: 'success',
+          static_post_slug: staticResult.id,
+          static_post_url: staticResult.url,
+        }).eq('id', logEntry.id)
+      }
+
+      return {
+        success: true,
+        staticPostSlug: staticResult.id,
+        staticPostUrl: staticResult.url,
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Publish failed'

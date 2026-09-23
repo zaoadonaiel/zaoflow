@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Globe, Plus, Trash2, RefreshCw, ExternalLink, CheckCircle2, XCircle, Calendar, BookMarked, Server, KeyRound, RotateCcw } from 'lucide-react'
+import { Globe, Plus, Trash2, RefreshCw, ExternalLink, CheckCircle2, XCircle, Calendar, BookMarked, Server, KeyRound, RotateCcw, FileCode } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import AddSiteModal from '@/components/sites/AddSiteModal'
 import AddNodeSiteModal from '@/components/sites/AddNodeSiteModal'
+import AddStaticSiteModal from '@/components/sites/AddStaticSiteModal'
 import EditCredentialsModal from '@/components/sites/EditCredentialsModal'
 import ReconnectSiteModal from '@/components/sites/ReconnectSiteModal'
 import KnowledgeBaseModal from '@/components/sites/KnowledgeBaseModal'
@@ -19,6 +20,7 @@ export default function SitesPage() {
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [showAddNode, setShowAddNode] = useState(false)
+  const [showAddStatic, setShowAddStatic] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [testingId, setTestingId] = useState<string | null>(null)
   const [editSite, setEditSite] = useState<Site | null>(null)
@@ -172,6 +174,13 @@ export default function SitesPage() {
               <Plus className="w-4 h-4" />
               Add Node.js site
             </button>
+            <button
+              onClick={() => setShowAddStatic(true)}
+              className="flex items-center gap-2 bg-gray-900 dark:bg-gray-700 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add static site
+            </button>
           </div>
         }
       />
@@ -211,6 +220,13 @@ export default function SitesPage() {
                 <Plus className="w-4 h-4" />
                 Node.js site
               </button>
+              <button
+                onClick={() => setShowAddStatic(true)}
+                className="flex items-center gap-2 bg-gray-900 dark:bg-gray-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Static site
+              </button>
             </div>
           </div>
         </div>
@@ -222,6 +238,8 @@ export default function SitesPage() {
                 <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
                   {site.site_type === 'nodejs' ? (
                     <Server className="w-5 h-5 text-blue-600" />
+                  ) : site.site_type === 'static' ? (
+                    <FileCode className="w-5 h-5 text-blue-600" />
                   ) : (
                     <Globe className="w-5 h-5 text-blue-600" />
                   )}
@@ -239,6 +257,8 @@ export default function SitesPage() {
                     variant={
                       site.site_type === 'nodejs'
                         ? 'purple'
+                        : site.site_type === 'static'
+                        ? 'warning'
                         : site.site_type === 'other'
                         ? 'info'
                         : 'default'
@@ -246,6 +266,8 @@ export default function SitesPage() {
                   >
                     {site.site_type === 'nodejs'
                       ? 'Node.js'
+                      : site.site_type === 'static'
+                      ? 'Static'
                       : site.site_type === 'other'
                       ? 'Analytics only'
                       : 'WordPress'}
@@ -405,6 +427,15 @@ export default function SitesPage() {
         open={showAddNode}
         onClose={() => setShowAddNode(false)}
         onAdded={() => fetchSites()}
+      />
+
+      <AddStaticSiteModal
+        open={showAddStatic}
+        onClose={() => setShowAddStatic(false)}
+        onAdded={() => {
+          setShowAddStatic(false)
+          fetchSites()
+        }}
       />
 
       <EditCredentialsModal
