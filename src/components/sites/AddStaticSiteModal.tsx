@@ -9,6 +9,7 @@ import {
   FileJson,
   Languages,
   GitBranch,
+  Tag,
   CheckCircle2,
   AlertCircle,
   Loader2,
@@ -33,6 +34,7 @@ export default function AddStaticSiteModal({ open, onClose, onAdded }: AddStatic
   const [branch, setBranch] = useState('main')
   const [contentPath, setContentPath] = useState('content/articles.json')
   const [language, setLanguage] = useState('en')
+  const [category, setCategory] = useState('Articles')
   const [loading, setLoading] = useState(false)
   const [formError, setFormError] = useState('')
 
@@ -45,6 +47,7 @@ export default function AddStaticSiteModal({ open, onClose, onAdded }: AddStatic
     setBranch('main')
     setContentPath('content/articles.json')
     setLanguage('en')
+    setCategory('Articles')
     setLoading(false)
     setFormError('')
   }
@@ -93,6 +96,7 @@ export default function AddStaticSiteModal({ open, onClose, onAdded }: AddStatic
           github_branch: branch.trim() || 'main',
           github_content_path: contentPath.trim() || 'content/articles.json',
           github_default_language: language.trim() || 'en',
+          static_default_category: category.trim() || null,
         }),
       })
 
@@ -269,6 +273,23 @@ export default function AddStaticSiteModal({ open, onClose, onAdded }: AddStatic
               placeholder="content/articles.json"
               className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent font-mono"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              <Tag className="w-4 h-4 inline-block mr-1 text-gray-400" />
+              Default category
+            </label>
+            <input
+              type="text"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="Articles"
+              className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+            />
+            <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+              Written into every article&apos;s JSON entry as <code className="font-mono">category</code>. Leave blank to omit.
+            </p>
           </div>
 
           <div className="p-3.5 bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 rounded-xl text-xs text-blue-700 dark:text-blue-300 space-y-1.5">

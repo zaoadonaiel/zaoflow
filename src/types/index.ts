@@ -29,6 +29,8 @@ export interface Site {
   github_content_path?: string
   /** Language bucket ('en'/'es'/…) that new articles land in by default. */
   github_default_language?: string
+  /** Label written into every article's JSON entry — presentational only. */
+  static_default_category?: string
   secret_token: string
   status: 'connected' | 'disconnected' | 'error'
   plugin_installed: boolean

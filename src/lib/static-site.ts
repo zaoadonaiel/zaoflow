@@ -17,6 +17,7 @@ export interface StaticArticleEntry {
   slug: string
   published_date: string
   body: string
+  category?: string
 }
 
 export interface StaticPostResult {

@@ -121,6 +121,7 @@ export async function POST(req: NextRequest) {
       github_branch,
       github_content_path,
       github_default_language,
+      static_default_category,
     } = body
 
     if (!name || !url || !github_repo || !github_token) {
@@ -166,6 +167,7 @@ export async function POST(req: NextRequest) {
       github_branch: github_branch || 'main',
       github_content_path: github_content_path || 'content/articles.json',
       github_default_language: github_default_language || 'en',
+      static_default_category: static_default_category || null,
       status: test.success ? 'connected' : 'error',
       last_sync: test.success ? new Date().toISOString() : null,
       plugin_installed: false,

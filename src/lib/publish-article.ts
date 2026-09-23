@@ -64,6 +64,7 @@ export async function publishArticle({
     node_api_url?: string; secret_token?: string
     github_repo?: string; github_branch?: string; github_token?: string
     github_content_path?: string; github_default_language?: string
+    static_default_category?: string | null
   } | null
   if (!site) return { success: false, error: 'Site not found' }
 
@@ -197,6 +198,7 @@ export async function publishArticle({
           // through verbatim; the Python generator on the static
           // side is what decides how to render it.
           body: article.content,
+          category: site.static_default_category || undefined,
         },
       })
 
