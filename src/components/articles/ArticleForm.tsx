@@ -1052,7 +1052,7 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
             </label>
           )}
 
-          {!isNodeSite && (
+          {selectedSite?.site_type === 'wordpress' && (
             <button
               type="button"
               onClick={() => setShowCategoryPicker(true)}

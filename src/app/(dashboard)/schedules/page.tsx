@@ -849,27 +849,29 @@ export default function SchedulesPage() {
                 onChange={(v) => setForm({ ...form, ai_model: v })}
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
-                <FolderOpen className="w-3.5 h-3.5 text-gray-400" />Category
-              </label>
-              {loadingCats ? (
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-400">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />Loading...
-                </div>
-              ) : (
-                <select
-                  value={form.wp_category_id}
-                  onChange={(e) => setForm({ ...form, wp_category_id: e.target.value ? Number(e.target.value) : '' })}
-                  className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-                  <option value="">Uncategorized</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              )}
-            </div>
+            {sites.find((s) => s.id === form.site_id)?.site_type === 'wordpress' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
+                  <FolderOpen className="w-3.5 h-3.5 text-gray-400" />Category
+                </label>
+                {loadingCats ? (
+                  <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-400">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />Loading...
+                  </div>
+                ) : (
+                  <select
+                    value={form.wp_category_id}
+                    onChange={(e) => setForm({ ...form, wp_category_id: e.target.value ? Number(e.target.value) : '' })}
+                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    <option value="">Uncategorized</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
           </div>
 
           <div>
