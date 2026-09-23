@@ -241,17 +241,19 @@ export default function AddStaticSiteModal({ open, onClose, onAdded }: AddStatic
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              <label htmlFor="static-site-language" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 <Languages className="w-4 h-4 inline-block mr-1 text-gray-400" />
-                Default language
+                Content language
               </label>
-              <input
-                type="text"
+              <select
+                id="static-site-language"
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
-                placeholder="en"
-                className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent font-mono"
-              />
+                className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+              >
+                <option value="en">English</option>
+                <option value="es">Español</option>
+              </select>
             </div>
           </div>
 
