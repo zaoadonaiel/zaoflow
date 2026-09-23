@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { generateTopic, generateArticle } from '@/lib/openrouter'
 import { publishPost } from '@/lib/wordpress'
+import { publishStaticPost } from '@/lib/static-site'
 import { calcNextRunMulti } from '@/lib/schedule-utils'
 import { resolveLengthTarget } from '@/lib/article-length'
 
@@ -27,10 +28,14 @@ export async function POST(
 
   const site = schedule.sites as {
     id: string; url: string; wp_username: string; wp_app_password: string; status: string
+    site_type?: 'wordpress' | 'nodejs' | 'other' | 'static'
+    github_repo?: string; github_branch?: string; github_token?: string
+    github_content_path?: string; github_default_language?: string
+    static_default_category?: string | null
   }
 
   if (!site || site.status !== 'connected') {
-    return NextResponse.json({ error: 'WordPress site is not connected' }, { status: 422 })
+    return NextResponse.json({ error: 'Site is not connected' }, { status: 422 })
   }
 
   // Load API key
@@ -96,7 +101,13 @@ export async function POST(
       length,
     })
 
-    // 3. Save article to DB
+    // 3. Save article to DB. Static-site schedules need a slug on the row
+    // since the JSON entry is keyed by it — the AI's title is the only
+    // source we have here, so we derive one from that.
+    const derivedSlug = site.site_type === 'static'
+      ? title.toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 80)
+      : undefined
+
     const { data: article, error: articleError } = await supabase
       .from('articles')
       .insert({
@@ -111,6 +122,7 @@ export async function POST(
         word_count: wordCount,
         ai_model: model,
         wp_category_id: schedule.wp_category_id || null,
+        slug: derivedSlug,
         status: 'publishing',
         trigger_job_id: 'manual-run',
       })
@@ -119,7 +131,63 @@ export async function POST(
 
     if (articleError) throw new Error(`DB error: ${articleError.message}`)
 
-    // 4. Publish to WordPress
+    // 4a. Static-site branch — commit to the repo instead of WordPress.
+    if (site.site_type === 'static') {
+      const staticResult = await publishStaticPost({
+        repo: site.github_repo!,
+        token: site.github_token!,
+        branch: site.github_branch || 'main',
+        contentPath: site.github_content_path || 'content/articles.json',
+        language: site.github_default_language || 'en',
+        siteUrl: site.url,
+        entry: {
+          title,
+          excerpt: excerpt || metaDescription || '',
+          slug: article.slug,
+          published_date: new Date().toISOString(),
+          body: content,
+          category: site.static_default_category || undefined,
+        },
+      })
+
+      await supabase.from('articles').update({
+        status: 'published',
+        published_at: new Date().toISOString(),
+        static_post_slug: staticResult.id,
+        static_post_url: staticResult.url,
+        updated_at: new Date().toISOString(),
+      }).eq('id', article.id)
+
+      await supabase.from('publish_logs').insert({
+        article_id: article.id,
+        site_id: schedule.site_id,
+        user_id: user.id,
+        status: 'success',
+        static_post_slug: staticResult.id,
+        static_post_url: staticResult.url,
+      })
+
+      const times: string[] = schedule.times_of_day?.length
+        ? schedule.times_of_day
+        : [schedule.time_of_day || '09:00']
+      const nextRun = calcNextRunMulti(schedule.frequency, times)
+
+      await supabase.from('schedules').update({
+        articles_generated: (schedule.articles_generated || 0) + 1,
+        last_run: new Date().toISOString(),
+        next_run: nextRun.toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq('id', schedule.id)
+
+      return NextResponse.json({
+        success: true,
+        title,
+        articleId: article.id,
+        url: staticResult.url,
+      })
+    }
+
+    // 4b. WordPress branch (default).
     const wpResult = await publishPost({
       siteUrl: site.url,
       username: site.wp_username,

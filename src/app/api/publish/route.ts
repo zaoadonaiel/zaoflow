@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { publishPost, uploadMedia } from '@/lib/wordpress'
 import { publishPost as publishNodePost } from '@/lib/nodejs-site'
+import { publishStaticPost } from '@/lib/static-site'
 import { compressImageFromUrl, type ServerCompressionResult } from '@/lib/image-compression-server'
 import { storeCompressedToStorage } from '@/lib/image-compression-storage'
 
@@ -31,12 +32,18 @@ export async function POST(req: NextRequest) {
   if (!article) return NextResponse.json({ error: 'Article not found' }, { status: 404 })
 
   const site = (article as Record<string, unknown>).sites as {
-    site_type?: 'wordpress' | 'nodejs'
+    site_type?: 'wordpress' | 'nodejs' | 'other' | 'static'
     url: string
     wp_username: string
     wp_app_password: string
     node_api_url: string
     secret_token: string
+    github_repo?: string
+    github_branch?: string
+    github_token?: string
+    github_content_path?: string
+    github_default_language?: string
+    static_default_category?: string | null
   }
   if (!site) return NextResponse.json({ error: 'Site not found' }, { status: 404 })
 
@@ -125,6 +132,75 @@ export async function POST(req: NextRequest) {
         id: nodeResult.id,
         url: nodeResult.url,
         imageWarning: nodeImageWarning,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Publish failed'
+
+      await supabase.from('articles').update({
+        status: 'failed',
+        updated_at: new Date().toISOString(),
+      }).eq('id', articleId)
+
+      if (logEntry) {
+        await supabase.from('publish_logs').update({
+          status: 'failed',
+          error_message: msg,
+        }).eq('id', logEntry.id)
+      }
+
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
+  }
+
+  // Static sites: commit the article into the repo's articles.json and
+  // let the host's CI (Cloudflare Pages / Netlify / Vercel) rebuild.
+  // `scheduledAt` isn't honoured — static sites have no equivalent of a
+  // WordPress future-post; the article editor doesn't offer scheduling
+  // for them either.
+  if (site.site_type === 'static') {
+    if (!article.slug) {
+      return NextResponse.json({ error: 'Static publish needs a slug on the article.' }, { status: 400 })
+    }
+
+    try {
+      const language = site.github_default_language || 'en'
+      const staticResult = await publishStaticPost({
+        repo: site.github_repo!,
+        token: site.github_token!,
+        branch: site.github_branch || 'main',
+        contentPath: site.github_content_path || 'content/articles.json',
+        language,
+        siteUrl: site.url,
+        entry: {
+          title: article.title,
+          excerpt: article.excerpt || article.meta_description || '',
+          slug: article.slug,
+          published_date: publishAt || new Date().toISOString(),
+          body: article.content,
+          category: site.static_default_category || undefined,
+        },
+      })
+
+      await supabase.from('articles').update({
+        status: 'published',
+        published_at: publishAt || new Date().toISOString(),
+        static_post_slug: staticResult.id,
+        static_post_url: staticResult.url,
+        updated_at: new Date().toISOString(),
+      }).eq('id', articleId)
+
+      if (logEntry) {
+        await supabase.from('publish_logs').update({
+          status: 'success',
+          static_post_slug: staticResult.id,
+          static_post_url: staticResult.url,
+        }).eq('id', logEntry.id)
+      }
+
+      return NextResponse.json({
+        success: true,
+        id: staticResult.id,
+        url: staticResult.url,
       })
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Publish failed'

@@ -2,6 +2,7 @@ import { task, logger } from '@trigger.dev/sdk/v3'
 import { generateArticle } from '@/lib/openrouter'
 import { publishPost } from '@/lib/wordpress'
 import { publishPost as publishNodePost } from '@/lib/nodejs-site'
+import { publishStaticPost } from '@/lib/static-site'
 import { resolveLengthTarget } from '@/lib/article-length'
 
 interface GenerateAndPublishPayload {
@@ -11,12 +12,18 @@ interface GenerateAndPublishPayload {
   topicPrompt: string
   aiModel: string
   apiKey: string
-  siteType?: 'wordpress' | 'nodejs'
+  siteType?: 'wordpress' | 'nodejs' | 'other' | 'static'
   siteUrl: string
   wpUsername: string
   wpAppPassword: string
   nodeApiUrl?: string
   secretToken: string
+  githubRepo?: string
+  githubBranch?: string
+  githubToken?: string
+  githubContentPath?: string
+  githubDefaultLanguage?: string
+  staticDefaultCategory?: string | null
   wpCategoryId?: number
   publishImmediately?: boolean
   /** Optional link to the article_instructions row that scopes length/tone/structure. */
@@ -63,6 +70,8 @@ export const generateAndPublishTask = task({
     const {
       scheduleId, siteId, userId, topicPrompt, aiModel, apiKey,
       siteType = 'wordpress', siteUrl, wpUsername, wpAppPassword, nodeApiUrl, secretToken,
+      githubRepo, githubBranch, githubToken, githubContentPath, githubDefaultLanguage,
+      staticDefaultCategory,
       wpCategoryId, publishImmediately = true, instructionId,
     } = payload
 
@@ -121,7 +130,13 @@ export const generateAndPublishTask = task({
       })
       logger.log('Article generated', { wordCount, lengthRetried, lengthOutOfRange, target: length })
 
-      // Step 3: Save as article in DB
+      // Step 3: Save as article in DB. Static publishes are keyed by
+      // slug in the target JSON, so we derive one from the AI title here
+      // — the row otherwise has none.
+      const derivedSlug = siteType === 'static'
+        ? title.toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 80)
+        : undefined
+
       const { data: article, error: articleError } = await supabase.from('articles').insert({
         user_id: userId,
         site_id: siteId,
@@ -133,6 +148,7 @@ export const generateAndPublishTask = task({
         word_count: wordCount,
         ai_model: aiModel,
         wp_category_id: wpCategoryId || null,
+        slug: derivedSlug,
         status: publishImmediately ? 'publishing' : 'draft',
         trigger_job_id: 'scheduled',
       }).select().single()
@@ -193,6 +209,58 @@ export const generateAndPublishTask = task({
           articleId: article.id,
           nodePostId: nodeResult.id,
           url: nodeResult.url,
+          status: 'published',
+        }
+      }
+
+      if (siteType === 'static') {
+        logger.log('Publishing to static site (GitHub push)...')
+        const staticResult = await publishStaticPost({
+          repo: githubRepo!,
+          token: githubToken!,
+          branch: githubBranch || 'main',
+          contentPath: githubContentPath || 'content/articles.json',
+          language: githubDefaultLanguage || 'en',
+          siteUrl,
+          entry: {
+            title,
+            excerpt: excerpt || metaDescription || '',
+            slug: article.slug,
+            published_date: new Date().toISOString(),
+            body: content,
+            category: staticDefaultCategory || undefined,
+          },
+        })
+        logger.log('Published to static site', { slug: staticResult.id, url: staticResult.url })
+
+        await supabase.from('articles').update({
+          status: 'published',
+          published_at: new Date().toISOString(),
+          static_post_slug: staticResult.id,
+          static_post_url: staticResult.url,
+          updated_at: new Date().toISOString(),
+        }).eq('id', article.id)
+
+        await supabase.from('publish_logs').insert({
+          article_id: article.id,
+          site_id: siteId,
+          user_id: userId,
+          status: 'success',
+          static_post_slug: staticResult.id,
+          static_post_url: staticResult.url,
+        })
+
+        await supabase.from('schedules').update({
+          articles_generated: supabase.rpc('increment', { x: 1 }),
+          last_run: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }).eq('id', scheduleId)
+
+        return {
+          success: true,
+          articleId: article.id,
+          staticPostSlug: staticResult.id,
+          url: staticResult.url,
           status: 'published',
         }
       }
