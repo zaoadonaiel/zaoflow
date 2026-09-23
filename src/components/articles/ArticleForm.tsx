@@ -797,11 +797,10 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
         })
         const pubData = await pubRes.json()
         if (!pubRes.ok) throw new Error(pubData.error || 'Publish failed')
-        const target = isNodeSite ? 'Node.js site' : 'WordPress'
         toast.success(
           backdateIso
-            ? `Article published to ${target} — dated ${new Date(backdateIso).toLocaleDateString()}`
-            : `Article published to ${target}!`,
+            ? `Article published to website — dated ${new Date(backdateIso).toLocaleDateString()}`
+            : 'Article published to website!',
         )
         if (pubData.imageWarning) {
           toast.error(`Featured image: ${pubData.imageWarning}`, { duration: 8000 })
