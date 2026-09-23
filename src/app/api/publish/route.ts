@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { publishPost, uploadMedia } from '@/lib/wordpress'
 import { publishPost as publishNodePost } from '@/lib/nodejs-site'
 import { publishStaticPost } from '@/lib/static-site'
+import { translateArticle, type LanguageCode } from '@/lib/translate'
 import { compressImageFromUrl, type ServerCompressionResult } from '@/lib/image-compression-server'
 import { storeCompressedToStorage } from '@/lib/image-compression-storage'
 
@@ -11,13 +12,16 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { articleId, scheduledAt, publishAt } = await req.json() as {
+  const { articleId, scheduledAt, publishAt, publishBothLanguages } = await req.json() as {
     articleId?: string
     /** Future ISO — creates a WP "future" post; WP publishes it at the slot. */
     scheduledAt?: string
     /** Historical ISO — publishes immediately but stamps the WP post's date
      *  with this value. Ignored when `scheduledAt` is set. */
     publishAt?: string
+    /** Static sites only: also translate + commit into the other of en/es
+     *  in the same push. Ignored for WP/Node.js. */
+    publishBothLanguages?: boolean
   }
   if (!articleId) return NextResponse.json({ error: 'articleId is required' }, { status: 400 })
 
@@ -163,7 +167,76 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const language = site.github_default_language || 'en'
+      const language = (site.github_default_language || 'en') as LanguageCode
+      const publishedDate = publishAt || new Date().toISOString()
+
+      const primaryEntry = {
+        title: article.title,
+        excerpt: article.excerpt || article.meta_description || '',
+        slug: article.slug,
+        published_date: publishedDate,
+        body: article.content,
+        category: site.static_default_category || undefined,
+      }
+
+      // Second-language pass. Only supports en↔es today — a site
+      // configured with any other default language falls back to a
+      // single-language publish and surfaces a clear error, since
+      // translating into an arbitrary language wasn't asked for.
+      let extraLanguages: { language: string; entry: typeof primaryEntry }[] | undefined
+      if (publishBothLanguages) {
+        if (language !== 'en' && language !== 'es') {
+          return NextResponse.json(
+            { error: 'Publishing both languages is only supported for sites whose default language is English or Spanish.' },
+            { status: 400 },
+          )
+        }
+        const targetLang: LanguageCode = language === 'en' ? 'es' : 'en'
+
+        const { data: apiSettings } = await supabase
+          .from('api_settings')
+          .select('openrouter_api_key, default_model')
+          .eq('user_id', user.id)
+          .single()
+        if (!apiSettings?.openrouter_api_key) {
+          return NextResponse.json(
+            { error: 'OpenRouter API key is missing — set one in Settings before publishing in both languages.' },
+            { status: 422 },
+          )
+        }
+
+        // Use whatever model the article was generated with when
+        // possible; the default_model is a decent fallback but the
+        // article's own model captures the user's per-piece choice.
+        const translationModel = (article.ai_model as string | undefined)
+          || apiSettings.default_model
+          || 'anthropic/claude-haiku-4.5'
+
+        const translated = await translateArticle({
+          apiKey: apiSettings.openrouter_api_key,
+          model: translationModel,
+          from: language,
+          to: targetLang,
+          article: {
+            title: article.title,
+            excerpt: article.excerpt || article.meta_description || '',
+            body: article.content,
+          },
+        })
+
+        extraLanguages = [{
+          language: targetLang,
+          entry: {
+            title: translated.title,
+            excerpt: translated.excerpt,
+            slug: translated.slug,
+            published_date: publishedDate,
+            body: translated.body,
+            category: site.static_default_category || undefined,
+          },
+        }]
+      }
+
       const staticResult = await publishStaticPost({
         repo: site.github_repo!,
         token: site.github_token!,
@@ -171,14 +244,8 @@ export async function POST(req: NextRequest) {
         contentPath: site.github_content_path || 'content/articles.json',
         language,
         siteUrl: site.url,
-        entry: {
-          title: article.title,
-          excerpt: article.excerpt || article.meta_description || '',
-          slug: article.slug,
-          published_date: publishAt || new Date().toISOString(),
-          body: article.content,
-          category: site.static_default_category || undefined,
-        },
+        entry: primaryEntry,
+        extraLanguages,
       })
 
       await supabase.from('articles').update({

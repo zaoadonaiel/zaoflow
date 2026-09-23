@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   Sparkles, Save, Send, Calendar, Loader2, Globe, Search, FolderOpen,
   ExternalLink, Check, CheckCircle2, ChevronDown, ChevronUp, AlertCircle, Plus, ImageUp, Zap,
-  ClipboardList, BookMarked, Link2, History,
+  ClipboardList, BookMarked, Link2, History, Languages,
 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import ConfirmSiteModal from '@/components/ui/ConfirmSiteModal'
@@ -176,6 +176,10 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
   const [scheduledAt, setScheduledAt] = useState('')
   const [scheduledTz, setScheduledTz] = useState('PST')
   const [showScheduler, setShowScheduler] = useState(false)
+  // Static sites only: also translate + commit the other of en/es in the
+  // same push. Off by default so a plain publish stays cheap; a click on
+  // the toggle opts in per-publish (not persisted anywhere).
+  const [publishBoth, setPublishBoth] = useState(false)
   // Backdate flow — publishing right now, but stamping WordPress with the
   // chosen date. `backdateAt` is a datetime-local string (no timezone); it's
   // converted to ISO when handed to the API.
@@ -793,14 +797,18 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
           body: JSON.stringify({
             articleId: savedId,
             publishAt: backdateIso || undefined,
+            publishBothLanguages: selectedSite?.site_type === 'static' && publishBoth ? true : undefined,
           }),
         })
         const pubData = await pubRes.json()
         if (!pubRes.ok) throw new Error(pubData.error || 'Publish failed')
+        const bothLangs = selectedSite?.site_type === 'static' && publishBoth
         toast.success(
           backdateIso
             ? `Article published to website — dated ${new Date(backdateIso).toLocaleDateString()}`
-            : 'Article published to website!',
+            : bothLangs
+              ? 'Article published to website in both languages!'
+              : 'Article published to website!',
         )
         if (pubData.imageWarning) {
           toast.error(`Featured image: ${pubData.imageWarning}`, { duration: 8000 })
@@ -1115,6 +1123,18 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
             <History className="w-3.5 h-3.5" />
             Backdate…
           </button>
+
+          {selectedSite?.site_type === 'static' && (
+            <button
+              type="button"
+              onClick={() => setPublishBoth((v) => !v)}
+              className={`${PILL_BASE} ${publishBoth ? PILL_ACTION_ACTIVE : PILL_ACTION}`}
+              title="Also translate and commit the article in the other language (en ↔ es) on this publish"
+            >
+              <Languages className="w-3.5 h-3.5" />
+              {publishBoth ? 'Both languages: on' : 'Both languages'}
+            </button>
+          )}
 
           <button
             onClick={() => { setPublishMode('now'); handleSave('now') }}
@@ -1613,6 +1633,18 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
           <History className="w-3.5 h-3.5" />
           Backdate…
         </button>
+
+        {selectedSite?.site_type === 'static' && (
+          <button
+            type="button"
+            onClick={() => setPublishBoth((v) => !v)}
+            className={`w-full sm:w-auto justify-center ${PILL_BASE} ${publishBoth ? PILL_ACTION_ACTIVE : PILL_ACTION}`}
+            title="Also translate and commit the article in the other language (en ↔ es) on this publish"
+          >
+            <Languages className="w-3.5 h-3.5" />
+            {publishBoth ? 'Both languages: on' : 'Both languages'}
+          </button>
+        )}
 
         <button
           onClick={() => { setPublishMode('now'); handleSave('now') }}

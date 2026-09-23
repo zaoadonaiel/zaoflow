@@ -157,6 +157,7 @@ export async function publishStaticPost({
   language,
   siteUrl,
   entry,
+  extraLanguages,
 }: {
   repo: string
   token: string
@@ -165,13 +166,23 @@ export async function publishStaticPost({
   language: string
   siteUrl: string
   entry: StaticArticleEntry
+  /** Additional language buckets to write in the same commit — used by
+   *  "publish in both languages" so English + Spanish land in one push. */
+  extraLanguages?: Array<{ language: string; entry: StaticArticleEntry }>
 }): Promise<StaticPostResult> {
   const { parsed, sha } = await fetchArticlesJson({ repo, token, branch, contentPath })
-  const merged = upsertEntry(parsed, language, entry)
+  let merged = upsertEntry(parsed, language, entry)
+  for (const extra of extraLanguages ?? []) {
+    merged = upsertEntry(merged, extra.language, extra.entry)
+  }
   const nextContent = JSON.stringify(merged, null, 2) + '\n'
 
+  const commitMessage = extraLanguages?.length
+    ? `zaoflo: publish "${entry.title}" (${[language, ...extraLanguages.map((e) => e.language)].join(', ')})`
+    : `zaoflo: publish "${entry.title}" (${language})`
+
   const body: Record<string, unknown> = {
-    message: `zaoflo: publish "${entry.title}" (${language})`,
+    message: commitMessage,
     content: encodeBase64(nextContent),
     branch,
   }
