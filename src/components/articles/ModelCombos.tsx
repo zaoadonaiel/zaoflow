@@ -35,6 +35,17 @@ interface Props {
    *  hint on the save row so the user can see the price of what they're about
    *  to save. Null when no receipt yet. */
   lastGenerationCost?: number | null
+  /**
+   * `save-and-load` (default): the Article Writer's usage — a save row on top
+   * plus a "Load into form" button per combo.
+   * `pick-only`: the Autopilot panel's usage — no save row, and each combo
+   * offers "Use for Autopilot". `selectedId` highlights the current pick.
+   */
+  mode?: 'save-and-load' | 'pick-only'
+  /** In `pick-only`, which combo is currently active. Highlighted in the list. */
+  selectedId?: string | null
+  /** Overrides the per-row action label. Ignored when a combo is expired. */
+  loadLabel?: string
 }
 
 const SLOT_LABEL: Record<ComboSlot, string> = {
@@ -54,7 +65,14 @@ const IMAGE_SLOT: ComboSlot = 'image_model'
  * been dropped by OpenRouter shows a greyed chip with a swap affordance,
  * rather than silently letting the next generation fail on that step.
  */
-export default function ModelCombos({ currentModels, onLoad, lastGenerationCost = null }: Props) {
+export default function ModelCombos({
+  currentModels,
+  onLoad,
+  lastGenerationCost = null,
+  mode = 'save-and-load',
+  selectedId = null,
+  loadLabel,
+}: Props) {
   const [combos, setCombos] = useState<ModelCombo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -156,7 +174,9 @@ export default function ModelCombos({ currentModels, onLoad, lastGenerationCost 
         Model combos
       </h3>
 
-      {/* Save row — the current four picks, ready to name and stash. */}
+      {/* Save row — only in save-and-load mode. Autopilot's picker skips it
+          because there is nothing to save from the panel's context. */}
+      {mode === 'save-and-load' && (
       <div className="rounded-lg bg-gray-50 dark:bg-gray-900/40 p-3 mb-3">
         {lastGenerationCost !== null && (
           <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-2">
@@ -190,6 +210,7 @@ export default function ModelCombos({ currentModels, onLoad, lastGenerationCost 
           </p>
         )}
       </div>
+      )}
 
       {/* Saved combos list — click a combo card to load it into the form. */}
       {loading ? (
@@ -215,6 +236,8 @@ export default function ModelCombos({ currentModels, onLoad, lastGenerationCost 
               onDelete={() => handleDelete(combo)}
               onSwap={(slot) => setSwap({ combo, slot })}
               deleting={deletingId === combo.id}
+              selected={selectedId === combo.id}
+              loadLabel={loadLabel}
             />
           ))}
         </ul>
@@ -255,9 +278,13 @@ interface ComboRowProps {
   onDelete: () => void
   onSwap: (slot: ComboSlot) => void
   deleting: boolean
+  /** Autopilot's current pick — pops a brand border so it stands apart. */
+  selected?: boolean
+  /** Overrides the row-action label ("Load into form" -> "Use for Autopilot"). */
+  loadLabel?: string
 }
 
-function ComboRow({ combo, discontinued, onLoad, onDelete, onSwap, deleting }: ComboRowProps) {
+function ComboRow({ combo, discontinued, onLoad, onDelete, onSwap, deleting, selected = false, loadLabel }: ComboRowProps) {
   const slots: ComboSlot[] = ['idea_model', 'article_model', 'seo_model', 'image_model']
 
   // Any expired model in the combo blocks a straight load — the user has to
@@ -268,7 +295,13 @@ function ComboRow({ combo, discontinued, onLoad, onDelete, onSwap, deleting }: C
   )
 
   return (
-    <li className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/30 p-3">
+    <li
+      className={`rounded-lg border p-3 transition-colors ${
+        selected
+          ? 'border-brand-400 dark:border-brand-500 bg-brand-50/60 dark:bg-brand-900/20 ring-1 ring-brand-200 dark:ring-brand-800'
+          : 'border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/30'
+      }`}
+    >
       <div className="flex items-start justify-between gap-2 mb-2">
         <button
           type="button"
@@ -327,9 +360,10 @@ function ComboRow({ combo, discontinued, onLoad, onDelete, onSwap, deleting }: C
         <button
           type="button"
           onClick={onLoad}
-          className="mt-2 w-full py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 hover:border-brand-300 dark:hover:border-brand-700 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
+          disabled={selected}
+          className="mt-2 w-full py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 hover:border-brand-300 dark:hover:border-brand-700 hover:text-brand-600 dark:hover:text-brand-400 transition-colors disabled:opacity-60 disabled:cursor-default disabled:hover:border-gray-200 dark:disabled:hover:border-gray-700 disabled:hover:text-gray-600 dark:disabled:hover:text-gray-300 disabled:hover:bg-transparent"
         >
-          Load into form
+          {selected ? 'Currently in use' : (loadLabel || 'Load into form')}
         </button>
       )}
     </li>
