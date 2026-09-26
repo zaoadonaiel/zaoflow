@@ -270,7 +270,7 @@ export default function PageRemover() {
   }, [items, query, countyFilter, counties])
 
   // Build the dropdown from the currently-loaded items so counts always
-  // reflect what's on screen. Sorted by size desc with "Unknown" and
+  // reflect what's on screen. Alphabetical by label with "Unknown" and
   // "Unclassified" pinned last so real counties don't get pushed off.
   const countyOptions = useMemo(() => {
     const counts = new Map<string, { count: number; sample: CountyAssignment | undefined }>()
@@ -288,7 +288,6 @@ export default function PageRemover() {
         if (b.key === UNCLASSIFIED_KEY) return -1
         if (a.key === UNKNOWN_KEY) return 1
         if (b.key === UNKNOWN_KEY) return -1
-        if (b.count !== a.count) return b.count - a.count
         return a.label.localeCompare(b.label)
       })
   }, [items, counties])
