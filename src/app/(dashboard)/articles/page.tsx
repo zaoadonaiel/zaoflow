@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { FileText, Plus, Search, Trash2, ExternalLink, Globe, Pencil, Eye, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import Badge, { statusToBadgeVariant } from '@/components/ui/Badge'
@@ -32,13 +33,21 @@ function siteName(a: Article): string {
 }
 
 export default function ArticlesPage() {
+  const searchParams = useSearchParams()
+  // Content Alerts deep-links here with ?site_id=<uuid>&status=scheduled — seed
+  // the filters once so the list opens already narrowed to that site's queue.
+  // Only applied on first render: after that the dropdowns own the state.
   const [articles, setArticles] = useState<Article[]>([])
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const initialStatus = (() => {
+    const s = searchParams.get('status')
+    return (STATUS_FILTERS as readonly string[]).includes(s || '') ? (s as StatusFilter) : 'all'
+  })()
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialStatus)
   const [sites, setSites] = useState<Site[]>([])
-  const [siteFilter, setSiteFilter] = useState('all')
+  const [siteFilter, setSiteFilter] = useState(searchParams.get('site_id') || 'all')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   // Sort state — Date descending by default so the newest work is at the top.
   const [sortKey, setSortKey] = useState<SortKey>('date')

@@ -83,6 +83,10 @@ interface Props {
   articleId?: string
   /** An idea being taken back out of Archive → Ideas and written up. */
   ideaId?: string | null
+  /** Pre-select this site when composing (from `/articles/new?siteId=…`).
+   *  Ignored in edit mode — the loaded article owns the site. Ignored if the
+   *  id isn't one of the caller's own sites. */
+  seedSiteId?: string | null
 }
 
 /** Date → the value shape `<input type="datetime-local">` accepts (no zone). */
@@ -97,7 +101,7 @@ function toLocalInputValue(d: Date): string {
  * article is edited with every tool it was created with — the image
  * generator, the SEO fields, the instructions and the scheduler.
  */
-export default function ArticleForm({ articleId, ideaId }: Props) {
+export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
   const router = useRouter()
   const editId = articleId ?? null
   const isEdit = !!editId
@@ -362,9 +366,16 @@ export default function ArticleForm({ articleId, ideaId }: Props) {
       setSites(d.sites || [])
       // In edit mode the article supplies the site; defaulting here would
       // silently move the article to whichever site happens to sort first.
-      if (d.sites?.length > 0 && !editId) setSiteId(d.sites[0].id)
+      // A `?siteId=<uuid>` (from a Content Alert deep-link) overrides the
+      // first-site default when it names a site the caller actually owns.
+      if (!editId && d.sites?.length > 0) {
+        const seeded = seedSiteId && d.sites.some((s: Site) => s.id === seedSiteId)
+          ? seedSiteId
+          : d.sites[0].id
+        setSiteId(seeded)
+      }
     })
-  }, [editId])
+  }, [editId, seedSiteId])
 
   // An idea restored from the archive. Held until the sites are in, because
   // the idea names the site it was written for and that has to land after the

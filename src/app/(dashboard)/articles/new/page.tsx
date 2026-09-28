@@ -25,6 +25,10 @@ function NewOrRedirect() {
   const params = useSearchParams()
   const editId = params.get('id')
   const ideaId = params.get('ideaId')
+  // `?siteId=<uuid>` pre-selects the site — used by Content Alerts so
+  // clicking "Create articles" on a low-runway alert lands on the editor
+  // already pointed at that site.
+  const seedSiteId = params.get('siteId')
 
   useEffect(() => {
     if (editId) router.replace(`/articles/${editId}`)
@@ -38,5 +42,5 @@ function NewOrRedirect() {
     )
   }
 
-  return <ArticleForm ideaId={ideaId} />
+  return <ArticleForm ideaId={ideaId} seedSiteId={seedSiteId} />
 }

@@ -26,6 +26,7 @@ import {
   Trash2,
   MousePointerClick,
   Rocket,
+  AlertTriangle,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import ThemeToggle from '@/components/ui/ThemeToggle'
@@ -37,6 +38,7 @@ const NAV_ITEMS = [
   { href: '/sites', label: 'Sites', icon: Globe },
   { href: '/nodejs-sites', label: 'Node JS Sites', icon: Server },
   { href: '/articles', label: 'Articles', icon: FileText },
+  { href: '/alerts', label: 'Content Alerts', icon: AlertTriangle },
   { href: '/autopilot', label: 'Autopilot', icon: Rocket },
   { href: '/seo-pages', label: 'SEO Pages', icon: MapPin },
   { href: '/seo-city-fix', label: 'SEO City Fix', icon: Wand2 },
@@ -69,8 +71,20 @@ export default function Sidebar({ userEmail, userName }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [newMenuOpen, setNewMenuOpen] = useState(false)
   const newMenuRef = useRef<HTMLDivElement | null>(null)
+  // How many sites need attention. Refreshed on every route change so
+  // navigating away from /alerts (after creating articles) drops the badge.
+  const [alertCount, setAlertCount] = useState(0)
 
   useEffect(() => { setIsOpen(false); setNewMenuOpen(false) }, [pathname])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/alerts?count=1', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : { count: 0 }))
+      .then((d) => { if (!cancelled) setAlertCount(Number(d.count) || 0) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [pathname])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -119,6 +133,10 @@ export default function Sidebar({ userEmail, userName }: SidebarProps) {
         <div className="space-y-0.5">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+            // Content Alerts sits in the nav with a red count pill when any
+            // site is running low; hidden entirely at zero so a healthy queue
+            // does not carry noise.
+            const showAlertBadge = href === '/alerts' && alertCount > 0
             return (
               <Link
                 key={href}
@@ -131,7 +149,12 @@ export default function Sidebar({ userEmail, userName }: SidebarProps) {
               >
                 <Icon className={`w-4 h-4 flex-shrink-0 transition-colors ${isActive ? 'text-brand-600 dark:text-brand-400' : 'text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300'}`} />
                 <span className="flex-1">{label}</span>
-                {isActive && <div className="w-1.5 h-1.5 rounded-full bg-brand-600 dark:bg-brand-400" />}
+                {showAlertBadge && (
+                  <span className="min-w-[1.25rem] h-5 px-1.5 flex items-center justify-center rounded-full bg-red-600 text-white text-[10px] font-semibold">
+                    {alertCount}
+                  </span>
+                )}
+                {isActive && !showAlertBadge && <div className="w-1.5 h-1.5 rounded-full bg-brand-600 dark:bg-brand-400" />}
               </Link>
             )
           })}
