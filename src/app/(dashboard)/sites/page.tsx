@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Globe, Plus, Trash2, RefreshCw, ExternalLink, CheckCircle2, XCircle, Calendar, BookMarked, Server, KeyRound, RotateCcw, FileCode } from 'lucide-react'
+import { Globe, Plus, Trash2, RefreshCw, ExternalLink, CheckCircle2, XCircle, Calendar, BookMarked, Server, KeyRound, RotateCcw, FileCode, ImagePlus } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import AddSiteModal from '@/components/sites/AddSiteModal'
 import AddNodeSiteModal from '@/components/sites/AddNodeSiteModal'
@@ -10,6 +10,7 @@ import AddStaticSiteModal from '@/components/sites/AddStaticSiteModal'
 import EditCredentialsModal from '@/components/sites/EditCredentialsModal'
 import ReconnectSiteModal from '@/components/sites/ReconnectSiteModal'
 import KnowledgeBaseModal from '@/components/sites/KnowledgeBaseModal'
+import ImageKnowledgeModal from '@/components/sites/ImageKnowledgeModal'
 import ScheduleCalendarOverview from '@/components/schedules/ScheduleCalendarOverview'
 import Badge, { statusToBadgeVariant } from '@/components/ui/Badge'
 import type { Site } from '@/types'
@@ -26,6 +27,7 @@ export default function SitesPage() {
   const [editSite, setEditSite] = useState<Site | null>(null)
   const [calendarFor, setCalendarFor] = useState<Site | null>(null)
   const [knowledgeFor, setKnowledgeFor] = useState<Site | null>(null)
+  const [imageKnowledgeFor, setImageKnowledgeFor] = useState<Site | null>(null)
   const [reconnectFor, setReconnectFor] = useState<Site | null>(null)
   const [authorSavingId, setAuthorSavingId] = useState<string | null>(null)
   const [authorRefreshingId, setAuthorRefreshingId] = useState<string | null>(null)
@@ -357,6 +359,14 @@ export default function SitesPage() {
                   <BookMarked className="w-3.5 h-3.5" />
                 </button>
                 <button
+                  onClick={() => setImageKnowledgeFor(site)}
+                  title={`Image guidance for ${site.name}`}
+                  aria-label={`Image guidance for ${site.name}`}
+                  className="flex items-center justify-center py-2 px-3 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                >
+                  <ImagePlus className="w-3.5 h-3.5" />
+                </button>
+                <button
                   onClick={() => setCalendarFor(site)}
                   title={`Publishing calendar for ${site.name}`}
                   aria-label={`Publishing calendar for ${site.name}`}
@@ -399,6 +409,16 @@ export default function SitesPage() {
               prev.map((s) => (s.id === knowledgeFor.id ? { ...s, knowledge_base } : s))
             )
           }
+        />
+      )}
+
+      {imageKnowledgeFor && (
+        <ImageKnowledgeModal
+          key={imageKnowledgeFor.id}
+          open
+          onClose={() => setImageKnowledgeFor(null)}
+          siteId={imageKnowledgeFor.id}
+          siteName={imageKnowledgeFor.name}
         />
       )}
 

@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { generateImage, getDefaultSize } from '@/lib/image-gen'
 import { fetchGenerationCost, recordUsage, type UsageRecord } from '@/lib/ai-cost'
+import {
+  imageKnowledgeBlock,
+  isMissingImageKbColumnError,
+  isMissingReferenceTableError,
+  type ReferenceImageForPrompt,
+} from '@/lib/image-knowledge'
 
 export const maxDuration = 120
 
@@ -28,10 +34,42 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
   }
 
+  // Site-scoped image guidance (the do/don't rules and reference-subject
+  // descriptions) rides at the top of every prompt for the site. Reading
+  // happens here rather than in the client so the rules apply even to callers
+  // that forgot — autopilot, SEO builder, batch flows. Missing table/column
+  // (migration 043 not run yet) is treated as "no guidance" rather than a
+  // hard failure — image generation still has to work on legacy databases.
+  let siteGuidance = ''
+  if (siteId) {
+    const [{ data: siteRow, error: siteErr }, { data: refRows, error: refErr }] = await Promise.all([
+      supabase.from('sites').select('*').eq('id', siteId).eq('user_id', user.id).single(),
+      supabase
+        .from('site_reference_images')
+        .select('kind, label, description')
+        .eq('site_id', siteId)
+        .eq('user_id', user.id),
+    ])
+    const kbText =
+      siteRow && !isMissingImageKbColumnError(siteErr)
+        ? (siteRow.image_knowledge_base || '')
+        : ''
+    const refs: ReferenceImageForPrompt[] = isMissingReferenceTableError(refErr)
+      ? []
+      : (refRows || []).map((r) => ({
+          kind: r.kind as 'person' | 'logo' | 'other',
+          label: r.label,
+          description: r.description,
+        }))
+    siteGuidance = imageKnowledgeBlock(kbText, refs)
+  }
+
+  const finalPrompt = siteGuidance ? `${siteGuidance}\n${prompt}` : prompt
+
   try {
     const { url: imageSource, b64, usage, generationId } = await generateImage({
       apiKey: settings.openrouter_api_key,
-      prompt,
+      prompt: finalPrompt,
       model,
       size,
     })

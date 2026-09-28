@@ -74,7 +74,9 @@ interface Props {
    *  server records the cost against whichever the caller passes. */
   seoPageId?: string
   articleTitle?: string
-  /** Site the article belongs to. Reserved for future per-site image settings. */
+  /** Site the article belongs to. Pipes to /api/generate-image so the site's
+   *  image guidance and reference-image descriptions are prepended to every
+   *  prompt (see /sites → image-guidance button). */
   siteId?: string
   defaultPrompt?: string
   /**
