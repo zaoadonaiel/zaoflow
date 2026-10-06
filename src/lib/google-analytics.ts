@@ -73,7 +73,17 @@ export async function refreshAccessToken(
   })
 
   if (!res.ok) {
-    throw new Error(await parseGoogleError(res, 'Failed to refresh Google access token'))
+    // Revoked/expired refresh tokens come back as 400 with body
+    // { error: 'invalid_grant', error_description: 'Bad Request' }. Surface
+    // the reconnect sentinel so the UI prompts the user to reconnect Google
+    // instead of showing a raw "Bad Request" message.
+    const body = await res.json().catch(() => null)
+    if (body?.error === 'invalid_grant') {
+      throw new Error('Google account not connected')
+    }
+    const message =
+      body?.error?.message || body?.error_description || body?.error || 'Failed to refresh Google access token'
+    throw new Error(message)
   }
 
   return res.json()
