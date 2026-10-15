@@ -1529,6 +1529,7 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
           <ImageGenerator
             articleTitle={title}
             siteId={siteId}
+            siteName={selectedSite?.name}
             initialImageUrl={featuredImageUrl}
             initialPrompt={featuredImagePrompt}
             initialAlt={featuredImageAlt}

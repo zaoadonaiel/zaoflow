@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Image, Images, Loader2, RefreshCw, Download, Send, Wand2, X, ZoomIn, Users, Type, Camera, Palette, SlidersHorizontal, Eraser } from 'lucide-react'
+import { Image, Images, Loader2, RefreshCw, Download, Send, Wand2, X, ZoomIn, Users, Type, Camera, Palette, SlidersHorizontal, Eraser, BookOpen } from 'lucide-react'
 import { getSizesForModel, getDefaultSize } from '@/lib/image-gen'
 import ImageModelSelect, { LAST_IMG_MODEL_KEY } from '@/components/ui/ImageModelSelect'
 import MediaLibraryModal from '@/components/articles/MediaLibraryModal'
 import Modal from '@/components/ui/Modal'
+import ImageKnowledgeModal from '@/components/sites/ImageKnowledgeModal'
 import type { GeneratedImage } from '@/types'
 import toast from 'react-hot-toast'
 
@@ -78,6 +79,8 @@ interface Props {
    *  image guidance and reference-image descriptions are prepended to every
    *  prompt (see /sites → image-guidance button). */
   siteId?: string
+  /** Shown in the image-guidance editor's title; falls back to "this site". */
+  siteName?: string | null
   defaultPrompt?: string
   /**
    * The user's most-used image model. Preferred over localStorage's
@@ -134,6 +137,7 @@ export default function ImageGenerator({
   seoPageId,
   articleTitle = '',
   siteId,
+  siteName,
   defaultPrompt = '',
   defaultModel,
   model: controlledModel,
@@ -165,6 +169,7 @@ export default function ImageGenerator({
   const [lightbox, setLightbox] = useState(false)
   const [showLibrary, setShowLibrary] = useState(false)
   const [showModal, setShowModal] = useState(false)
+  const [showGuidance, setShowGuidance] = useState(false)
   // Off by default — the writer has said again and again that stock photos of
   // people and word-art overlays are not what these posts should carry.
   const [allowPeople, setAllowPeople] = useState(false)
@@ -423,10 +428,31 @@ export default function ImageGenerator({
           image generation without ever opening the modal. The modal is kept for
           model/size selection, the library, and post-generation edits. */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 space-y-3">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-          <Image className="w-4 h-4 text-gray-400" />
-          {heading}
-        </h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+            <Image className="w-4 h-4 text-gray-400" />
+            {heading}
+          </h3>
+          {siteId && (
+            <button
+              type="button"
+              onClick={() => setShowGuidance(true)}
+              title="Image guidance for this site — do/don't rules and reference images"
+              className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-400"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              Guidance
+            </button>
+          )}
+        </div>
+        {siteId && (
+          <ImageKnowledgeModal
+            open={showGuidance}
+            onClose={() => setShowGuidance(false)}
+            siteId={siteId}
+            siteName={siteName || 'this site'}
+          />
+        )}
 
         {imageUrl && (
           <>

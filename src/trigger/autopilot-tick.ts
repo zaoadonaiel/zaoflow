@@ -9,6 +9,12 @@ import {
 import { generateImage, getDefaultSize } from '@/lib/image-gen'
 import { runWithFallback } from '@/lib/generation-retry'
 import {
+  imageKnowledgeBlock,
+  isMissingImageKbColumnError,
+  isMissingReferenceTableError,
+  type ReferenceImageForPrompt,
+} from '@/lib/image-knowledge'
+import {
   getRandomSlotInWindow,
   todayInZone,
   addDays,
@@ -430,6 +436,28 @@ async function generateOne({
   const imagePrompt = `Professional blog featured image for: ${title}`
   featuredImagePrompt = imagePrompt
   try {
+    // Same per-site guidance /api/generate-image prepends, so autopilot
+    // images obey the site's do/don't rules. Missing migration 043 means "no
+    // guidance", never a failure. The stored prompt stays the bare one.
+    const [{ data: siteImgRow, error: siteImgErr }, { data: refRows, error: refErr }] = await Promise.all([
+      supabase.from('sites').select('*').eq('id', site.id).eq('user_id', userId).single(),
+      supabase
+        .from('site_reference_images')
+        .select('kind, label, description')
+        .eq('site_id', site.id)
+        .eq('user_id', userId),
+    ])
+    const imageGuidance = imageKnowledgeBlock(
+      siteImgRow && !isMissingImageKbColumnError(siteImgErr) ? (siteImgRow.image_knowledge_base || '') : '',
+      isMissingReferenceTableError(refErr)
+        ? []
+        : (refRows || []).map((r: { kind: string; label: string | null; description: string | null }) => ({
+            kind: r.kind as ReferenceImageForPrompt['kind'],
+            label: r.label,
+            description: r.description,
+          })),
+    )
+    const finalImagePrompt = imageGuidance ? `${imageGuidance}\n${imagePrompt}` : imagePrompt
     const { result: img } = await runWithFallback({
       supabase, userId, step: 'image',
       primaryModel: combo.image_model!,
@@ -438,7 +466,7 @@ async function generateOne({
       }),
       attempt: async (model) => {
         const genResult = await generateImage({
-          apiKey, prompt: imagePrompt, model, size: getDefaultSize(model),
+          apiKey, prompt: finalImagePrompt, model, size: getDefaultSize(model),
         })
         return { ...genResult, model }
       },
