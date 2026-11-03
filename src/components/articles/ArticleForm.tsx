@@ -19,7 +19,11 @@ import { getFavoriteImageModel } from '@/components/ui/ImageModelSelect'
 import CollabPanel from '@/components/collab/CollabPanel'
 import IdeaGenerator from '@/components/articles/IdeaGenerator'
 import ScheduleCalendarModal from '@/components/ui/ScheduleCalendarModal'
-import { useSiteCalendar, dayKey, readableDay } from '@/lib/schedule-calendar'
+import MonthScroller from '@/components/schedules/MonthScroller'
+import {
+  useSiteCalendar, dayKey, readableDay, partsOfKey, civilKey,
+  RING_CLASS, DOT_LABEL, type DayMark,
+} from '@/lib/schedule-calendar'
 import { formatInZone, SCHEDULE_ZONES } from '@/lib/timezone'
 import { useUnsavedWarning } from '@/lib/use-unsaved-warning'
 import InstructionSets from '@/components/articles/InstructionSets'
@@ -348,7 +352,23 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
 
   // Loaded only while the backdate modal is open, so the picker can warn
   // before landing a second article on a day the site already has one on.
-  const { articles: siteCalendarArticles } = useSiteCalendar(siteId, showBackdate && !!siteId)
+  const {
+    articles: siteCalendarArticles,
+    byDay: siteCalendarByDay,
+    loading: siteCalendarLoading,
+    error: siteCalendarError,
+  } = useSiteCalendar(siteId, showBackdate && !!siteId)
+  // The calendar's highlighted day and "today", both from the browser's local
+  // clock, which is what the backdate input itself uses.
+  const backdateSelected = useMemo(() => {
+    const day = backdateAt.split('T')[0]
+    return day ? partsOfKey(day) : partsOfKey(civilKey(
+      new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate()))
+  }, [backdateAt])
+  const backdateToday = useMemo(() => {
+    const n = new Date()
+    return { year: n.getFullYear(), month: n.getMonth() + 1, day: n.getDate() }
+  }, [])
 
   const [savingSiteTz, setSavingSiteTz] = useState(false)
   async function handleSiteTzChange(newTz: string) {
@@ -1715,7 +1735,7 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
         open={showBackdate}
         onClose={() => { setShowBackdate(false); setBackdateCollisions(null) }}
         title="Publish with a chosen date"
-        maxWidth="max-w-md"
+        maxWidth="max-w-2xl"
       >
         {backdateCollisions ? (
           <div className="space-y-3">
@@ -1763,6 +1783,51 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
               Publishes immediately, but WordPress will show this date on the post.
               Uses your browser&apos;s local time.
             </p>
+            {/* What this site has already published and queued, so the date is
+                picked next to the existing run rather than blind. Read-only:
+                nothing here moves or holds another article. */}
+            {siteId ? (
+              <div>
+                <MonthScroller
+                  start={backdateSelected}
+                  byDay={siteCalendarByDay}
+                  today={backdateToday}
+                  selected={backdateSelected}
+                  onPickDay={(d) => {
+                    const time = backdateAt.split('T')[1] || '09:00'
+                    setBackdateAt(`${civilKey(d.year, d.month, d.day)}T${time}`)
+                  }}
+                  onMove={() => {}}
+                  onToggleDay={() => {}}
+                  movingId={null}
+                  busyDay={null}
+                  readOnly
+                />
+                {siteCalendarLoading ? (
+                  <p className="flex items-center gap-1.5 mt-2 text-[11px] text-gray-400 dark:text-gray-500">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Loading what this site has published and queued…
+                  </p>
+                ) : siteCalendarError ? (
+                  <p className="mt-2 text-[11px] text-red-600 dark:text-red-400">
+                    {siteCalendarError} — the days above are unmarked because nothing could be
+                    read, not because nothing is there.
+                  </p>
+                ) : (
+                  <div className="flex items-center gap-3 mt-2 text-[11px] text-gray-400 dark:text-gray-500">
+                    {(['scheduled', 'paused', 'published'] as DayMark[]).map((m) => (
+                      <span key={m} className="flex items-center gap-1.5">
+                        <span className={`w-3.5 h-3.5 rounded-full ${RING_CLASS[m]}`} /> {DOT_LABEL[m]}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                Pick a site to see what it has already published and what is queued.
+              </p>
+            )}
             <input
               type="datetime-local"
               value={backdateAt}

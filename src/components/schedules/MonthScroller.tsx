@@ -45,11 +45,13 @@ interface Props {
   movingId: string | null
   busyDay: string | null
   colorOf?: (a: Article) => SiteColor | undefined
+  /** Marks only — no hold button, no dragging titles. See MonthGrid. */
+  readOnly?: boolean
 }
 
 export default function MonthScroller({
   start, byDay, today, selected = null, onPickDay,
-  onMove, onToggleDay, movingId, busyDay, colorOf,
+  onMove, onToggleDay, movingId, busyDay, colorOf, readOnly,
 }: Props) {
   const first = indexOf(start)
   // A month of history behind the slot and a year in front of it — enough that
@@ -125,6 +127,7 @@ export default function MonthScroller({
               movingId={movingId}
               busyDay={busyDay}
               colorOf={colorOf}
+              readOnly={readOnly}
               stickyHeader={
                 <div className="flex items-baseline gap-2 pb-1">
                   <span className="text-sm font-semibold text-gray-900 dark:text-white">

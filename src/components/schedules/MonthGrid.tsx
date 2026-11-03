@@ -41,6 +41,11 @@ interface Props {
   onMove: (article: Article, dayKey: string) => void
   /** The day's hold control was pressed. */
   onToggleDay: (dayKey: string, posts: Article[]) => void
+  /**
+   * Show the days without the controls that change them: no hold button and no
+   * dragging titles around. For a picker that only needs to see what is there.
+   */
+  readOnly?: boolean
   /** The article being written, and the day being held, so each can spin. */
   movingId: string | null
   busyDay: string | null
@@ -70,7 +75,7 @@ interface Props {
  */
 export default function MonthGrid({
   view, byDay, today, monthLabel, selected = null, onPickDay,
-  onMove, onToggleDay, movingId, busyDay, colorOf, stickyHeader,
+  onMove, onToggleDay, movingId, busyDay, colorOf, stickyHeader, readOnly = false,
 }: Props) {
   /** The article under the cursor, and the day it is hovering over. */
   const [draggingId, setDraggingId] = useState<string | null>(null)
@@ -120,7 +125,7 @@ export default function MonthGrid({
           const isOver = overKey === cellKey
           // Pause when anything on the day is still live, resume once none
           // is; null on a day with nothing left that could be held.
-          const pauseAction = dayPauseAction(posts)
+          const pauseAction = readOnly ? null : dayPauseAction(posts)
           // Every state the day carries, not just the strongest. A day that
           // published one article and has another queued is two different
           // facts, and collapsing them hid one of them.
@@ -287,7 +292,7 @@ export default function MonthGrid({
               {shownPosts.length > 0 && (
                 <span className="relative mt-1 hidden sm:flex flex-col gap-0.5 min-w-0">
                   {shownPosts.map((p) => {
-                    const movable = isMovable(p)
+                    const movable = !readOnly && isMovable(p)
                     return (
                     // items-start, not items-center: the title runs to two
                     // lines now, and a centred dot would float beside the
