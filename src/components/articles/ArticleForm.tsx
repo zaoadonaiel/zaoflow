@@ -15,6 +15,7 @@ import ModelSelect, { LAST_MODEL_KEY } from '@/components/ui/ModelSelect'
 
 const SEO_LAST_MODEL_KEY = 'zaoflo_last_model_seo'
 import ImageGenerator from '@/components/articles/ImageGenerator'
+import { getFavoriteImageModel } from '@/components/ui/ImageModelSelect'
 import CollabPanel from '@/components/collab/CollabPanel'
 import IdeaGenerator from '@/components/articles/IdeaGenerator'
 import ScheduleCalendarModal from '@/components/ui/ScheduleCalendarModal'
@@ -146,6 +147,10 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
     // Loading an existing article skips the preference lookup — that row's
     // ai_model is what should be shown, and it lands via the edit-mode fetch.
     if (editId) return
+    // The starred image model is a deliberate pick, so it outranks the
+    // most-used one below.
+    const favouriteImage = getFavoriteImageModel()
+    if (favouriteImage) setImageModel(favouriteImage)
     fetch('/api/preferences/models')
       .then((r) => r.json())
       .then((d) => {
@@ -154,7 +159,7 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
         if (m.article) setModel(m.article)
         if (m.seo) setSeoModel(m.seo)
         if (m.idea) setIdeaModel(m.idea)
-        if (m.image) setImageModel(m.image)
+        if (m.image && !favouriteImage) setImageModel(m.image)
       })
       .catch(() => {})
   }, [editId])

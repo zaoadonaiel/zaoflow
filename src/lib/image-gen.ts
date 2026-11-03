@@ -40,8 +40,18 @@ export function getSizesForModel(modelId: string): SizeOption[] {
   return MODEL_SIZES[modelId] ?? DEFAULT_SIZES
 }
 
+// Models that should open on square even though their size list (or the
+// generic fallback) leads with something else. Custom ids land on the generic
+// widescreen default, which is wrong for these.
+const SQUARE_DEFAULT_MODELS = /sunburst/i
+
 export function getDefaultSize(modelId: string): string {
-  return getSizesForModel(modelId)[0].value
+  const sizes = getSizesForModel(modelId)
+  if (SQUARE_DEFAULT_MODELS.test(modelId)) {
+    const square = sizes.find((s) => s.value === '1024x1024')
+    if (square) return square.value
+  }
+  return sizes[0].value
 }
 
 import { readImageUsage, type UsageInfo } from '@/lib/ai-cost'

@@ -513,6 +513,15 @@ export async function generateArticleIdea({
   // An empty title would render as a blank card — better to fail loudly so the
   // caller can retry or switch models.
   if (!title) {
+    const finishReason = data.choices?.[0]?.finish_reason
+    console.warn('generateArticleIdea: unusable response', {
+      model, finishReason, raw: raw.slice(0, 300),
+    })
+    // Out of tokens before any JSON came back — typical of reasoning models,
+    // whose thinking counts against max_tokens. Different fix than "try again".
+    if (finishReason === 'length') {
+      throw new Error('Model ran out of output tokens before returning an idea (reasoning models can do this). Try again or switch models.')
+    }
     throw new Error('Model did not return a usable idea. Try again or switch models.')
   }
 

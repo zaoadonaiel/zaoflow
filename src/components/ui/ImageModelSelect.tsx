@@ -10,6 +10,23 @@ const HIDDEN_KEY = 'zaoflo_hidden_image_models'
 const CUSTOM_HISTORY_KEY = 'zaoflo_custom_image_models'
 export const LAST_IMG_MODEL_KEY = 'zaoflo_last_model_image'
 
+/**
+ * The starred image model a fresh generator should open on, or '' when none is
+ * starred. Favorites live in localStorage, so this is client-only; with several
+ * stars the earliest-starred wins. Hidden models are skipped.
+ */
+export function getFavoriteImageModel(): string {
+  try {
+    const favs: unknown = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]')
+    const hidden: unknown = JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')
+    if (!Array.isArray(favs)) return ''
+    const hiddenIds = Array.isArray(hidden) ? hidden : []
+    return favs.find((f): f is string => typeof f === 'string' && !hiddenIds.includes(f)) || ''
+  } catch {
+    return ''
+  }
+}
+
 interface Props {
   value: string
   onChange: (model: string) => void

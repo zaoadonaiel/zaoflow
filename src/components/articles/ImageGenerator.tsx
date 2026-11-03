@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Image, Images, Loader2, RefreshCw, Download, Send, Wand2, X, ZoomIn, Users, Type, Camera, Palette, SlidersHorizontal, Eraser, BookOpen } from 'lucide-react'
 import { getSizesForModel, getDefaultSize } from '@/lib/image-gen'
-import ImageModelSelect, { LAST_IMG_MODEL_KEY } from '@/components/ui/ImageModelSelect'
+import ImageModelSelect, { LAST_IMG_MODEL_KEY, getFavoriteImageModel } from '@/components/ui/ImageModelSelect'
 import MediaLibraryModal from '@/components/articles/MediaLibraryModal'
 import Modal from '@/components/ui/Modal'
 import ImageKnowledgeModal from '@/components/sites/ImageKnowledgeModal'
@@ -215,13 +215,20 @@ export default function ImageGenerator({
     // of the two is chosen; both on or both off adds no constraint.
     ((allowRealistic ? 1 : 0) + (allowIllustration ? 1 : 0) === 1 ? 1 : 0)
 
-  // Most-used wins over localStorage last-used; the localStorage read is the
+  // Starred wins over most-used, which wins over localStorage last-used; the localStorage read is the
   // fallback for users with no image-generation history yet. Hydration-safe:
   // localStorage is not read during render, so the first client HTML matches
   // the server. Skipped entirely in controlled mode — the parent has already
   // set the model and running this effect would clobber a combo load.
   useEffect(() => {
     if (isControlled) return
+    // A starred model beats the most-used one: the star is a deliberate pick.
+    const favourite = getFavoriteImageModel()
+    if (favourite) {
+      setInternalModel(favourite)
+      setSize(getDefaultSize(favourite))
+      return
+    }
     if (defaultModel) {
       setInternalModel(defaultModel)
       setSize(getDefaultSize(defaultModel))
