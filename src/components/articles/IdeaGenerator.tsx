@@ -82,10 +82,10 @@ export default function IdeaGenerator({
   useEffect(() => {
     if (isControlled) return
     // A starred model is a deliberate pick, so it outranks the most-used one.
-    const favourite = getFavoriteTextModel()
+    const favourite = getFavoriteTextModel(siteId)
     if (favourite) setInternalModel(favourite)
     else if (defaultModel) setInternalModel(defaultModel)
-  }, [defaultModel, isControlled])
+  }, [defaultModel, isControlled, siteId])
 
   function setModel(next: string) {
     if (!isControlled) setInternalModel(next)
@@ -297,6 +297,7 @@ export default function IdeaGenerator({
             value={model}
             onChange={setModel}
             variant="compact"
+            siteId={siteId}
             lastModelKey={IDEA_MODEL_KEY}
           />
         </div>

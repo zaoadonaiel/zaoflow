@@ -134,6 +134,7 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
   // immediate fallback while the fetch is in flight, and as a stand-in for
   // users with no usage history yet.
   const [preferredModels, setPreferredModels] = useState<Record<string, string>>({})
+  const siteIdRef = useRef('')
   useEffect(() => {
     try {
       const saved = localStorage.getItem(LAST_MODEL_KEY)
@@ -144,16 +145,18 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
       if (savedSeo) setSeoModel(savedSeo)
     } catch {}
 
-    // The idea model is not tied to any saved article, so the starred one
-    // applies in edit mode too.
+    // Starred models are a deliberate pick, so they outrank the most-used
+    // ones below. The idea model is not tied to any saved article, so its star
+    // applies in edit mode too. Per-site stars are applied by the siteId
+    // effect further down once a site is known.
     const favouriteIdea = getFavoriteTextModel()
     if (favouriteIdea) setIdeaModel(favouriteIdea)
 
     // Loading an existing article skips the preference lookup — that row's
     // ai_model is what should be shown, and it lands via the edit-mode fetch.
     if (editId) return
-    // The starred image model is a deliberate pick, so it outranks the
-    // most-used one below.
+    const favouriteText = getFavoriteTextModel()
+    if (favouriteText) { setModel(favouriteText); setSeoModel(favouriteText) }
     const favouriteImage = getFavoriteImageModel()
     if (favouriteImage) setImageModel(favouriteImage)
     fetch('/api/preferences/models')
@@ -161,13 +164,36 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
       .then((d) => {
         const m: Record<string, string> = d?.models || {}
         setPreferredModels(m)
-        if (m.article) setModel(m.article)
-        if (m.seo) setSeoModel(m.seo)
-        if (m.idea && !favouriteIdea) setIdeaModel(m.idea)
-        if (m.image && !favouriteImage) setImageModel(m.image)
+        // Re-read at resolve time: the site may have been picked while the
+        // request was in flight, and its stars take precedence.
+        const site = siteIdRef.current
+        const textFav = getFavoriteTextModel(site)
+        const imageFav = getFavoriteImageModel(site)
+        if (m.article && !textFav) setModel(m.article)
+        if (m.seo && !textFav) setSeoModel(m.seo)
+        if (m.idea && !textFav) setIdeaModel(m.idea)
+        if (m.image && !imageFav) setImageModel(m.image)
       })
       .catch(() => {})
   }, [editId])
+
+  // Each site keeps its own stars, so picking a site switches the pickers to
+  // that site's starred models. A site with no stars of its own falls back to
+  // the global list, and with no stars at all nothing changes. An existing
+  // article keeps the models it was written with.
+  useEffect(() => {
+    siteIdRef.current = siteId
+    if (!siteId) return
+    const textFav = getFavoriteTextModel(siteId)
+    if (textFav) {
+      setIdeaModel(textFav)
+      if (!editId) { setModel(textFav); setSeoModel(textFav) }
+    }
+    if (!editId) {
+      const imageFav = getFavoriteImageModel(siteId)
+      if (imageFav) setImageModel(imageFav)
+    }
+  }, [siteId, editId])
   const [instructions, setInstructions] = useState('')
   const [instructionSetId, setInstructionSetId] = useState<string | null>(null)
   const [wpCategoryId, setWpCategoryId] = useState<number | ''>('')
@@ -1364,6 +1390,7 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
             <ModelSelect
               value={model}
               onChange={setModel}
+              siteId={siteId}
               action={
                 <button
                   onClick={() => {
@@ -1437,6 +1464,7 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
                 <ModelSelect
                   value={seoModel}
                   onChange={setSeoModel}
+                  siteId={siteId}
                   lastModelKey={SEO_LAST_MODEL_KEY}
                   variant="compact"
                 />

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Star, ChevronDown, ExternalLink, Pencil, X } from 'lucide-react'
 import { IMAGE_GEN_MODELS } from '@/lib/image-gen'
 import Modal from '@/components/ui/Modal'
+import { readFavorites, writeFavorites, firstFavorite } from '@/lib/model-favorites'
 
 const FAVORITES_KEY = 'zaoflo_favorites_image'
 const HIDDEN_KEY = 'zaoflo_hidden_image_models'
@@ -12,25 +13,19 @@ export const LAST_IMG_MODEL_KEY = 'zaoflo_last_model_image'
 
 /**
  * The starred image model a fresh generator should open on, or '' when none is
- * starred. Favorites live in localStorage, so this is client-only; with several
- * stars the earliest-starred wins. Hidden models are skipped.
+ * starred. With a site, that site's own stars apply (falling back to the
+ * global list); with several stars the earliest-starred wins.
  */
-export function getFavoriteImageModel(): string {
-  try {
-    const favs: unknown = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]')
-    const hidden: unknown = JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')
-    if (!Array.isArray(favs)) return ''
-    const hiddenIds = Array.isArray(hidden) ? hidden : []
-    return favs.find((f): f is string => typeof f === 'string' && !hiddenIds.includes(f)) || ''
-  } catch {
-    return ''
-  }
+export function getFavoriteImageModel(siteId?: string | null): string {
+  return firstFavorite(FAVORITES_KEY, HIDDEN_KEY, siteId)
 }
 
 interface Props {
   value: string
   onChange: (model: string) => void
   className?: string
+  /** Keeps stars per site: toggling a star here saves to this site's own list. */
+  siteId?: string | null
 }
 
 interface ImgModel { id: string; name: string; badge?: string }
@@ -96,7 +91,7 @@ function priceSummary(p?: ImgPricing): string | null {
   return null
 }
 
-export default function ImageModelSelect({ value, onChange, className }: Props) {
+export default function ImageModelSelect({ value, onChange, className, siteId }: Props) {
   const [open, setOpen] = useState(false)
   const [favorites, setFavorites] = useState<string[]>([])
   const [hidden, setHidden] = useState<string[]>([])
@@ -107,14 +102,17 @@ export default function ImageModelSelect({ value, onChange, className }: Props) 
 
   useEffect(() => {
     try {
-      const f = localStorage.getItem(FAVORITES_KEY)
-      if (f) setFavorites(JSON.parse(f))
       const h = localStorage.getItem(HIDDEN_KEY)
       if (h) setHidden(JSON.parse(h))
       const c = localStorage.getItem(CUSTOM_HISTORY_KEY)
       if (c) setCustomHistory(JSON.parse(c))
     } catch {}
   }, [])
+
+  // Stars are per site, so they reload whenever the site changes.
+  useEffect(() => {
+    setFavorites(readFavorites(FAVORITES_KEY, siteId))
+  }, [siteId])
 
   // The trigger shows a price now, so pricing has to load before the modal is
   // opened. Re-runs when a custom id becomes the value so its price is fetched
@@ -147,7 +145,7 @@ export default function ImageModelSelect({ value, onChange, className }: Props) 
 
   function saveFavorites(next: string[]) {
     setFavorites(next)
-    try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(next)) } catch {}
+    writeFavorites(FAVORITES_KEY, siteId, next)
   }
 
   function saveHidden(next: string[]) {

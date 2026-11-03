@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Star, ChevronDown, ExternalLink, Pencil, X, RefreshCw } from 'lucide-react'
 import { AVAILABLE_MODELS } from '@/lib/openrouter'
 import Modal from '@/components/ui/Modal'
+import { readFavorites, writeFavorites, firstFavorite } from '@/lib/model-favorites'
 
 const FAVORITES_KEY = 'zaoflo_favorites_text'
 const HIDDEN_KEY = 'zaoflo_hidden_text_models'
@@ -12,19 +13,11 @@ export const LAST_MODEL_KEY = 'zaoflo_last_model_text'
 
 /**
  * The starred text model a fresh generator should open on, or '' when none is
- * starred. Favorites live in localStorage, so this is client-only; with several
- * stars the earliest-starred wins. Hidden models are skipped.
+ * starred. With a site, that site's own stars apply (falling back to the
+ * global list); with several stars the earliest-starred wins.
  */
-export function getFavoriteTextModel(): string {
-  try {
-    const favs: unknown = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]')
-    const hidden: unknown = JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')
-    if (!Array.isArray(favs)) return ''
-    const hiddenIds = Array.isArray(hidden) ? hidden : []
-    return favs.find((f): f is string => typeof f === 'string' && !hiddenIds.includes(f)) || ''
-  } catch {
-    return ''
-  }
+export function getFavoriteTextModel(siteId?: string | null): string {
+  return firstFavorite(FAVORITES_KEY, HIDDEN_KEY, siteId)
 }
 
 interface TextModel { id: string; name: string; badge: string }
@@ -44,6 +37,8 @@ interface Props {
   onChange: (model: string) => void
   className?: string
   lastModelKey?: string
+  /** Keeps stars per site: toggling a star here saves to this site's own list. */
+  siteId?: string | null
   /** 'tile' is the standalone card; 'compact' is a single row for tight layouts */
   variant?: 'tile' | 'compact'
   /** Trailing button/element rendered beside the picker — e.g. a "Generate" action. */
@@ -120,6 +115,7 @@ export default function ModelSelect({
   onChange,
   className,
   lastModelKey = LAST_MODEL_KEY,
+  siteId,
   variant = 'tile',
   action,
 }: Props) {
@@ -137,14 +133,17 @@ export default function ModelSelect({
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(FAVORITES_KEY)
-      if (stored) setFavorites(JSON.parse(stored))
       const h = localStorage.getItem(HIDDEN_KEY)
       if (h) setHidden(JSON.parse(h))
       const c = localStorage.getItem(CUSTOM_HISTORY_KEY)
       if (c) setCustomHistory(JSON.parse(c))
     } catch {}
   }, [])
+
+  // Stars are per site, so they reload whenever the site changes.
+  useEffect(() => {
+    setFavorites(readFavorites(FAVORITES_KEY, siteId))
+  }, [siteId])
 
   // Any custom id the picker sees as `value` gets pinned so it lives on next
   // time the modal opens — a model used once should be a click away to use
@@ -197,9 +196,7 @@ export default function ModelSelect({
 
   function saveFavorites(next: string[]) {
     setFavorites(next)
-    try {
-      localStorage.setItem(FAVORITES_KEY, JSON.stringify(next))
-    } catch {}
+    writeFavorites(FAVORITES_KEY, siteId, next)
   }
 
   function saveHidden(next: string[]) {

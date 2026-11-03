@@ -223,7 +223,7 @@ export default function ImageGenerator({
   useEffect(() => {
     if (isControlled) return
     // A starred model beats the most-used one: the star is a deliberate pick.
-    const favourite = getFavoriteImageModel()
+    const favourite = getFavoriteImageModel(siteId)
     if (favourite) {
       setInternalModel(favourite)
       setSize(getDefaultSize(favourite))
@@ -240,7 +240,7 @@ export default function ImageGenerator({
       setInternalModel(saved)
       setSize(getDefaultSize(saved))
     }
-  }, [defaultModel, isControlled])
+  }, [defaultModel, isControlled, siteId])
 
   // In controlled mode the parent can swap the model out from under us (combo
   // load). Sync the size to the new model so its default resolution stays in
@@ -494,7 +494,7 @@ export default function ImageGenerator({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div>
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Model</label>
-            <ImageModelSelect value={model} onChange={handleModelChange} />
+            <ImageModelSelect value={model} onChange={handleModelChange} siteId={siteId} />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Size</label>
@@ -588,7 +588,7 @@ export default function ImageGenerator({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Model</label>
-              <ImageModelSelect value={model} onChange={handleModelChange} />
+              <ImageModelSelect value={model} onChange={handleModelChange} siteId={siteId} />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Size</label>
