@@ -11,7 +11,7 @@ import Modal from '@/components/ui/Modal'
 import ConfirmSiteModal from '@/components/ui/ConfirmSiteModal'
 import Badge, { statusToBadgeVariant } from '@/components/ui/Badge'
 import ArticleEditor from '@/components/articles/ArticleEditor'
-import ModelSelect, { LAST_MODEL_KEY } from '@/components/ui/ModelSelect'
+import ModelSelect, { LAST_MODEL_KEY, getFavoriteTextModel } from '@/components/ui/ModelSelect'
 
 const SEO_LAST_MODEL_KEY = 'zaoflo_last_model_seo'
 import ImageGenerator from '@/components/articles/ImageGenerator'
@@ -144,6 +144,11 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
       if (savedSeo) setSeoModel(savedSeo)
     } catch {}
 
+    // The idea model is not tied to any saved article, so the starred one
+    // applies in edit mode too.
+    const favouriteIdea = getFavoriteTextModel()
+    if (favouriteIdea) setIdeaModel(favouriteIdea)
+
     // Loading an existing article skips the preference lookup — that row's
     // ai_model is what should be shown, and it lands via the edit-mode fetch.
     if (editId) return
@@ -158,7 +163,7 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
         setPreferredModels(m)
         if (m.article) setModel(m.article)
         if (m.seo) setSeoModel(m.seo)
-        if (m.idea) setIdeaModel(m.idea)
+        if (m.idea && !favouriteIdea) setIdeaModel(m.idea)
         if (m.image && !favouriteImage) setImageModel(m.image)
       })
       .catch(() => {})

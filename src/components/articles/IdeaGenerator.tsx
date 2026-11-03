@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { Lightbulb, Loader2, RefreshCw, Check, BookMarked, Archive, X, Globe } from 'lucide-react'
-import ModelSelect from '@/components/ui/ModelSelect'
+import ModelSelect, { getFavoriteTextModel } from '@/components/ui/ModelSelect'
 import ConfirmSiteModal from '@/components/ui/ConfirmSiteModal'
 import Modal from '@/components/ui/Modal'
 import KnowledgeBaseModal from '@/components/sites/KnowledgeBaseModal'
@@ -81,7 +81,10 @@ export default function IdeaGenerator({
 
   useEffect(() => {
     if (isControlled) return
-    if (defaultModel) setInternalModel(defaultModel)
+    // A starred model is a deliberate pick, so it outranks the most-used one.
+    const favourite = getFavoriteTextModel()
+    if (favourite) setInternalModel(favourite)
+    else if (defaultModel) setInternalModel(defaultModel)
   }, [defaultModel, isControlled])
 
   function setModel(next: string) {

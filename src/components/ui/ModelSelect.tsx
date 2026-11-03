@@ -10,6 +10,23 @@ const HIDDEN_KEY = 'zaoflo_hidden_text_models'
 const CUSTOM_HISTORY_KEY = 'zaoflo_custom_text_models'
 export const LAST_MODEL_KEY = 'zaoflo_last_model_text'
 
+/**
+ * The starred text model a fresh generator should open on, or '' when none is
+ * starred. Favorites live in localStorage, so this is client-only; with several
+ * stars the earliest-starred wins. Hidden models are skipped.
+ */
+export function getFavoriteTextModel(): string {
+  try {
+    const favs: unknown = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]')
+    const hidden: unknown = JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')
+    if (!Array.isArray(favs)) return ''
+    const hiddenIds = Array.isArray(hidden) ? hidden : []
+    return favs.find((f): f is string => typeof f === 'string' && !hiddenIds.includes(f)) || ''
+  } catch {
+    return ''
+  }
+}
+
 interface TextModel { id: string; name: string; badge: string }
 
 const OPENROUTER_SEO_MODELS_URL =
