@@ -6,6 +6,9 @@
  * per-site lists existed keep working; the first star toggled inside a site
  * copies the effective list into that site's key and diverges from there.
  *
+ * A list can also fall back to a legacy key (the shared list that predates
+ * separate idea / article lists), so existing stars keep working.
+ *
  * Client-only: every function reads localStorage and returns an empty result
  * when it is unavailable.
  */
@@ -24,14 +27,19 @@ function parseList(raw: string | null): string[] | null {
   }
 }
 
-/** The effective favourites for a site: its own list if it has one, else the global list. */
-export function readFavorites(baseKey: string, siteId?: string | null): string[] {
+/**
+ * The effective favourites: the site's own list if it has one, else the global
+ * list for this key, else the legacy key's list.
+ */
+export function readFavorites(baseKey: string, siteId?: string | null, legacyKey?: string): string[] {
   try {
     if (siteId) {
       const own = parseList(localStorage.getItem(siteKey(baseKey, siteId)))
       if (own) return own
     }
-    return parseList(localStorage.getItem(baseKey)) ?? []
+    const global = parseList(localStorage.getItem(baseKey))
+    if (global) return global
+    return legacyKey ? parseList(localStorage.getItem(legacyKey)) ?? [] : []
   } catch {
     return []
   }
@@ -43,9 +51,11 @@ export function writeFavorites(baseKey: string, siteId: string | null | undefine
 }
 
 /** Earliest-starred favourite that is not hidden, or '' when there is none. */
-export function firstFavorite(baseKey: string, hiddenKey: string, siteId?: string | null): string {
+export function firstFavorite(
+  baseKey: string, hiddenKey: string, siteId?: string | null, legacyKey?: string,
+): string {
   const hidden = (() => {
     try { return parseList(localStorage.getItem(hiddenKey)) ?? [] } catch { return [] }
   })()
-  return readFavorites(baseKey, siteId).find((f) => !hidden.includes(f)) || ''
+  return readFavorites(baseKey, siteId, legacyKey).find((f) => !hidden.includes(f)) || ''
 }

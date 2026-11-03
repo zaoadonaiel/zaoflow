@@ -181,7 +181,7 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
   // model it was built with.
   useEffect(() => {
     if (initial?.ai_model) return
-    const favourite = getFavoriteTextModel(siteId)
+    const favourite = getFavoriteTextModel(siteId, 'article')
     if (favourite) setModel(favourite)
   }, [siteId, initial?.ai_model])
   const [similarity, setSimilarity] = useState<SEOPageSimilarity | null>(initial?.rewrite_similarity ?? null)
@@ -1103,7 +1103,7 @@ export default function SEOPageBuilder({ initial, initialCostTotal = 0 }: Props)
 
             <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Model</label>
-              <ModelSelect value={model} onChange={setModel} variant="compact" siteId={siteId} />
+              <ModelSelect value={model} onChange={setModel} variant="compact" siteId={siteId} purpose="article" />
             </div>
 
             <div>

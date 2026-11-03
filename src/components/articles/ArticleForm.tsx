@@ -146,17 +146,18 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
     } catch {}
 
     // Starred models are a deliberate pick, so they outrank the most-used
-    // ones below. The idea model is not tied to any saved article, so its star
-    // applies in edit mode too. Per-site stars are applied by the siteId
-    // effect further down once a site is known.
-    const favouriteIdea = getFavoriteTextModel()
+    // ones below. Idea and article models are starred separately. The idea
+    // model is not tied to any saved article, so its star applies in edit mode
+    // too. Per-site stars are applied by the siteId effect further down once a
+    // site is known.
+    const favouriteIdea = getFavoriteTextModel(undefined, 'idea')
     if (favouriteIdea) setIdeaModel(favouriteIdea)
 
     // Loading an existing article skips the preference lookup — that row's
     // ai_model is what should be shown, and it lands via the edit-mode fetch.
     if (editId) return
-    const favouriteText = getFavoriteTextModel()
-    if (favouriteText) { setModel(favouriteText); setSeoModel(favouriteText) }
+    const favouriteArticle = getFavoriteTextModel(undefined, 'article')
+    if (favouriteArticle) { setModel(favouriteArticle); setSeoModel(favouriteArticle) }
     const favouriteImage = getFavoriteImageModel()
     if (favouriteImage) setImageModel(favouriteImage)
     fetch('/api/preferences/models')
@@ -167,29 +168,29 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
         // Re-read at resolve time: the site may have been picked while the
         // request was in flight, and its stars take precedence.
         const site = siteIdRef.current
-        const textFav = getFavoriteTextModel(site)
+        const ideaFav = getFavoriteTextModel(site, 'idea')
+        const articleFav = getFavoriteTextModel(site, 'article')
         const imageFav = getFavoriteImageModel(site)
-        if (m.article && !textFav) setModel(m.article)
-        if (m.seo && !textFav) setSeoModel(m.seo)
-        if (m.idea && !textFav) setIdeaModel(m.idea)
+        if (m.article && !articleFav) setModel(m.article)
+        if (m.seo && !articleFav) setSeoModel(m.seo)
+        if (m.idea && !ideaFav) setIdeaModel(m.idea)
         if (m.image && !imageFav) setImageModel(m.image)
       })
       .catch(() => {})
   }, [editId])
 
   // Each site keeps its own stars, so picking a site switches the pickers to
-  // that site's starred models. A site with no stars of its own falls back to
-  // the global list, and with no stars at all nothing changes. An existing
-  // article keeps the models it was written with.
+  // that site's starred models: idea and article separately. A site with no
+  // stars of its own falls back to the global list, and with no stars at all
+  // nothing changes. An existing article keeps the models it was written with.
   useEffect(() => {
     siteIdRef.current = siteId
     if (!siteId) return
-    const textFav = getFavoriteTextModel(siteId)
-    if (textFav) {
-      setIdeaModel(textFav)
-      if (!editId) { setModel(textFav); setSeoModel(textFav) }
-    }
+    const ideaFav = getFavoriteTextModel(siteId, 'idea')
+    if (ideaFav) setIdeaModel(ideaFav)
     if (!editId) {
+      const articleFav = getFavoriteTextModel(siteId, 'article')
+      if (articleFav) { setModel(articleFav); setSeoModel(articleFav) }
       const imageFav = getFavoriteImageModel(siteId)
       if (imageFav) setImageModel(imageFav)
     }
@@ -1391,6 +1392,7 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
               value={model}
               onChange={setModel}
               siteId={siteId}
+              purpose="article"
               action={
                 <button
                   onClick={() => {
@@ -1465,6 +1467,7 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
                   value={seoModel}
                   onChange={setSeoModel}
                   siteId={siteId}
+                  purpose="article"
                   lastModelKey={SEO_LAST_MODEL_KEY}
                   variant="compact"
                 />

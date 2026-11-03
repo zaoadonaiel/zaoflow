@@ -11,13 +11,22 @@ const HIDDEN_KEY = 'zaoflo_hidden_text_models'
 const CUSTOM_HISTORY_KEY = 'zaoflo_custom_text_models'
 export const LAST_MODEL_KEY = 'zaoflo_last_model_text'
 
+/** Which job a text model picker is for. Each keeps its own stars. */
+export type TextModelPurpose = 'idea' | 'article'
+
+// Idea and article models are chosen separately, so each has its own list of
+// stars. The old shared list stays as a fallback so earlier stars still apply.
+function favoritesKey(purpose?: TextModelPurpose): string {
+  return purpose ? `${FAVORITES_KEY}_${purpose}` : FAVORITES_KEY
+}
+
 /**
  * The starred text model a fresh generator should open on, or '' when none is
- * starred. With a site, that site's own stars apply (falling back to the
- * global list); with several stars the earliest-starred wins.
+ * starred. With a site, that site's own stars for the purpose apply (falling
+ * back to the global list); with several stars the earliest-starred wins.
  */
-export function getFavoriteTextModel(siteId?: string | null): string {
-  return firstFavorite(FAVORITES_KEY, HIDDEN_KEY, siteId)
+export function getFavoriteTextModel(siteId?: string | null, purpose?: TextModelPurpose): string {
+  return firstFavorite(favoritesKey(purpose), HIDDEN_KEY, siteId, purpose ? FAVORITES_KEY : undefined)
 }
 
 interface TextModel { id: string; name: string; badge: string }
@@ -39,6 +48,8 @@ interface Props {
   lastModelKey?: string
   /** Keeps stars per site: toggling a star here saves to this site's own list. */
   siteId?: string | null
+  /** Idea and article pickers keep separate stars; omit for the shared list. */
+  purpose?: TextModelPurpose
   /** 'tile' is the standalone card; 'compact' is a single row for tight layouts */
   variant?: 'tile' | 'compact'
   /** Trailing button/element rendered beside the picker — e.g. a "Generate" action. */
@@ -116,6 +127,7 @@ export default function ModelSelect({
   className,
   lastModelKey = LAST_MODEL_KEY,
   siteId,
+  purpose,
   variant = 'tile',
   action,
 }: Props) {
@@ -142,8 +154,8 @@ export default function ModelSelect({
 
   // Stars are per site, so they reload whenever the site changes.
   useEffect(() => {
-    setFavorites(readFavorites(FAVORITES_KEY, siteId))
-  }, [siteId])
+    setFavorites(readFavorites(favoritesKey(purpose), siteId, purpose ? FAVORITES_KEY : undefined))
+  }, [siteId, purpose])
 
   // Any custom id the picker sees as `value` gets pinned so it lives on next
   // time the modal opens — a model used once should be a click away to use
@@ -196,7 +208,7 @@ export default function ModelSelect({
 
   function saveFavorites(next: string[]) {
     setFavorites(next)
-    writeFavorites(FAVORITES_KEY, siteId, next)
+    writeFavorites(favoritesKey(purpose), siteId, next)
   }
 
   function saveHidden(next: string[]) {
