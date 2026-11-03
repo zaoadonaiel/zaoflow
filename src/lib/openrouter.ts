@@ -250,7 +250,7 @@ async function callModel({
   const plainText = htmlToText(content)
   const excerpt = plainText.slice(0, 300) + (plainText.length > 300 ? '...' : '')
   const metaDescription =
-    extracted || plainText.slice(0, 155) + (plainText.length > 155 ? '...' : '')
+    extracted || clampMetaDescription(plainText, 155)
   const wc = plainText.split(/\s+/).filter(Boolean).length
 
   return { content, wordCount: wc, excerpt, metaDescription, extractedMetaDescription: extracted }
@@ -646,6 +646,34 @@ No prose, no markdown, no code fences.`)
 
 // Converts any string to a URL slug, never cutting mid-word.
 // Removes stop words first to save space, then drops trailing complete words until ≤ maxLen.
+/**
+ * Fits a meta description into `max` characters without leaving it hanging.
+ *
+ * A raw slice turned "...or lush waterfalls?" into "...or lush wat". Prefer
+ * ending on the last full sentence that fits; failing that, cut on a word
+ * boundary and mark the cut with an ellipsis.
+ */
+export function clampMetaDescription(text: string, max = 160): string {
+  const t = text.replace(/\s+/g, ' ').trim()
+  if (t.length <= max) return t
+
+  const window = t.slice(0, max + 1)
+  let sentenceEnd = -1
+  for (let i = window.length - 1; i >= 0; i--) {
+    if (/[.!?]/.test(window[i]) && (i + 1 === window.length || window[i + 1] === ' ')) {
+      sentenceEnd = i
+      break
+    }
+  }
+  // Only worth ending early when most of the description survives.
+  if (sentenceEnd >= Math.floor(max * 0.5)) return t.slice(0, sentenceEnd + 1)
+
+  const room = t.slice(0, max - 1)
+  const lastSpace = room.lastIndexOf(' ')
+  const base = (lastSpace > 0 ? room.slice(0, lastSpace) : room).replace(/[\s,;:\-–—]+$/, '')
+  return `${base}…`
+}
+
 function safeSlug(input: string, maxLen = 60): string {
   const STOP = /^(the|a|an|is|are|was|were|be|been|being|do|does|did|have|has|had|will|would|could|should|may|might|shall|can|need|dare|ought|used|to|of|in|on|at|for|with|by|from|up|about|into|through|during|before|after|above|below|between|out|off|over|under|again|then|once|here|there|when|where|why|how|all|both|each|few|more|most|other|some|such|no|not|only|own|same|so|than|too|very|just|but|and|or|nor|yet|so|if|as|because|although|though|unless|until|while|what|which|who|whom|whose|this|that|these|those|your|my|our|their|his|her|its|you|we|they|he|she|it|i|me|him|us|them)$/i
 
@@ -702,7 +730,7 @@ export function fillSeoBlanks(
     clean(seo?.keyphraseSynonyms) || keywords[1] || titleWords.slice(-3).join(' ') || focusKeyphrase
   const yoastTitle = (clean(seo?.yoastTitle) || title).slice(0, 60)
   const yoastMetaDescription =
-    (clean(seo?.yoastMetaDescription) || contentText.slice(0, 155) || title).slice(0, 160)
+    clampMetaDescription(clean(seo?.yoastMetaDescription) || contentText.slice(0, 155) || title, 160)
   const slug =
     (clean(seo?.slug) || titleWords.slice(0, 8).join('-') || 'article').slice(0, 60)
   return { focusKeyphrase, keyphraseSynonyms, yoastTitle, yoastMetaDescription, slug }
@@ -724,7 +752,7 @@ RULES:
 - focusKeyphrase: 2-4 word phrase someone would Google to find this article. Based on SEARCH INTENT. NOT stop words (do/the/how/you/is/your). Example: "copyright protection" or "email marketing tips"
 - keyphraseSynonyms: A DIFFERENT 2-4 word phrase covering the same topic. Example: "copyright ownership" or "intellectual property rights". NOT random words or stop words.
 - yoastTitle: SEO title between 50-60 characters (count carefully including spaces)
-- yoastMetaDescription: Meta description between 155-160 characters (count carefully)
+- yoastMetaDescription: Meta description between 120-155 characters (count carefully). It MUST be a complete thought that ends with a full stop or question mark — never trail off or stop mid-sentence, and never go over 155 characters
 - slug: URL slug — lowercase hyphenated, max 60 chars. CRITICAL: every word must be fully spelled out, no mid-word cuts. Remove stop words (the/a/is/how/your/do) to stay under 60. Example bad: "copyright-protectio" (cut off). Example good: "copyright-protection-creative-work"
 
 Article title: ${title}
@@ -782,7 +810,7 @@ Return ONLY the JSON, no markdown, no explanation. Example format:
     }
 
     if ((parsed.yoastMetaDescription || '').length > 160) {
-      parsed.yoastMetaDescription = parsed.yoastMetaDescription.slice(0, 160)
+      parsed.yoastMetaDescription = clampMetaDescription(parsed.yoastMetaDescription, 160)
     }
 
     // Ensure keyphrase fields are never empty — extract from keywords or title as fallback
@@ -799,7 +827,7 @@ Return ONLY the JSON, no markdown, no explanation. Example format:
       focusKeyphrase: keywords[0] || title.split(' ').slice(0, 3).join(' ').toLowerCase(),
       keyphraseSynonyms: keywords[1] || title.split(' ').slice(-3).join(' ').toLowerCase(),
       yoastTitle: title.slice(0, 60),
-      yoastMetaDescription: plainContent.slice(0, 155),
+      yoastMetaDescription: clampMetaDescription(plainContent, 155),
       slug: safeSlug(title),
     }
   }
