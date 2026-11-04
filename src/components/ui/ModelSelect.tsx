@@ -316,7 +316,7 @@ export default function ModelSelect({
         {isFavourite && (
           <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 shrink-0" />
         )}
-        <span className="flex-1 text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+        <span className="flex-1 min-w-0 text-sm font-medium text-gray-900 dark:text-gray-100 break-all">
           {currentName}
         </span>
         <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
@@ -333,7 +333,7 @@ export default function ModelSelect({
       className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-500 text-left text-gray-900 dark:text-gray-100"
     >
       {isFavourite && <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 shrink-0" />}
-      <span className="flex-1 truncate">{currentName}</span>
+      <span className="flex-1 truncate" title={currentName}>{currentName}</span>
       {currentPrice && (
         <span className="shrink-0 text-xs font-mono text-gray-400 dark:text-gray-500">
           {formatPerM(currentPrice.inputPerM)} / {formatPerM(currentPrice.outputPerM)}
@@ -359,7 +359,7 @@ export default function ModelSelect({
         open={open}
         onClose={() => setOpen(false)}
         title="Choose an AI model"
-        maxWidth="max-w-2xl"
+        maxWidth="max-w-4xl"
       >
         <div className="space-y-5">
           <div className="flex items-start gap-2 -mt-1">
@@ -496,7 +496,9 @@ function ModelCard({
       >
         <div className="flex items-start gap-2 pr-14">
           <span
-            className={`text-sm font-medium truncate ${
+            // Wraps instead of truncating: ids like deepseek/deepseek-v4.1-flash-1017
+            // differ only at the end, which is exactly what truncation hid.
+            className={`text-sm font-medium break-all min-w-0 ${
               discontinued
                 ? 'text-gray-400 dark:text-gray-500 line-through'
                 : selected
