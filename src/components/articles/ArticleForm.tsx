@@ -1481,8 +1481,10 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
               <Search className="w-4 h-4 text-gray-400" />
               SEO / Yoast Fields
             </h3>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 min-w-0">
+            {/* Wraps: in a half-width card the model name was squeezed out by the
+                price and the Generate button sitting on one row. */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex-1 min-w-[14rem]">
                 <ModelSelect
                   value={seoModel}
                   onChange={setSeoModel}
@@ -1503,7 +1505,9 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* One column: two side-by-side inputs in a half-width card each showed
+                about a dozen characters. */}
+            <div className="grid grid-cols-1 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Focus Keyphrase</label>
                 <input

@@ -333,7 +333,7 @@ export default function ModelSelect({
       className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-500 text-left text-gray-900 dark:text-gray-100"
     >
       {isFavourite && <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 shrink-0" />}
-      <span className="flex-1 truncate" title={currentName}>{currentName}</span>
+      <span className="flex-1 min-w-0 break-all" title={currentName}>{currentName}</span>
       {currentPrice && (
         <span className="shrink-0 text-xs font-mono text-gray-400 dark:text-gray-500">
           {formatPerM(currentPrice.inputPerM)} / {formatPerM(currentPrice.outputPerM)}

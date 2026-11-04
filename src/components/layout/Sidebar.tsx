@@ -27,11 +27,14 @@ import {
   MousePointerClick,
   Rocket,
   AlertTriangle,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import ThemeToggle from '@/components/ui/ThemeToggle'
 import OpenRouterCredits from '@/components/layout/OpenRouterCredits'
 import toast from 'react-hot-toast'
+import { SIDEBAR_STORAGE_KEY } from '@/lib/sidebar-state'
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -52,6 +55,11 @@ const NAV_ITEMS = [
   { href: '/stats', label: 'Stats', icon: Activity },
   { href: '/history', label: 'History', icon: Clock },
 ]
+
+// The desktop sidebar can shrink to an icon rail so the page gets the width.
+// The state lives on <html data-sidebar="collapsed"> rather than in React so
+// the layout's <main> margin and every label can follow it with plain CSS,
+// and so an inline script can set it before first paint (no width flash).
 
 interface SidebarProps {
   userEmail?: string
@@ -74,6 +82,19 @@ export default function Sidebar({ userEmail, userName }: SidebarProps) {
   // How many sites need attention. Refreshed on every route change so
   // navigating away from /alerts (after creating articles) drops the badge.
   const [alertCount, setAlertCount] = useState(0)
+  const [collapsed, setCollapsed] = useState(false)
+
+  useEffect(() => {
+    setCollapsed(document.documentElement.dataset.sidebar === 'collapsed')
+  }, [])
+
+  function toggleCollapsed() {
+    const next = !collapsed
+    setCollapsed(next)
+    if (next) document.documentElement.dataset.sidebar = 'collapsed'
+    else delete document.documentElement.dataset.sidebar
+    try { localStorage.setItem(SIDEBAR_STORAGE_KEY, next ? 'collapsed' : 'open') } catch {}
+  }
 
   useEffect(() => { setIsOpen(false); setNewMenuOpen(false) }, [pathname])
 
@@ -115,10 +136,10 @@ export default function Sidebar({ userEmail, userName }: SidebarProps) {
   const navContent = (
     <>
       {/* Logo */}
-      <div className="h-16 flex items-center px-5 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
-        <div className="flex items-center gap-2.5 flex-1">
+      <div className="h-16 flex items-center px-5 md:[html[data-sidebar=collapsed]_&]:px-0 md:[html[data-sidebar=collapsed]_&]:justify-center border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
+        <div className="flex items-center gap-2.5 flex-1 md:[html[data-sidebar=collapsed]_&]:flex-none">
           <img src="/logo.png" alt="Zao Flo" className="w-8 h-8 flex-shrink-0" />
-          <span className="text-lg font-bold text-gray-900 dark:text-white">Zao Flo</span>
+          <span className="text-lg font-bold text-gray-900 dark:text-white md:[html[data-sidebar=collapsed]_&]:hidden">Zao Flo</span>
         </div>
         <button
           onClick={() => setIsOpen(false)}
@@ -130,6 +151,18 @@ export default function Sidebar({ userEmail, userName }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto">
+        {/* Desktop only: on a phone the sidebar is a drawer, not a rail. */}
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-expanded={!collapsed}
+          className="hidden md:flex w-full items-center gap-3 px-3 py-2 mb-2 rounded-xl text-xs font-medium text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors md:[html[data-sidebar=collapsed]_&]:justify-center md:[html[data-sidebar=collapsed]_&]:px-0"
+        >
+          {collapsed ? <PanelLeftOpen className="w-4 h-4 flex-shrink-0" /> : <PanelLeftClose className="w-4 h-4 flex-shrink-0" />}
+          <span className="md:[html[data-sidebar=collapsed]_&]:hidden">Collapse</span>
+        </button>
         <div className="space-y-0.5">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
@@ -141,20 +174,22 @@ export default function Sidebar({ userEmail, userName }: SidebarProps) {
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
+                title={label}
+                className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group md:[html[data-sidebar=collapsed]_&]:justify-center md:[html[data-sidebar=collapsed]_&]:px-0 ${
                   isActive
                     ? 'bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 border border-brand-100 dark:border-brand-800'
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                 }`}
               >
                 <Icon className={`w-4 h-4 flex-shrink-0 transition-colors ${isActive ? 'text-brand-600 dark:text-brand-400' : 'text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300'}`} />
-                <span className="flex-1">{label}</span>
+                <span className="flex-1 md:[html[data-sidebar=collapsed]_&]:hidden">{label}</span>
                 {showAlertBadge && (
-                  <span className="min-w-[1.25rem] h-5 px-1.5 flex items-center justify-center rounded-full bg-red-600 text-white text-[10px] font-semibold">
+                  // In the rail the count shrinks to a dot on the icon.
+                  <span className="min-w-[1.25rem] h-5 px-1.5 flex items-center justify-center rounded-full bg-red-600 text-white text-[10px] font-semibold md:[html[data-sidebar=collapsed]_&]:absolute md:[html[data-sidebar=collapsed]_&]:top-1.5 md:[html[data-sidebar=collapsed]_&]:right-2.5 md:[html[data-sidebar=collapsed]_&]:min-w-0 md:[html[data-sidebar=collapsed]_&]:w-2.5 md:[html[data-sidebar=collapsed]_&]:h-2.5 md:[html[data-sidebar=collapsed]_&]:px-0 md:[html[data-sidebar=collapsed]_&]:text-[0px]">
                     {alertCount}
                   </span>
                 )}
-                {isActive && !showAlertBadge && <div className="w-1.5 h-1.5 rounded-full bg-brand-600 dark:bg-brand-400" />}
+                {isActive && !showAlertBadge && <div className="w-1.5 h-1.5 rounded-full bg-brand-600 dark:bg-brand-400 md:[html[data-sidebar=collapsed]_&]:hidden" />}
               </Link>
             )
           })}
@@ -163,14 +198,15 @@ export default function Sidebar({ userEmail, userName }: SidebarProps) {
         <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-800 space-y-0.5">
           <Link
             href="/settings"
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
+            title="Settings"
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group md:[html[data-sidebar=collapsed]_&]:justify-center md:[html[data-sidebar=collapsed]_&]:px-0 ${
               pathname.startsWith('/settings')
                 ? 'bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 border border-brand-100 dark:border-brand-800'
                 : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
             }`}
           >
             <Settings className={`w-4 h-4 flex-shrink-0 ${pathname.startsWith('/settings') ? 'text-brand-600 dark:text-brand-400' : 'text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300'}`} />
-            Settings
+            <span className="md:[html[data-sidebar=collapsed]_&]:hidden">Settings</span>
           </Link>
         </div>
 
@@ -178,22 +214,24 @@ export default function Sidebar({ userEmail, userName }: SidebarProps) {
             scrolls with everything else instead of being pinned under the
             logo — a "no credits" state is still visible before a generation
             click, just without eating a permanent slot. */}
-        <OpenRouterCredits />
+        <div className="md:[html[data-sidebar=collapsed]_&]:hidden">
+          <OpenRouterCredits />
+        </div>
       </nav>
 
       {/* User section */}
       <div className="border-t border-gray-100 dark:border-gray-800 p-3 flex-shrink-0">
-        <div className="flex items-center gap-2 px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+        <div className="flex items-center gap-2 px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors md:[html[data-sidebar=collapsed]_&]:flex-col md:[html[data-sidebar=collapsed]_&]:px-0">
           <div className="w-8 h-8 bg-brand-100 dark:bg-brand-900/40 rounded-full flex items-center justify-center flex-shrink-0">
             <span className="text-brand-700 dark:text-brand-400 text-xs font-bold uppercase">
               {(userName || userEmail || 'U').charAt(0)}
             </span>
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 md:[html[data-sidebar=collapsed]_&]:hidden">
             {userName && <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{userName}</p>}
             <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{userEmail}</p>
           </div>
-          <ThemeToggle />
+          <ThemeToggle className="md:[html[data-sidebar=collapsed]_&]:hidden" />
           <button
             onClick={handleSignOut}
             className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors p-1 rounded"
@@ -271,7 +309,7 @@ export default function Sidebar({ userEmail, userName }: SidebarProps) {
 
       {/* Sidebar */}
       <aside
-        className={`fixed left-0 top-0 bottom-0 w-60 bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 flex flex-col z-50 transition-transform duration-200
+        className={`fixed left-0 top-0 bottom-0 w-60 md:[html[data-sidebar=collapsed]_&]:w-16 bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 flex flex-col z-50 transition-[transform,width] duration-200
           md:translate-x-0
           ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         `}
