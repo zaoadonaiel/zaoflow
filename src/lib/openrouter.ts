@@ -489,7 +489,10 @@ export async function generateArticleIdea({
       // The idea itself is ~100 tokens, but a reasoning model spends its
       // thinking out of this same budget — at 500 it ran dry before writing
       // any JSON. Only tokens actually generated are billed, so headroom is free.
-      max_tokens: 4000,
+      max_tokens: 8000,
+      // Ideas need no deep thinking; keep reasoning models from burning the
+      // whole budget on it. Models without reasoning ignore this field.
+      reasoning: { effort: 'low' },
       response_format: { type: 'json_object' },
       ...(webSearch ? { plugins: [{ id: 'web' }] } : {}),
     }),
