@@ -157,18 +157,34 @@ export default function ModelSelect({
     setFavorites(readFavorites(favoritesKey(purpose), siteId, purpose ? FAVORITES_KEY : undefined))
   }, [siteId, purpose])
 
-  // Any custom id the picker sees as `value` gets pinned so it lives on next
-  // time the modal opens — a model used once should be a click away to use
-  // again, not a re-typed slug.
+  // Pins a custom id so it is a click away next time. Written to localStorage
+  // directly, outside any state updater: an updater only runs on the next
+  // render, and a picker that unmounts right after a pick (the idea generator
+  // re-renders around generation) never got to write it. The stored list, not
+  // component state, is the source of truth here — state may not have loaded
+  // it yet. A model picked on purpose also comes back out of "hidden".
+  function rememberCustom(id: string) {
+    if (!id || AVAILABLE_MODELS.some((m) => m.id === id)) return
+    try {
+      const stored: TextModel[] = JSON.parse(localStorage.getItem(CUSTOM_HISTORY_KEY) || '[]')
+      if (!stored.some((m) => m.id === id)) {
+        const next = [...stored, { id, name: id, badge: '' }]
+        localStorage.setItem(CUSTOM_HISTORY_KEY, JSON.stringify(next))
+      }
+      const hiddenIds: string[] = JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')
+      if (hiddenIds.includes(id)) {
+        localStorage.setItem(HIDDEN_KEY, JSON.stringify(hiddenIds.filter((h) => h !== id)))
+        setHidden((prev) => prev.filter((h) => h !== id))
+      }
+    } catch {}
+    setCustomHistory((prev) => (prev.some((m) => m.id === id) ? prev : [...prev, { id, name: id, badge: '' }]))
+  }
+
+  // Any custom id the picker sees as `value` gets pinned, whichever way it
+  // arrived (typed here, loaded from a saved combo, restored from last-used).
   useEffect(() => {
-    if (!value) return
-    if (AVAILABLE_MODELS.some((m) => m.id === value)) return
-    setCustomHistory((prev) => {
-      if (prev.some((m) => m.id === value)) return prev
-      const next = [...prev, { id: value, name: value, badge: '' }]
-      try { localStorage.setItem(CUSTOM_HISTORY_KEY, JSON.stringify(next)) } catch {}
-      return next
-    })
+    rememberCustom(value)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value])
 
   // The trigger shows a price now, so this can't wait for the modal to open.
@@ -244,6 +260,7 @@ export default function ModelSelect({
   }
 
   function selectModel(id: string) {
+    rememberCustom(id)
     onChange(id)
     // Persist every pick, preset or custom, so reopening the article does not
     // silently reset the model choice to whatever the form defaulted to.
