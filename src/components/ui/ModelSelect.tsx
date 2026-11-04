@@ -54,6 +54,8 @@ interface Props {
   variant?: 'tile' | 'compact'
   /** Trailing button/element rendered beside the picker — e.g. a "Generate" action. */
   action?: React.ReactNode
+  /** Always put the action under the picker (full width) instead of beside it. */
+  stackAction?: boolean
 }
 
 export interface PricingSnapshot {
@@ -130,6 +132,7 @@ export default function ModelSelect({
   purpose,
   variant = 'tile',
   action,
+  stackAction,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [favorites, setFavorites] = useState<string[]>([])
@@ -349,9 +352,9 @@ export default function ModelSelect({
         // Mobile: picker on top, action stretched full width underneath. On
         // sm+ they share a row so the button does not push the picker down
         // when there is room for both.
-        <div className="flex flex-col sm:flex-row sm:items-stretch gap-2">
+        <div className={stackAction ? 'flex flex-col gap-2' : 'flex flex-col sm:flex-row sm:items-stretch gap-2'}>
           <div className="flex-1 min-w-0">{picker}</div>
-          <div className="shrink-0 flex items-stretch [&>*]:w-full sm:[&>*]:w-auto">{action}</div>
+          <div className={stackAction ? 'flex items-stretch [&>*]:w-full' : 'shrink-0 flex items-stretch [&>*]:w-full sm:[&>*]:w-auto'}>{action}</div>
         </div>
       ) : picker}
 

@@ -1413,6 +1413,7 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
               onChange={setModel}
               siteId={siteId}
               purpose="article"
+              stackAction
               action={
                 <button
                   onClick={() => {
@@ -1424,7 +1425,7 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
                     setConfirmGenerate(true)
                   }}
                   disabled={generating || !title.trim()}
-                  className="flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 text-white text-xs font-medium px-2 py-1.5 hover:bg-brand-700 transition-colors disabled:opacity-50"
+                  className="flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 text-white text-xs font-medium px-3 py-2 hover:bg-brand-700 transition-colors disabled:opacity-50"
                 >
                   {generating
                     ? <><Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />Generating…</>
