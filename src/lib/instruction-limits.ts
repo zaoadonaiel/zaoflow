@@ -1,6 +1,7 @@
-// The article generation call is capped at max_tokens: 4096 (see openrouter.ts).
-// That is roughly 2,500 words of HTML — asking for more produces an article that
-// gets truncated mid-sentence, so instruction sets are validated against this ceiling.
+// The article generation call is capped at max_tokens: 8192 (see openrouter.ts),
+// but a reasoning model spends part of that thinking, so the safe article size
+// stays ~2,500 words of HTML (~4k tokens) — asking for more risks an article
+// truncated mid-sentence, so instruction sets are validated against this ceiling.
 export const MAX_ARTICLE_WORDS = 2500
 
 // "2,500 words", "3000 word article", "1500-2000 words", "3k words"

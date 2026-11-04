@@ -222,7 +222,11 @@ async function callModel({
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      max_tokens: 4096,
+      // Room for the article (the 2,500-word ceiling is ~4k tokens of HTML)
+      // plus a reasoning model's thinking, which is spent from this same
+      // budget. At 4096 such a model could burn most of it thinking and leave
+      // the article cut off mid-sentence. Only generated tokens are billed.
+      max_tokens: 8192,
       temperature: 0.7,
       // OpenRouter's web plugin. Adds a small per-request search cost that
       // flows through the same usage record; the model still bills as itself.
@@ -244,6 +248,14 @@ async function callModel({
   const data = await response.json()
   onUsage?.(readUsage(data, model))
   const rawContent: string = data.choices?.[0]?.message?.content || ''
+
+  // A reply that hit the token cap ends mid-sentence. Saving it would publish
+  // a cut-off article, so fail loudly and let the caller retry or switch models.
+  if (data.choices?.[0]?.finish_reason === 'length') {
+    throw new Error(
+      'The model ran out of output tokens and the article was cut off (reasoning models can do this). Try again or switch models.',
+    )
+  }
 
   const { content, metaDescription: extracted } = extractMetaDescription(rawContent)
 
