@@ -338,6 +338,16 @@ export default function ArticleForm({ articleId, ideaId, seedSiteId }: Props) {
   // The site the article is being written for — its knowledge base is what the
   // AI reads before writing anything for it.
   const selectedSite = sites.find((s) => s.id === siteId) || null
+
+  // Sites that offer "Both languages" start with it on; the user can still
+  // switch it off for a single publish. Only en/es sites qualify — the publish
+  // route rejects any other default language.
+  const siteDefaultsBoth =
+    selectedSite?.site_type === 'static' &&
+    ['en', 'es'].includes(selectedSite.github_default_language || 'en')
+  useEffect(() => {
+    setPublishBoth(!!siteDefaultsBoth)
+  }, [selectedSite?.id, siteDefaultsBoth])
   // The site's default scheduling zone. Falls back to PST for legacy rows
   // that never had the column set.
   const siteDefaultTz = selectedSite?.default_tz || 'PST'
