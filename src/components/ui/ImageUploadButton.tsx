@@ -4,6 +4,26 @@ import { useRef, useState } from 'react'
 import { Upload, Loader2 } from 'lucide-react'
 import type { GeneratedImage } from '@/types'
 import toast from 'react-hot-toast'
+import { compressImage } from '@/lib/image-compression'
+
+/** The host rejects request bodies over ~4.5 MB before our route ever runs. */
+const SAFE_UPLOAD_BYTES = 4_000_000
+
+/** Shrinks an oversized photo in the browser so it fits through the host's body limit. */
+async function fitForUpload(file: File): Promise<File> {
+  if (file.size <= SAFE_UPLOAD_BYTES || file.type === 'image/gif') return file
+  const url = URL.createObjectURL(file)
+  try {
+    const r = await compressImage(url, SAFE_UPLOAD_BYTES)
+    if (r.bytes > SAFE_UPLOAD_BYTES) {
+      throw new Error(`${file.name} is still ${(r.bytes / 1e6).toFixed(1)} MB after shrinking — over the 4 MB upload limit`)
+    }
+    const ext = r.format === 'webp' ? 'webp' : 'jpg'
+    return new File([r.blob], file.name.replace(/\.[^.]+$/, '') + '.' + ext, { type: r.blob.type })
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
 
 interface Props {
   /** Tags the upload with a site, so it files itself in the library like the rest. */
@@ -44,14 +64,19 @@ export default function ImageUploadButton({
     for (const file of Array.from(files)) {
       try {
         const body = new FormData()
-        body.append('file', file)
+        body.append('file', await fitForUpload(file))
         if (siteId) body.append('site_id', siteId)
         if (articleId) body.append('article_id', articleId)
         body.append('description', file.name)
 
         const res = await fetch('/api/images/upload', { method: 'POST', body })
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error || 'Upload failed')
+        // A host-level rejection (e.g. 413) comes back as plain text, not JSON.
+        const data = await res.json().catch(() => ({} as { error?: string; image?: GeneratedImage }))
+        if (!res.ok) {
+          throw new Error(
+            data.error || (res.status === 413 ? `${file.name} is too large to upload` : `Upload failed (${res.status})`),
+          )
+        }
         uploaded.push(data.image as GeneratedImage)
         onUploaded?.(data.image as GeneratedImage)
       } catch (err) {

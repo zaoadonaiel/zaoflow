@@ -50,7 +50,10 @@ export interface CompressionResult {
  * fits, returns the smallest attempt with `overTarget=true` so callers can
  * warn the user rather than silently ship a larger file.
  */
-export async function compressImage(sourceUrl: string): Promise<CompressionResult> {
+export async function compressImage(
+  sourceUrl: string,
+  targetBytes: number = TARGET_BYTES,
+): Promise<CompressionResult> {
   const res = await fetch(sourceUrl)
   if (!res.ok) throw new Error(`Could not fetch the image (${res.status})`)
   const source = await res.blob()
@@ -62,9 +65,9 @@ export async function compressImage(sourceUrl: string): Promise<CompressionResul
     // Try WebP first for the better ratio; fall through to JPEG if either the
     // browser refuses it or the produced blob is not actually WebP (older
     // Safari silently returns a PNG when asked for webp).
-    return await encode(bitmap, 'webp', source.size)
+    return await encode(bitmap, 'webp', source.size, targetBytes)
   } catch {
-    return await encode(bitmap, 'jpeg', source.size)
+    return await encode(bitmap, 'jpeg', source.size, targetBytes)
   } finally {
     bitmap.close?.()
   }
@@ -74,6 +77,7 @@ async function encode(
   bitmap: ImageBitmap,
   format: CompressedFormat,
   originalBytes: number,
+  targetBytes: number,
 ): Promise<CompressionResult> {
   const mime = format === 'webp' ? 'image/webp' : 'image/jpeg'
 
@@ -110,7 +114,7 @@ async function encode(
         overTarget: false,
       }
 
-      if (blob.size <= TARGET_BYTES) return attempt
+      if (blob.size <= targetBytes) return attempt
 
       // Hold onto the smallest attempt so far in case nothing fits — the user
       // still gets *some* reduction, even if we could not reach the goal.
