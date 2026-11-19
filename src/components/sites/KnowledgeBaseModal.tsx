@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Loader2, AlertCircle, HardDrive, Lock, Pencil } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Loader2, AlertCircle, HardDrive, Lock, Pencil, FileUp } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import {
   MAX_KNOWLEDGE_BASE_CHARS,
@@ -58,6 +58,9 @@ export default function KnowledgeBaseModal({
   const [codeInput, setCodeInput] = useState('')
   const [unlocked, setUnlocked] = useState(false)
 
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [importing, setImporting] = useState(false)
+
   const limitError = knowledgeBaseLimitError(draft)
   const dirty = draft.trim() !== stored.trim()
 
@@ -90,6 +93,28 @@ export default function KnowledgeBaseModal({
     setUnlocked(false)
     load()
   }, [open, load, startInEdit])
+
+  /** Reads a .docx/.pdf/.txt/.md into text and appends it to the draft for review. */
+  async function handleFile(file: File | undefined) {
+    if (!file) return
+    setImporting(true)
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      const res = await fetch(`/api/sites/${siteId}/knowledge/extract`, { method: 'POST', body })
+      const data = await res.json().catch(() => ({} as { error?: string; text?: string }))
+      if (!res.ok) {
+        throw new Error(data.error || (res.status === 413 ? 'That file is too large (4 MB max)' : `Upload failed (${res.status})`))
+      }
+      setDraft((prev) => (prev.trim() ? `${prev.trim()}\n\n${data.text}` : data.text))
+      toast.success(`Added text from ${file.name} — review it, then save`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not read that file')
+    } finally {
+      setImporting(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
 
   function requestEdit() {
     setEditCode(generateEditCode())
@@ -204,6 +229,27 @@ export default function KnowledgeBaseModal({
                     : 'border-gray-200 dark:border-gray-600 focus:ring-brand-500'
                 }`}
               />
+              {unlocked && (
+                <div className="mt-2">
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept=".docx,.pdf,.txt,.md"
+                    className="hidden"
+                    onChange={(e) => handleFile(e.target.files?.[0])}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={importing}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+                  >
+                    {importing
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Reading file…</>
+                      : <><FileUp className="w-3.5 h-3.5" />Upload a document (Word, PDF, TXT)</>}
+                  </button>
+                </div>
+              )}
               {limitError ? (
                 <p className="flex items-start gap-1.5 text-xs text-red-600 dark:text-red-400 mt-1.5">
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />

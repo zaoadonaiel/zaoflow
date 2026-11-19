@@ -24,6 +24,7 @@
     "react-hot-toast": "^2.4.1",
     "recharts": "^2.15.4",
     "sharp": "^0.35.4",
+    "unpdf": "^2.2.1",
     "ws": "^8.21.3"
   },
   "devDependencies": {
