@@ -229,27 +229,26 @@ export default function KnowledgeBaseModal({
                     : 'border-gray-200 dark:border-gray-600 focus:ring-brand-500'
                 }`}
               />
-              {unlocked && (
-                <div className="mt-2">
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept=".docx,.pdf,.txt,.md"
-                    className="hidden"
-                    onChange={(e) => handleFile(e.target.files?.[0])}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => fileRef.current?.click()}
-                    disabled={importing}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-                  >
-                    {importing
-                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Reading file…</>
-                      : <><FileUp className="w-3.5 h-3.5" />Upload a document (Word, PDF, TXT)</>}
-                  </button>
-                </div>
-              )}
+              <div className="mt-2">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".docx,.pdf,.txt,.md"
+                  className="hidden"
+                  onChange={(e) => handleFile(e.target.files?.[0])}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={importing || !unlocked || migrationRequired}
+                  title={unlocked ? 'Add text from a Word, PDF, TXT or MD file' : 'Unlock editing first (pencil below)'}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+                >
+                  {importing
+                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Reading file…</>
+                    : <><FileUp className="w-3.5 h-3.5" />Upload a document (Word, PDF, TXT)</>}
+                </button>
+              </div>
               {limitError ? (
                 <p className="flex items-start gap-1.5 text-xs text-red-600 dark:text-red-400 mt-1.5">
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
