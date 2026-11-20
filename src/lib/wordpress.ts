@@ -104,6 +104,38 @@ function normalizeUrl(url: string): string {
   return url.replace(/\/$/, '')
 }
 
+/**
+ * Write requests (create, update, upload) are sent with `redirect: 'manual'` and
+ * checked here. If fetch followed the redirect instead, a moved site (say
+ * www.example.com -> example.com) would turn the POST into a GET: WordPress then
+ * answers 200 with a list of posts, nothing gets written, and the caller records a
+ * "success" with no post id. So a redirect is reported as an error that names the
+ * address to switch the site to.
+ */
+function assertNotRedirected(baseUrl: string, res: Response, action: string): void {
+  if (res.status < 300 || res.status >= 400) return
+  const location = res.headers.get('location')
+  let target: string | null = null
+  try {
+    if (location) target = new URL(location, baseUrl).origin
+  } catch {
+    target = location
+  }
+  throw new Error(
+    target
+      ? `${action} failed: ${baseUrl} now redirects to ${target}. Change this site's URL in Zaoflo to ${target}.`
+      : `${action} failed: ${baseUrl} answered with a redirect (${res.status}). Check this site's URL in Zaoflo.`,
+  )
+}
+
+/** A create call that comes back without a numeric id did not create anything. */
+function assertCreatedId(data: unknown, action: string): void {
+  const id = (data as { id?: unknown } | null)?.id
+  if (typeof id !== 'number' || !Number.isFinite(id)) {
+    throw new Error(`${action} failed: WordPress did not return an id for the new item.`)
+  }
+}
+
 
 /**
  * The file extension to send an image up under.
@@ -204,14 +236,17 @@ export async function uploadMedia({
     // vs BodyInit's Uint8Array<ArrayBuffer> -- runtime fetch accepts both.
     body: arrayBuffer as BodyInit,
     signal: AbortSignal.timeout(60000),
+    redirect: 'manual',
   })
 
+  assertNotRedirected(baseUrl, res, 'WordPress media upload')
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err?.message || `WordPress media upload failed: ${res.status}`)
   }
 
   const data = await res.json()
+  assertCreatedId(data, 'WordPress media upload')
 
   // Alt + title are a second call — the upload endpoint takes the bytes, not
   // the fields. An image on the page beats an image with a description, so a
@@ -421,9 +456,11 @@ export async function publishPost({
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(30000),
+      redirect: 'manual',
     }
   )
 
+  assertNotRedirected(baseUrl, res, 'WordPress publish')
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     const failure = new Error(err?.message || `WordPress publish failed: ${res.status}`)
@@ -439,6 +476,8 @@ export async function publishPost({
   // old domain, the host redirects the POST into a GET, and what comes back is
   // a 200 that is not our post at all (a list of posts, an HTML page). Without
   // this check the article was recorded as published and never reached the site.
+  // (`redirect: 'manual'` above already stops the redirect itself; this is the
+  // backstop for any other 200 that isn't a created post.)
   const data = await res.json().catch(() => null)
   if (!data || typeof data.id !== 'number' || typeof data.link !== 'string') {
     const movedTo = crossOriginRedirect(baseUrl, res.url)
@@ -983,8 +1022,10 @@ export async function updatePost({
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(30000),
+    redirect: 'manual',
   })
 
+  assertNotRedirected(baseUrl, res, 'WordPress update')
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err?.message || `WordPress update failed: ${res.status}`)
