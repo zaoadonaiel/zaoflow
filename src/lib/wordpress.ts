@@ -435,7 +435,19 @@ export async function publishPost({
     throw failure
   }
 
-  const data = await res.json()
+  // A 200 is not proof a post was created. When the saved site address is an
+  // old domain, the host redirects the POST into a GET, and what comes back is
+  // a 200 that is not our post at all (a list of posts, an HTML page). Without
+  // this check the article was recorded as published and never reached the site.
+  const data = await res.json().catch(() => null)
+  if (!data || typeof data.id !== 'number' || typeof data.link !== 'string') {
+    const movedTo = crossOriginRedirect(baseUrl, res.url)
+    throw new Error(
+      movedTo
+        ? `WordPress did not create the post: ${baseUrl} redirects to ${movedTo}. Update this site's URL to ${movedTo}.`
+        : `WordPress did not create the post — ${baseUrl} answered but returned no post. Check that the site URL is correct and that the connected user can publish.`,
+    )
+  }
   const result: WPPostResult = {
     id: data.id,
     link: data.link,
